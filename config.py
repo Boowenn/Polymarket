@@ -1,0 +1,70 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# API endpoints
+DATA_API_BASE = "https://data-api.polymarket.com"
+CLOB_BASE = "https://clob.polymarket.com"
+GAMMA_API_BASE = "https://gamma-api.polymarket.com"
+
+# Wallet / Auth (only needed for live trading)
+PRIVATE_KEY = os.getenv("PRIVATE_KEY", "")
+POLY_FUNDER = os.getenv("POLY_FUNDER", "")
+
+# Trading parameters
+BANKROLL = float(os.getenv("BANKROLL", "1000"))
+STAKE_PCT = float(os.getenv("STAKE_PCT", "0.01"))
+POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "15"))
+MAX_TRADERS = int(os.getenv("MAX_TRADERS", "5"))
+
+# Mode
+DRY_RUN = os.getenv("DRY_RUN", "true").lower() == "true"
+
+# Risk controls
+MAX_TRADE_PCT = float(os.getenv("MAX_TRADE_PCT", "0.05"))
+DAILY_LOSS_LIMIT = float(os.getenv("DAILY_LOSS_LIMIT", "50"))
+MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "10"))
+DAILY_RISK_BUDGET = float(os.getenv("DAILY_RISK_BUDGET", str(DAILY_LOSS_LIMIT)))
+MAX_TRADER_EXPOSURE_PCT = float(os.getenv("MAX_TRADER_EXPOSURE_PCT", "0.12"))
+MAX_MARKET_EXPOSURE_PCT = float(os.getenv("MAX_MARKET_EXPOSURE_PCT", "0.15"))
+MIN_SIGNAL_CONFIRM_SEC = int(os.getenv("MIN_SIGNAL_CONFIRM_SEC", "20"))
+MAX_SIGNAL_AGE_SEC = int(os.getenv("MAX_SIGNAL_AGE_SEC", "90"))
+MIN_SIGNAL_PRICE = float(os.getenv("MIN_SIGNAL_PRICE", "0.08"))
+MAX_SIGNAL_PRICE = float(os.getenv("MAX_SIGNAL_PRICE", "0.92"))
+TRADER_COOLDOWN_SEC = int(os.getenv("TRADER_COOLDOWN_SEC", "300"))
+WHIPSAW_LOOKBACK_SEC = int(os.getenv("WHIPSAW_LOOKBACK_SEC", "900"))
+MAX_TRADER_MARKET_ENTRIES_PER_DAY = int(os.getenv("MAX_TRADER_MARKET_ENTRIES_PER_DAY", "1"))
+ORDERBOOK_CACHE_SEC = float(os.getenv("ORDERBOOK_CACHE_SEC", "2"))
+MAX_ORDERBOOK_AGE_SEC = int(os.getenv("MAX_ORDERBOOK_AGE_SEC", "15"))
+MAX_BOOK_SPREAD = float(os.getenv("MAX_BOOK_SPREAD", "0.03"))
+MIN_TOP_LEVEL_LIQUIDITY_USDC = float(os.getenv("MIN_TOP_LEVEL_LIQUIDITY_USDC", "25"))
+MAX_BOOK_PRICE_DRIFT = float(os.getenv("MAX_BOOK_PRICE_DRIFT", "0.02"))
+MAX_BOOK_PRICE_IMPACT = float(os.getenv("MAX_BOOK_PRICE_IMPACT", "0.02"))
+SETTLEMENT_POLL_SEC = int(os.getenv("SETTLEMENT_POLL_SEC", "120"))
+SETTLEMENT_CACHE_SEC = float(os.getenv("SETTLEMENT_CACHE_SEC", "30"))
+SETTLEMENT_CANONICAL_EPS = float(os.getenv("SETTLEMENT_CANONICAL_EPS", "0.02"))
+
+# Trader quality filters
+PROFILE_REFRESH_SEC = int(os.getenv("PROFILE_REFRESH_SEC", "900"))
+PROFILE_HISTORY_INTERVAL_SEC = int(os.getenv("PROFILE_HISTORY_INTERVAL_SEC", "1800"))
+MIN_TRADER_SCORE = float(os.getenv("MIN_TRADER_SCORE", "60"))
+MIN_RECENT_TRADES = int(os.getenv("MIN_RECENT_TRADES", "8"))
+MIN_COPYABLE_TRADE_USDC = float(os.getenv("MIN_COPYABLE_TRADE_USDC", "10"))
+MAX_MICRO_TRADE_RATIO = float(os.getenv("MAX_MICRO_TRADE_RATIO", "0.35"))
+MAX_FLIP_RATE = float(os.getenv("MAX_FLIP_RATE", "0.25"))
+MAX_BURST_TRADES_PER_60S = int(os.getenv("MAX_BURST_TRADES_PER_60S", "12"))
+MAX_SAME_SECOND_TRADES = int(os.getenv("MAX_SAME_SECOND_TRADES", "4"))
+
+# Conservative consensus strategy
+ENABLE_CONSENSUS_STRATEGY = os.getenv("ENABLE_CONSENSUS_STRATEGY", "true").lower() == "true"
+CONSENSUS_WINDOW_SEC = int(os.getenv("CONSENSUS_WINDOW_SEC", "600"))
+MIN_CONSENSUS_TRADERS = int(os.getenv("MIN_CONSENSUS_TRADERS", "2"))
+MIN_CONSENSUS_SCORE = float(os.getenv("MIN_CONSENSUS_SCORE", "72"))
+CONSENSUS_TRADE_PCT = float(os.getenv("CONSENSUS_TRADE_PCT", "0.015"))
+
+# Reporting
+REPORT_DEFAULT_DAYS = int(os.getenv("REPORT_DEFAULT_DAYS", "3"))
+
+# Database
+DB_PATH = os.path.join(os.path.dirname(__file__), "copybot.db")

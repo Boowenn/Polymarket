@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polymarket 跟单机器人</title>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0e17;
+    --card: #111827;
+    --border: #1e293b;
+    --text: #e2e8f0;
+    --dim: #64748b;
+    --green: #22c55e;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --cyan: #06b6d4;
+    --yellow: #eab308;
+    --purple: #a855f7;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'SF Mono','Cascadia Code','Consolas','Microsoft YaHei',monospace; font-size:13px; line-height:1.5; }
+
+  /* header */
+  .header { background:linear-gradient(135deg,#1e3a5f 0%,#0f172a 100%); border-bottom:1px solid var(--border); padding:14px 24px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+  .header h1 { font-size:18px; font-weight:700; background:linear-gradient(90deg,var(--cyan),var(--blue)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .header-right { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  .mode-badge { padding:4px 12px; border-radius:4px; font-size:11px; font-weight:700; letter-spacing:1px; }
+  .mode-watch { background:rgba(234,179,8,.15); color:var(--yellow); border:1px solid rgba(234,179,8,.3); }
+  .mode-live { background:rgba(239,68,68,.15); color:var(--red); border:1px solid rgba(239,68,68,.3); }
+  .conn-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .conn-ok { background:var(--green); animation:pulse 2s infinite; }
+  .conn-off { background:var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(34,197,94,.4)} 50%{opacity:.7;box-shadow:0 0 0 6px rgba(34,197,94,0)} }
+  .meta { color:var(--dim); font-size:12px; }
+  .countdown { color:var(--dim); font-size:12px; }
+  .countdown span { color:var(--cyan); font-weight:600; }
+
+  /* stats bar */
+  .stats-bar { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; padding:14px 24px; border-bottom:1px solid var(--border); }
+  .stat-card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:10px 14px; }
+  .stat-label { font-size:10px; color:var(--dim); letter-spacing:1px; margin-bottom:3px; }
+  .stat-value { font-size:22px; font-weight:700; }
+  .stat-value.green { color:var(--green); }
+  .stat-value.red { color:var(--red); }
+  .stat-value.cyan { color:var(--cyan); }
+  .stat-sub { font-size:11px; color:var(--dim); margin-top:2px; }
+
+  /* grid */
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; padding:14px 24px; }
+  .grid-full { grid-column:1/-1; }
+  @media(max-width:900px) { .grid{grid-template-columns:1fr} .stats-bar{grid-template-columns:repeat(2,1fr)} }
+
+  /* card */
+  .card { background:var(--card); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .card-header { padding:10px 16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+  .card-title { font-size:13px; font-weight:600; }
+  .card-badge { font-size:10px; padding:2px 8px; border-radius:3px; background:rgba(59,130,246,.15); color:var(--blue); }
+
+  /* table */
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; padding:8px 12px; font-size:10px; letter-spacing:1px; color:var(--dim); border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--card); z-index:1; }
+  td { padding:7px 12px; border-bottom:1px solid rgba(30,41,59,.5); }
+  tr:hover { background:rgba(59,130,246,.04); }
+  .text-right { text-align:right; }
+  .text-green { color:var(--green); }
+  .text-red { color:var(--red); }
+  .text-dim { color:var(--dim); }
+
+  .side-buy { color:var(--green); font-weight:700; background:rgba(34,197,94,.1); padding:2px 6px; border-radius:3px; }
+  .side-sell { color:var(--red); font-weight:700; background:rgba(239,68,68,.1); padding:2px 6px; border-radius:3px; }
+  .status-ok { color:var(--green); font-size:11px; }
+  .status-wait { color:var(--dim); font-size:11px; }
+
+  /* rank */
+  .rank { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; font-size:11px; font-weight:700; }
+  .rank-1 { background:linear-gradient(135deg,#fbbf24,#f59e0b); color:#000; }
+  .rank-2 { background:linear-gradient(135deg,#94a3b8,#64748b); color:#000; }
+  .rank-3 { background:linear-gradient(135deg,#d97706,#b45309); color:#fff; }
+  .rank-n { background:var(--border); color:var(--dim); }
+
+  .scrollable { max-height:340px; overflow-y:auto; }
+  .scrollable::-webkit-scrollbar { width:4px; }
+  .scrollable::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+  /* ring */
+  .ring-container { display:flex; align-items:center; gap:12px; padding:16px; }
+  .ring-svg { width:80px; height:80px; }
+  .ring-bg { fill:none; stroke:var(--border); stroke-width:6; }
+  .ring-fg { fill:none; stroke-width:6; stroke-linecap:round; transition:stroke-dashoffset .8s ease; }
+  .ring-text { font-size:16px; font-weight:700; fill:var(--text); text-anchor:middle; dominant-baseline:central; }
+  .ring-stats { display:flex; flex-direction:column; gap:4px; }
+  .ring-stats span { font-size:12px; }
+
+  /* risk */
+  .risk-item { padding:8px 12px; border-bottom:1px solid rgba(30,41,59,.5); display:flex; gap:10px; font-size:12px; }
+  .risk-time { color:var(--dim); min-width:60px; }
+  .risk-event { color:var(--yellow); font-weight:600; min-width:90px; }
+  .risk-detail { color:var(--dim); flex:1; }
+
+  /* new row flash */
+  @keyframes flash { 0%{background:rgba(6,182,212,.15)} 100%{background:transparent} }
+  .row-new { animation:flash 2s ease-out; }
+
+  .footer { text-align:center; padding:12px; color:var(--dim); font-size:11px; border-top:1px solid var(--border); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>POLYMARKET 跟单机器人</h1>
+  <div class="header-right">
+    <span class="conn-dot conn-ok" id="conn-dot"></span>
+    <span id="mode-badge" class="mode-badge mode-watch">观察</span>
+    <span class="meta">第 <span id="cycle-num">0</span> 轮 · <span id="update-time">--:--:--</span></span>
+    <span class="countdown">下次扫描: <span id="countdown">--:--</span></span>
+  </div>
+</div>
+
+<div class="stats-bar">
+  <div class="stat-card">
+    <div class="stat-label">本金</div>
+    <div class="stat-value cyan" id="s-bankroll">$0</div>
+    <div class="stat-sub">跟注比例: <span id="s-stake">0</span>%</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">总交易</div>
+    <div class="stat-value" id="s-total">0</div>
+    <div class="stat-sub"><span class="text-green" id="s-wins">0</span> 赢 / <span class="text-red" id="s-losses">0</span> 输</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">胜率</div>
+    <div class="stat-value green" id="s-winrate">0%</div>
+    <div class="stat-sub" id="s-signals">0 条信号</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">已实现盈亏</div>
+    <div class="stat-value" id="s-realized">$0.00</div>
+    <div class="stat-sub">未实现: <span id="s-unrealized">$0.00</span></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">已跟单</div>
+    <div class="stat-value" style="color:var(--purple)" id="s-mirrored">0</div>
+    <div class="stat-sub">自动复制</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">买入 / 卖出</div>
+    <div class="stat-value"><span class="text-green" id="s-buys">0</span> <span class="text-dim">/</span> <span class="text-red" id="s-sells">0</span></div>
+    <div class="stat-sub">信号比例</div>
+  </div>
+</div>
+
+<div class="grid">
+
+  <!-- 顶级交易员 -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">体育板块 · 顶级交易员</span>
+      <span class="card-badge" id="trader-count">0</span>
+    </div>
+    <div class="scrollable">
+      <table>
+        <thead><tr><th>#</th><th>交易员</th><th class="text-right">盈亏</th><th class="text-right">交易量</th><th>钱包</th></tr></thead>
+        <tbody id="traders-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 胜率 + 风控 -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">交易表现</span></div>
+    <div class="ring-container">
+      <svg class="ring-svg" viewBox="0 0 100 100">
+        <circle class="ring-bg" cx="50" cy="50" r="40"/>
+        <circle class="ring-fg" id="ring-circle" cx="50" cy="50" r="40" stroke="var(--green)" stroke-dasharray="251.3" stroke-dashoffset="251.3" transform="rotate(-90 50 50)"/>
+        <text class="ring-text" x="50" y="50" id="ring-pct">0%</text>
+      </svg>
+      <div class="ring-stats">
+        <span style="font-weight:600">胜率</span>
+        <span class="text-green" id="ring-wins">0 赢</span>
+        <span class="text-red" id="ring-losses">0 输</span>
+        <span class="text-dim" id="ring-total">共 0 笔</span>
+      </div>
+    </div>
+    <div class="card-header" style="border-top:1px solid var(--border)">
+      <span class="card-title">风控日志</span>
+      <span class="card-badge" id="risk-count">0</span>
+    </div>
+    <div class="scrollable" style="max-height:160px" id="risk-body"></div>
+  </div>
+
+  <!-- 实时信号 -->
+  <div class="card grid-full">
+    <div class="card-header">
+      <span class="card-title">实时交易信号</span>
+      <span class="card-badge" id="signal-count">0</span>
+    </div>
+    <div class="scrollable" style="max-height:420px">
+      <table>
+        <thead><tr><th>时间</th><th>交易员</th><th>方向</th><th>赛事</th><th>结果</th><th class="text-right">数量</th><th class="text-right">价格</th><th>状态</th></tr></thead>
+        <tbody id="trades-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  Polymarket 体育跟单机器人 · 日志: copybot.log · 配置: .env · 扫描间隔: <span id="f-poll">15</span>秒
+</div>
+
+<script>
+const socket = io({
+  reconnection: true,
+  reconnectionDelay: 1000,
+  reconnectionAttempts: Infinity
+});
+
+let pollInterval = 15;
+let countdownVal = 0;
+let countdownTimer = null;
+let prevTradeIds = new Set();
+let fallbackTimer = null;
+
+function fmt$(n) {
+  if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M';
+  if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(1) + 'K';
+  return '$' + n.toFixed(2);
+}
+
+function rankCls(r) {
+  return 'rank rank-' + (r <= 3 ? r : 'n');
+}
+
+function startCountdown() {
+  countdownVal = pollInterval;
+  if (countdownTimer) clearInterval(countdownTimer);
+  countdownTimer = setInterval(() => {
+    countdownVal = Math.max(0, countdownVal - 1);
+    const m = Math.floor(countdownVal / 60);
+    const s = countdownVal % 60;
+    document.getElementById('countdown').textContent =
+      String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  }, 1000);
+}
+
+// Fallback: if no push received for 2x poll interval, pull manually
+function resetFallback() {
+  if (fallbackTimer) clearInterval(fallbackTimer);
+  fallbackTimer = setInterval(() => {
+    socket.emit('request_update');
+  }, pollInterval * 2000);
+}
+
+function render(data) {
+  const c = data.config, p = data.pnl, st = data.stats;
+
+  pollInterval = c.poll_interval;
+  document.getElementById('f-poll').textContent = pollInterval;
+
+  // mode
+  const badge = document.getElementById('mode-badge');
+  badge.textContent = c.dry_run ? '观察模式' : '实盘交易';
+  badge.className = 'mode-badge ' + (c.dry_run ? 'mode-watch' : 'mode-live');
+
+  // meta
+  document.getElementById('cycle-num').textContent = data.cycle || 0;
+  document.getElementById('update-time').textContent = (data.timestamp || '').split(' ')[1] || '';
+  document.getElementById('s-bankroll').textContent = fmt$(c.bankroll);
+  document.getElementById('s-stake').textContent = c.stake_pct;
+
+  // pnl
+  document.getElementById('s-total').textContent = p.total;
+  document.getElementById('s-wins').textContent = p.wins;
+  document.getElementById('s-losses').textContent = p.losses;
+  const wr = document.getElementById('s-winrate');
+  wr.textContent = p.win_rate + '%';
+  wr.className = 'stat-value ' + (p.win_rate >= 50 ? 'green' : (p.total > 0 ? 'red' : ''));
+
+  const rPnl = document.getElementById('s-realized');
+  rPnl.textContent = fmt$(p.realized);
+  rPnl.className = 'stat-value ' + (p.realized >= 0 ? 'green' : 'red');
+  document.getElementById('s-unrealized').textContent = fmt$(p.unrealized);
+
+  // stats
+  document.getElementById('s-mirrored').textContent = st.mirrored_count;
+  document.getElementById('s-signals').textContent = st.signal_count + ' 条信号';
+  document.getElementById('s-buys').textContent = st.buy_count;
+  document.getElementById('s-sells').textContent = st.sell_count;
+  document.getElementById('signal-count').textContent = st.signal_count;
+
+  // ring
+  const circ = 251.3, pct = p.win_rate / 100;
+  const rc = document.getElementById('ring-circle');
+  rc.setAttribute('stroke-dashoffset', circ * (1 - pct));
+  rc.setAttribute('stroke', pct >= .5 ? 'var(--green)' : 'var(--red)');
+  document.getElementById('ring-pct').textContent = p.win_rate + '%';
+  document.getElementById('ring-wins').textContent = p.wins + ' 赢';
+  document.getElementById('ring-losses').textContent = p.losses + ' 输';
+  document.getElementById('ring-total').textContent = '共 ' + p.total + ' 笔';
+
+  // traders
+  document.getElementById('trader-count').textContent = data.traders.length;
+  document.getElementById('traders-body').innerHTML = data.traders.map(t => {
+    const pc = t.pnl >= 0 ? 'text-green' : 'text-red';
+    return `<tr>
+      <td><span class="${rankCls(t.rank)}">${t.rank}</span></td>
+      <td>${(t.username||'').substring(0,18)}</td>
+      <td class="text-right ${pc}">${fmt$(t.pnl)}</td>
+      <td class="text-right">${fmt$(t.volume)}</td>
+      <td class="text-dim">${(t.wallet||'').substring(0,10)}..</td>
+    </tr>`;
+  }).join('');
+
+  // trades — detect new rows
+  const newIds = new Set(data.trades.map(t => t.id));
+  document.getElementById('trades-body').innerHTML = data.trades.map(t => {
+    const sc = t.side === 'BUY' ? 'side-buy' : 'side-sell';
+    const sideText = t.side === 'BUY' ? '买入' : '卖出';
+    const stc = t.mirrored ? 'status-ok' : 'status-wait';
+    let stText;
+    if (t.mirrored) {
+      stText = t.our_status === 'dry_run' ? '已记录' : (t.our_status === 'filled' ? '已成交' : '已跟单');
+    } else {
+      stText = '待跟单';
+    }
+    const isNew = !prevTradeIds.has(t.id);
+    return `<tr class="${isNew ? 'row-new' : ''}">
+      <td class="text-dim">${t.time_str}</td>
+      <td class="text-dim">${t.wallet_short}..</td>
+      <td><span class="${sc}">${sideText}</span></td>
+      <td>${t.slug_short}</td>
+      <td>${t.outcome || '-'}</td>
+      <td class="text-right">${Number(t.size).toFixed(1)}</td>
+      <td class="text-right">$${Number(t.price).toFixed(3)}</td>
+      <td><span class="${stc}">${stText}</span></td>
+    </tr>`;
+  }).join('');
+  prevTradeIds = newIds;
+
+  // risk
+  document.getElementById('risk-count').textContent = data.risk_logs.length;
+  const rb = document.getElementById('risk-body');
+  if (!data.risk_logs.length) {
+    rb.innerHTML = '<div class="risk-item"><span class="text-dim">暂无风控事件</span></div>';
+  } else {
+    rb.innerHTML = data.risk_logs.map(r => `
+      <div class="risk-item">
+        <span class="risk-time">${r.time_str}</span>
+        <span class="risk-event">${r.event}</span>
+        <span class="risk-detail">${(r.details||'').substring(0,50)}</span>
+      </div>`).join('');
+  }
+
+  // restart countdown + fallback
+  startCountdown();
+  resetFallback();
+}
+
+socket.on('update', render);
+socket.on('connect', () => {
+  document.getElementById('conn-dot').className = 'conn-dot conn-ok';
+  socket.emit('request_update');
+  resetFallback();
+});
+socket.on('disconnect', () => {
+  document.getElementById('conn-dot').className = 'conn-dot conn-off';
+});
+</script>
+</body>
+</html>
