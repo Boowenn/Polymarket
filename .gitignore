@@ -5,6 +5,8 @@ __pycache__/
 *.pyd
 
 copybot.db
+copybot.db-shm
+copybot.db-wal
 copybot.log
 
 .claude/
