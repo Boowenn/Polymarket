@@ -3,6 +3,7 @@ import time
 import requests
 
 import config
+import market_scope
 import models
 
 
@@ -59,17 +60,40 @@ def detect_new_trades(trader):
         return []
 
     trades = parse_activity_to_trades(wallet, activities)
+    inserted = []
     for trade in trades:
         trade["trader_username"] = trader.get("username", wallet[:10])
-        trade["signal_source"] = "copy"
         trade["signal_score"] = float(trader.get("quality_score", 0) or 0)
-        trade["signal_note"] = trader.get("profile_note", "")
+        scope_info = market_scope.evaluate_trade_scope(trade)
+        trade["market_scope"] = scope_info["market_scope"]
+
+        base_note = trader.get("profile_note", "")
+        if scope_info["allowed"]:
+            trade["signal_source"] = "copy"
+            trade["signal_note"] = f"{base_note}; scope={scope_info['market_scope']}".strip("; ")
+        else:
+            trade["signal_source"] = "scope_skip"
+            trade["signal_note"] = (
+                f"market scope skipped: {scope_info['scope_reason']}; scope={scope_info['market_scope']}"
+            )
         if models.trade_exists(trade["id"]):
             continue
 
         models.insert_trade(trade)
         models.close_open_journal_entries(trade)
-    return trades
+        inserted.append(trade)
+
+        if not scope_info["allowed"]:
+            models.log_risk_event(
+                "SCOPE_SKIP",
+                (
+                    f"{trade.get('trader_username', wallet[:10])} "
+                    f"{trade.get('market_slug', '')[:40]} "
+                    f"({scope_info['scope_reason']})"
+                ),
+                "not_mirrored",
+            )
+    return inserted
 
 
 def _collect_actionable_signals():
@@ -103,7 +127,9 @@ def _collect_actionable_signals():
 
 def scan_all_traders():
     """Ingest new activity, then release only confirmed, un-reversed signals."""
-    traders = models.get_tracked_traders(limit=max(config.MAX_TRADERS * 4, config.MAX_TRADERS))
+    traders = models.get_tracked_traders(
+        limit=max(config.MAX_TRADERS * config.LEADERBOARD_CANDIDATE_MULTIPLIER, config.MAX_TRADERS)
+    )
     for trader in traders:
         try:
             detect_new_trades(trader)

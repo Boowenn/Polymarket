@@ -57,6 +57,11 @@ def first_run_setup():
         f.write(f"STAKE_PCT={float(stake) / 100}\n")
         f.write(f"POLL_INTERVAL={poll}\n")
         f.write(f"MAX_TRADERS={traders}\n")
+        f.write(f"LEADERBOARD_CATEGORY=SPORTS\n")
+        f.write(f"LEADERBOARD_CANDIDATE_MULTIPLIER=6\n")
+        f.write(f"MARKET_SCOPE=sports,esports\n")
+        f.write(f"ESPORT_SPORT_CODES=codmw,cs2,dota2,hok,lcs,lol,lpl,mlbb,ow,pubg,r6siege,rl,sc2,val,wildrift\n")
+        f.write(f"MARKET_SCOPE_CACHE_SEC=3600\n")
         f.write(f"DRY_RUN={dry_run}\n")
         f.write(f"MAX_TRADE_PCT=0.05\n")
         f.write(f"DAILY_LOSS_LIMIT=50\n")
@@ -129,13 +134,18 @@ logger = logging.getLogger("main")
 
 def show_banner():
     console.print()
-    console.print("[bold white on blue]  POLYMARKET SPORTS COPY TRADING BOT  [/]")
+    console.print(f"[bold white on blue]  POLYMARKET {config.market_scope_label().upper()} COPY TRADING BOT  [/]")
     console.print()
     mode = "[yellow]WATCH MODE[/yellow] (signals only)" if config.DRY_RUN else "[red bold]LIVE TRADING[/red bold]"
     console.print(f"  Mode:      {mode}")
     console.print(f"  Bankroll:  [cyan]${config.effective_bankroll():,.0f}[/cyan]")
     console.print(f"  Stake:     [cyan]{config.STAKE_PCT*100:.0f}%[/cyan] of whale trade")
     console.print(f"  Following: up to [cyan]{config.MAX_TRADERS}[/cyan] approved traders")
+    console.print(f"  Universe:  [cyan]{config.market_scope_label()}[/cyan]")
+    console.print(
+        f"  Discovery: [cyan]{config.LEADERBOARD_CATEGORY}[/cyan] leaderboard x"
+        f"[cyan]{config.LEADERBOARD_CANDIDATE_MULTIPLIER}[/cyan]"
+    )
     console.print(f"  Refresh:   every [cyan]{config.POLL_INTERVAL}s[/cyan]")
     console.print(f"  Filter:    trader score [cyan]>={config.MIN_TRADER_SCORE:.0f}[/cyan]")
     console.print(f"  Observe:   snapshot trader state every [cyan]{config.PROFILE_HISTORY_INTERVAL_SEC}s[/cyan]")

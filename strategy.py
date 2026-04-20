@@ -5,6 +5,7 @@ from collections import Counter, defaultdict
 import requests
 
 import config
+import market_scope
 import models
 
 
@@ -211,6 +212,9 @@ def build_consensus_signals():
         price = float(trade.get("price", 0) or 0)
         if price <= 0:
             continue
+        scope_info = market_scope.evaluate_trade_scope(trade)
+        if not scope_info["allowed"]:
+            continue
         key = (trade.get("condition_id", ""), trade.get("outcome", ""), trade.get("side", "BUY"))
         grouped[key].append(trade)
 
@@ -265,6 +269,7 @@ def build_consensus_signals():
             "condition_id": condition_id,
             "token_id": lead.get("token_id", ""),
             "market_slug": lead.get("market_slug", ""),
+            "market_scope": lead.get("market_scope", ""),
             "outcome": outcome,
             "side": side,
             "size": round(target_value / avg_price, 6),

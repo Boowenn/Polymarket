@@ -3,6 +3,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _csv_list(raw_value):
+    return [item.strip().lower() for item in str(raw_value or "").split(",") if item.strip()]
+
 # API endpoints
 DATA_API_BASE = "https://data-api.polymarket.com"
 CLOB_BASE = "https://clob.polymarket.com"
@@ -17,6 +21,18 @@ BANKROLL = float(os.getenv("BANKROLL", "1000"))
 STAKE_PCT = float(os.getenv("STAKE_PCT", "0.01"))
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "15"))
 MAX_TRADERS = int(os.getenv("MAX_TRADERS", "5"))
+LEADERBOARD_CATEGORY = os.getenv("LEADERBOARD_CATEGORY", "SPORTS").strip().upper()
+LEADERBOARD_CANDIDATE_MULTIPLIER = max(1, int(os.getenv("LEADERBOARD_CANDIDATE_MULTIPLIER", "6")))
+MARKET_SCOPE = tuple(_csv_list(os.getenv("MARKET_SCOPE", "sports,esports")))
+ESPORT_SPORT_CODES = tuple(
+    _csv_list(
+        os.getenv(
+            "ESPORT_SPORT_CODES",
+            "codmw,cs2,dota2,hok,lcs,lol,lpl,mlbb,ow,pubg,r6siege,rl,sc2,val,wildrift",
+        )
+    )
+)
+MARKET_SCOPE_CACHE_SEC = max(60, int(os.getenv("MARKET_SCOPE_CACHE_SEC", "3600")))
 
 # Mode
 DRY_RUN = os.getenv("DRY_RUN", "true").lower() == "true"
@@ -83,3 +99,21 @@ def effective_daily_risk_budget():
 
 def capital_gates_enabled():
     return not (DRY_RUN and PAPER_IGNORE_CAPITAL_GATES)
+
+
+def market_scope_set():
+    scope = {item for item in MARKET_SCOPE if item}
+    return scope or {"sports", "esports"}
+
+
+def market_scope_label():
+    scope = market_scope_set()
+    if "all" in scope:
+        return "All Markets"
+    if scope == {"sports"}:
+        return "Sports"
+    if scope == {"esports"}:
+        return "Esports"
+    if {"sports", "esports"}.issubset(scope):
+        return "Sports + Esports"
+    return " + ".join(item.title() for item in sorted(scope))

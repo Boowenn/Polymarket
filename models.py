@@ -90,6 +90,7 @@ def init_db():
                 condition_id    TEXT,
                 token_id        TEXT,
                 market_slug     TEXT,
+                market_scope    TEXT DEFAULT '',
                 outcome         TEXT,
                 side            TEXT,
                 size            REAL,
@@ -144,6 +145,7 @@ def init_db():
                 condition_id        TEXT,
                 token_id            TEXT,
                 market_slug         TEXT,
+                market_scope        TEXT DEFAULT '',
                 outcome             TEXT,
                 entry_side          TEXT,
                 signal_source       TEXT,
@@ -166,6 +168,8 @@ def init_db():
         _ensure_column(conn, "trades", "signal_source", "TEXT DEFAULT 'copy'")
         _ensure_column(conn, "trades", "signal_score", "REAL DEFAULT 0")
         _ensure_column(conn, "trades", "signal_note", "TEXT DEFAULT ''")
+        _ensure_column(conn, "trades", "market_scope", "TEXT DEFAULT ''")
+        _ensure_column(conn, "trade_journal", "market_scope", "TEXT DEFAULT ''")
 
         conn.executescript(
             """
@@ -427,16 +431,17 @@ def insert_trade(trade):
     with db() as conn:
         conn.execute(
             """INSERT OR IGNORE INTO trades (
-                   id, trader_wallet, condition_id, token_id, market_slug, outcome,
+                   id, trader_wallet, condition_id, token_id, market_slug, market_scope, outcome,
                    side, size, price, timestamp, signal_source, signal_score, signal_note
                )
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 trade["id"],
                 trade["trader_wallet"],
                 trade.get("condition_id", ""),
                 trade.get("token_id", ""),
                 trade.get("market_slug", ""),
+                trade.get("market_scope", ""),
                 trade.get("outcome", ""),
                 trade.get("side", "BUY"),
                 float(trade.get("size", 0) or 0),
@@ -508,13 +513,14 @@ def upsert_trade_journal(
             """
             INSERT INTO trade_journal (
                 trade_id, trader_wallet, trader_username, condition_id, token_id,
-                market_slug, outcome, entry_side, signal_source, signal_price,
+                market_slug, market_scope, outcome, entry_side, signal_source, signal_price,
                 tradable_price, protected_price, entry_size, entry_value,
                 entry_timestamp, entry_status
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(trade_id) DO UPDATE SET
                 trader_username=excluded.trader_username,
+                market_scope=excluded.market_scope,
                 tradable_price=excluded.tradable_price,
                 protected_price=excluded.protected_price,
                 entry_size=excluded.entry_size,
@@ -528,6 +534,7 @@ def upsert_trade_journal(
                 signal.get("condition_id", ""),
                 signal.get("token_id", ""),
                 signal.get("market_slug", ""),
+                signal.get("market_scope", ""),
                 signal.get("outcome", ""),
                 signal.get("side", "BUY"),
                 signal.get("signal_source", "copy"),

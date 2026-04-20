@@ -27,7 +27,7 @@ def render_dashboard(traders=None, cycle_count=0):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     mode_tag = "[yellow] WATCH [/yellow]" if config.DRY_RUN else "[red bold] LIVE [/red bold]"
     console.print(
-        f"[bold white on blue]  POLYMARKET COPY TRADING BOT  [/]  "
+        f"[bold white on blue]  POLYMARKET {config.market_scope_label().upper()} COPY TRADING BOT  [/]  "
         f"{mode_tag}  "
         f"[dim]Cycle #{cycle_count}  {now}[/dim]"
     )
@@ -36,7 +36,12 @@ def render_dashboard(traders=None, cycle_count=0):
     # ── Top Traders ──
     t_list = traders or models.get_tracked_traders()
     if t_list:
-        tt = Table(box=box.ROUNDED, title="Top Sports Traders", title_style="bold cyan", expand=True)
+        tt = Table(
+            box=box.ROUNDED,
+            title=f"Top {config.market_scope_label()} Traders",
+            title_style="bold cyan",
+            expand=True,
+        )
         tt.add_column("#", width=3, style="dim")
         tt.add_column("Trader", style="bold", max_width=22)
         tt.add_column("Status", width=10)
@@ -116,6 +121,8 @@ def render_dashboard(traders=None, cycle_count=0):
     stats_lines = [
         f"  Bankroll     [cyan]${config.effective_bankroll():,.0f}[/cyan]",
         f"  Stake        [cyan]{config.STAKE_PCT*100:.0f}%[/cyan] of whale",
+        f"  Universe     [cyan]{config.market_scope_label()}[/cyan]",
+        f"  Discovery    {config.LEADERBOARD_CATEGORY} x{config.LEADERBOARD_CANDIDATE_MULTIPLIER}",
         f"  Score Gate   [cyan]>={config.MIN_TRADER_SCORE:.0f}[/cyan]",
         f"  Confirm      [cyan]{config.MIN_SIGNAL_CONFIRM_SEC}s[/cyan] delay",
         f"  Simulated    {simulated} entries",

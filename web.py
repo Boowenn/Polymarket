@@ -18,6 +18,10 @@ if not os.path.exists(env_path):
     with open(env_path, "w") as f:
         f.write("DRY_RUN=true\nBANKROLL=1000\nSTAKE_PCT=0.01\n")
         f.write("POLL_INTERVAL=15\nMAX_TRADERS=5\n")
+        f.write("LEADERBOARD_CATEGORY=SPORTS\nLEADERBOARD_CANDIDATE_MULTIPLIER=6\n")
+        f.write("MARKET_SCOPE=sports,esports\n")
+        f.write("ESPORT_SPORT_CODES=codmw,cs2,dota2,hok,lcs,lol,lpl,mlbb,ow,pubg,r6siege,rl,sc2,val,wildrift\n")
+        f.write("MARKET_SCOPE_CACHE_SEC=3600\n")
         f.write("MAX_TRADE_PCT=0.05\nDAILY_LOSS_LIMIT=50\nMAX_POSITIONS=10\n")
         f.write("DAILY_RISK_BUDGET=50\nPAPER_BANKROLL=250\nPAPER_DAILY_RISK_BUDGET=250\n")
         f.write("PAPER_IGNORE_CAPITAL_GATES=true\nMAX_TRADER_EXPOSURE_PCT=0.12\n")
@@ -68,7 +72,9 @@ def ts_fmt(ts):
 
 
 def get_dashboard_data():
-    traders = models.get_tracked_traders(limit=max(config.MAX_TRADERS * 2, config.MAX_TRADERS))
+    traders = models.get_tracked_traders(
+        limit=max(config.MAX_TRADERS * config.LEADERBOARD_CANDIDATE_MULTIPLIER, config.MAX_TRADERS)
+    )
     recent = models.get_recent_trades(80)
     pnl = models.get_latest_pnl()
     performance = models.get_performance_snapshot()
@@ -106,6 +112,9 @@ def get_dashboard_data():
             "stake_pct": config.STAKE_PCT * 100,
             "poll_interval": config.POLL_INTERVAL,
             "max_traders": config.MAX_TRADERS,
+            "market_scope_label": config.market_scope_label(),
+            "leaderboard_category": config.LEADERBOARD_CATEGORY,
+            "leaderboard_candidate_multiplier": config.LEADERBOARD_CANDIDATE_MULTIPLIER,
             "min_trader_score": config.MIN_TRADER_SCORE,
             "profile_history_interval_sec": config.PROFILE_HISTORY_INTERVAL_SEC,
             "min_signal_confirm_sec": config.MIN_SIGNAL_CONFIRM_SEC,
@@ -238,7 +247,7 @@ def main():
     port = int(os.environ.get("PORT", 5000))
     print()
     print("  =============================================")
-    print(f"   Polymarket Copy Trading Bot")
+    print(f"   Polymarket {config.market_scope_label()} Copy Trading Bot")
     print(f"   Dashboard: http://localhost:{port}")
     print(f"   Scan interval: {config.POLL_INTERVAL}s")
     print("  =============================================")

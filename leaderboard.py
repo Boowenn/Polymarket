@@ -5,10 +5,12 @@ import models
 import strategy
 
 
-def fetch_top_traders(category="SPORTS", period="DAY", order_by="PNL", limit=None):
+def fetch_top_traders(category=None, period="DAY", order_by="PNL", limit=None):
     """Fetch a wider candidate pool, then let quality filters choose who is followable."""
+    if category is None:
+        category = config.LEADERBOARD_CATEGORY
     if limit is None:
-        limit = max(config.MAX_TRADERS * 4, config.MAX_TRADERS)
+        limit = max(config.MAX_TRADERS * config.LEADERBOARD_CANDIDATE_MULTIPLIER, config.MAX_TRADERS)
 
     resp = requests.get(
         f"{config.DATA_API_BASE}/v1/leaderboard",

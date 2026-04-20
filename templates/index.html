@@ -578,8 +578,12 @@ function render(data) {
   const config = data.config;
   const stats = data.stats;
   const performance = data.performance;
+  const heroSubtitle = document.querySelector('.hero-subtitle');
 
   pollInterval = config.poll_interval;
+  if (heroSubtitle) {
+    heroSubtitle.textContent = `Watching ${config.market_scope_label} flow from ${config.leaderboard_category} leaderboard candidates x${config.leaderboard_candidate_multiplier}.`;
+  }
 
   document.getElementById('mode-badge').textContent = config.dry_run ? '观察 / 模拟' : '实盘';
   document.getElementById('mode-badge').className = config.dry_run ? 'mode-watch' : 'mode-live';
@@ -596,6 +600,7 @@ function render(data) {
   } else {
     bankrollNote.textContent = `跟单比例 ${config.stake_pct}%`;
   }
+  bankrollNote.textContent = `${bankrollNote.textContent} ﾂｷ scope ${config.market_scope_label}`;
   document.getElementById('s-signals').textContent = stats.signal_count;
   document.getElementById('s-buys').textContent = stats.buy_count;
   document.getElementById('s-sells').textContent = stats.sell_count;

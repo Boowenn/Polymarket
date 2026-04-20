@@ -1,10 +1,11 @@
 # Polymarket Copy Trading Bot
 
-A defensive Polymarket copy-trading bot focused on paper trading, trader screening, order book protection, and post-trade analysis.
+A defensive Polymarket copy-trading bot focused on paper trading, trader screening, order book protection, and post-trade analysis across sports and esports markets.
 
 ## What it does
 
 - Tracks top Polymarket traders and scores whether they are safe to mirror.
+- Lets you explicitly scope mirrored markets to `sports`, `esports`, or `sports,esports` instead of blindly following every market a trader touches.
 - Blocks suspicious flow such as micro-order spam, burst trading, same-second bursts, and fast flip scalping.
 - Uses order book checks before mirroring to avoid wide spread, drift, and impact traps.
 - Supports `DRY_RUN=true` so you can simulate copy-trading without funding an account.
@@ -67,3 +68,10 @@ The report summarizes:
 ## Environment
 
 See `.env.example` for all configuration values.
+
+Relevant scope controls:
+
+- `MARKET_SCOPE=sports,esports` to allow both traditional sports and esports.
+- `MARKET_SCOPE=sports` to exclude esports.
+- `MARKET_SCOPE=esports` to focus only on esports.
+- `LEADERBOARD_CANDIDATE_MULTIPLIER` to widen the sports leaderboard candidate pool before trader-quality filtering.
