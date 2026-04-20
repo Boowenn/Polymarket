@@ -19,7 +19,8 @@ if not os.path.exists(env_path):
         f.write("DRY_RUN=true\nBANKROLL=1000\nSTAKE_PCT=0.01\n")
         f.write("POLL_INTERVAL=15\nMAX_TRADERS=5\n")
         f.write("MAX_TRADE_PCT=0.05\nDAILY_LOSS_LIMIT=50\nMAX_POSITIONS=10\n")
-        f.write("DAILY_RISK_BUDGET=50\nMAX_TRADER_EXPOSURE_PCT=0.12\n")
+        f.write("DAILY_RISK_BUDGET=50\nPAPER_BANKROLL=250\nPAPER_DAILY_RISK_BUDGET=250\n")
+        f.write("PAPER_IGNORE_CAPITAL_GATES=true\nMAX_TRADER_EXPOSURE_PCT=0.12\n")
         f.write("MAX_MARKET_EXPOSURE_PCT=0.15\nMIN_SIGNAL_CONFIRM_SEC=20\nMAX_SIGNAL_AGE_SEC=90\n")
         f.write("MIN_SIGNAL_PRICE=0.08\nMAX_SIGNAL_PRICE=0.92\nTRADER_COOLDOWN_SEC=300\n")
         f.write("WHIPSAW_LOOKBACK_SEC=900\nMAX_TRADER_MARKET_ENTRIES_PER_DAY=1\n")
@@ -100,7 +101,8 @@ def get_dashboard_data():
         "risk_logs": [{**r, "time_str": ts_fmt(r["timestamp"])} for r in risk],
         "config": {
             "dry_run": config.DRY_RUN,
-            "bankroll": config.BANKROLL,
+            "bankroll": config.effective_bankroll(),
+            "live_bankroll": config.BANKROLL,
             "stake_pct": config.STAKE_PCT * 100,
             "poll_interval": config.POLL_INTERVAL,
             "max_traders": config.MAX_TRADERS,
@@ -109,6 +111,8 @@ def get_dashboard_data():
             "min_signal_confirm_sec": config.MIN_SIGNAL_CONFIRM_SEC,
             "settlement_poll_sec": config.SETTLEMENT_POLL_SEC,
             "consensus_enabled": config.ENABLE_CONSENSUS_STRATEGY,
+            "paper_daily_risk_budget": config.effective_daily_risk_budget(),
+            "paper_ignore_capital_gates": config.PAPER_IGNORE_CAPITAL_GATES,
         },
         "stats": {
             "buy_count": buy_count,

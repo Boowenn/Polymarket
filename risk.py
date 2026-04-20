@@ -50,7 +50,7 @@ class RiskCheck:
             desired_value = (
                 float(signal.get("size", 0) or 0) * float(signal.get("price", 0) or 0) * config.STAKE_PCT
             )
-        return min(desired_value, config.BANKROLL * config.MAX_TRADE_PCT)
+        return min(desired_value, config.effective_bankroll() * config.MAX_TRADE_PCT)
 
     def _check_duplicate(self, signal):
         with models.db() as conn:
@@ -127,19 +127,24 @@ class RiskCheck:
         return True, ""
 
     def _check_daily_risk_budget(self, signal):
+        if not config.capital_gates_enabled():
+            return True, ""
         proposed = self._planned_value(signal)
         spent = models.get_daily_deployed_value()
-        if spent + proposed > config.DAILY_RISK_BUDGET:
+        budget = config.effective_daily_risk_budget()
+        if spent + proposed > budget:
             return False, (
                 f"daily risk budget reached (${spent + proposed:.2f} > "
-                f"${config.DAILY_RISK_BUDGET:.2f})"
+                f"${budget:.2f})"
             )
         return True, ""
 
     def _check_market_exposure(self, signal):
+        if not config.capital_gates_enabled():
+            return True, ""
         proposed = self._planned_value(signal)
         current = models.get_exposure_by_market(signal.get("condition_id", ""), signal.get("outcome", ""))
-        cap = config.BANKROLL * config.MAX_MARKET_EXPOSURE_PCT
+        cap = config.effective_bankroll() * config.MAX_MARKET_EXPOSURE_PCT
         if current + proposed > cap:
             return False, f"market exposure too high (${current + proposed:.2f} > ${cap:.2f})"
         return True, ""
@@ -159,15 +164,19 @@ class RiskCheck:
     def _check_trader_exposure(self, signal):
         if signal.get("signal_source", "copy") != "copy":
             return True, ""
+        if not config.capital_gates_enabled():
+            return True, ""
 
         proposed = self._planned_value(signal)
         current = models.get_exposure_by_trader(signal.get("trader_wallet", ""))
-        cap = config.BANKROLL * config.MAX_TRADER_EXPOSURE_PCT
+        cap = config.effective_bankroll() * config.MAX_TRADER_EXPOSURE_PCT
         if current + proposed > cap:
             return False, f"trader exposure too high (${current + proposed:.2f} > ${cap:.2f})"
         return True, ""
 
     def _check_max_positions(self, signal):
+        if not config.capital_gates_enabled():
+            return True, ""
         count = models.get_open_position_count()
         if count >= config.MAX_POSITIONS:
             return False, f"max positions reached ({count}/{config.MAX_POSITIONS})"

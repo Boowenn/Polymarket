@@ -354,7 +354,7 @@
     <div class="stat-card">
       <div class="stat-label">Bankroll</div>
       <div class="stat-value blue" id="s-bankroll">$0.00</div>
-      <div class="stat-sub">跟单比例 <span id="s-stake">0</span>%</div>
+      <div class="stat-sub" id="s-bankroll-note">跟单比例 0%</div>
     </div>
     <div class="stat-card">
       <div class="stat-label">Simulated Entries</div>
@@ -586,7 +586,16 @@ function render(data) {
   document.getElementById('cycle-num').textContent = data.cycle || 0;
   document.getElementById('update-time').textContent = (data.timestamp || '').split(' ')[1] || '--:--:--';
   document.getElementById('s-bankroll').textContent = fmtMoney(config.bankroll);
-  document.getElementById('s-stake').textContent = config.stake_pct;
+  const bankrollNote = document.getElementById('s-bankroll-note');
+  if (config.dry_run) {
+    const gateNote = config.paper_ignore_capital_gates ? '资本门槛已关闭' : '资本门槛保留';
+    const baseNote = config.live_bankroll !== config.bankroll
+      ? `研究资金 ${fmtMoney(config.bankroll)} / live ${fmtMoney(config.live_bankroll)}`
+      : `研究资金 ${fmtMoney(config.bankroll)}`;
+    bankrollNote.textContent = `${baseNote} · 跟单比例 ${config.stake_pct}% · ${gateNote}`;
+  } else {
+    bankrollNote.textContent = `跟单比例 ${config.stake_pct}%`;
+  }
   document.getElementById('s-signals').textContent = stats.signal_count;
   document.getElementById('s-buys').textContent = stats.buy_count;
   document.getElementById('s-sells').textContent = stats.sell_count;

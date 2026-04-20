@@ -238,8 +238,8 @@ def build_consensus_signals():
 
         target_value = round(
             min(
-                config.BANKROLL * config.MAX_TRADE_PCT,
-                config.BANKROLL * config.CONSENSUS_TRADE_PCT * (0.85 + confidence / 200.0),
+                config.effective_bankroll() * config.MAX_TRADE_PCT,
+                config.effective_bankroll() * config.CONSENSUS_TRADE_PCT * (0.85 + confidence / 200.0),
             ),
             4,
         )

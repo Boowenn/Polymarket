@@ -321,7 +321,14 @@ def build_recommendations(journal_summary, risk_counts, trader_rows, source_rows
         )
 
     if risk_counts.get("capital_gate", 0) >= max(5, int(journal_summary.get("total_entries", 0) or 0)):
-        recommendations.append("大部分信号被资金/单笔上限挡住了。若你现在只是做模拟观察，可适当调大 BANKROLL、MAX_TRADE_PCT 或 DAILY_RISK_BUDGET，否则收集不到足够样本。")
+        if config.DRY_RUN:
+            recommendations.append(
+                "大部分信号被资本类门槛挡住了。若你现在只是做模拟观察，优先调大 PAPER_BANKROLL / PAPER_DAILY_RISK_BUDGET，或开启 PAPER_IGNORE_CAPITAL_GATES。"
+            )
+        else:
+            recommendations.append(
+                "大部分信号被资金/单笔上限挡住了。可适当调大 BANKROLL、MAX_TRADE_PCT 或 DAILY_RISK_BUDGET，但别超过你能承受的真实风险。"
+            )
 
     if risk_counts.get("whipsaw", 0) >= 3:
         recommendations.append(
@@ -418,7 +425,15 @@ def main():
     print()
     print("Polymarket Copybot Observation Report")
     print(f"Window: {_fmt_ts(since_ts)} -> {_fmt_ts(now)}  ({max(args.days, 1)} day(s))")
-    print(f"Mode: {'DRY_RUN' if config.DRY_RUN else 'LIVE'}")
+    mode_label = "DRY_RUN" if config.DRY_RUN else "LIVE"
+    if config.DRY_RUN:
+        gate_label = "off" if config.PAPER_IGNORE_CAPITAL_GATES else "on"
+        print(
+            f"Mode: {mode_label}  |  paper_bankroll={config.effective_bankroll():.0f}  "
+            f"|  paper_budget={config.effective_daily_risk_budget():.0f}  |  capital_gates={gate_label}"
+        )
+    else:
+        print(f"Mode: {mode_label}")
     print()
 
     print("Overview:")

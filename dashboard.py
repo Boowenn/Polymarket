@@ -114,7 +114,7 @@ def render_dashboard(traders=None, cycle_count=0):
     )
 
     stats_lines = [
-        f"  Bankroll     [cyan]${config.BANKROLL:,.0f}[/cyan]",
+        f"  Bankroll     [cyan]${config.effective_bankroll():,.0f}[/cyan]",
         f"  Stake        [cyan]{config.STAKE_PCT*100:.0f}%[/cyan] of whale",
         f"  Score Gate   [cyan]>={config.MIN_TRADER_SCORE:.0f}[/cyan]",
         f"  Confirm      [cyan]{config.MIN_SIGNAL_CONFIRM_SEC}s[/cyan] delay",
@@ -122,6 +122,12 @@ def render_dashboard(traders=None, cycle_count=0):
         f"  Closed       {resolved}  ([green]{wins}W[/green] / [red]{losses}L[/red] / {flats} flat)",
         f"  Win Rate     {wr}  on {decided} decided trades",
         f"  Open         {open_entries}",
+        (
+            f"  Research     budget ${config.effective_daily_risk_budget():,.0f}, "
+            f"capital gates {'off' if config.PAPER_IGNORE_CAPITAL_GATES else 'on'}"
+            if config.DRY_RUN
+            else "  Research     live execution"
+        ),
         f"  Journal PnL  {'[green]' if realized >= 0 else '[red]'}${realized:,.2f}[/]",
         f"  Entry Drift  {performance.get('avg_entry_drift', 0):.3f}",
         f"  Basis        closed/settled journal only",
