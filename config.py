@@ -26,6 +26,9 @@ MAX_TRADE_PCT = float(os.getenv("MAX_TRADE_PCT", "0.05"))
 DAILY_LOSS_LIMIT = float(os.getenv("DAILY_LOSS_LIMIT", "50"))
 MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "10"))
 DAILY_RISK_BUDGET = float(os.getenv("DAILY_RISK_BUDGET", str(DAILY_LOSS_LIMIT)))
+PAPER_BANKROLL = float(os.getenv("PAPER_BANKROLL", str(BANKROLL)))
+PAPER_DAILY_RISK_BUDGET = float(os.getenv("PAPER_DAILY_RISK_BUDGET", str(DAILY_RISK_BUDGET)))
+PAPER_IGNORE_CAPITAL_GATES = os.getenv("PAPER_IGNORE_CAPITAL_GATES", "false").lower() == "true"
 MAX_TRADER_EXPOSURE_PCT = float(os.getenv("MAX_TRADER_EXPOSURE_PCT", "0.12"))
 MAX_MARKET_EXPOSURE_PCT = float(os.getenv("MAX_MARKET_EXPOSURE_PCT", "0.15"))
 MIN_SIGNAL_CONFIRM_SEC = int(os.getenv("MIN_SIGNAL_CONFIRM_SEC", "20"))
@@ -68,3 +71,15 @@ REPORT_DEFAULT_DAYS = int(os.getenv("REPORT_DEFAULT_DAYS", "3"))
 
 # Database
 DB_PATH = os.path.join(os.path.dirname(__file__), "copybot.db")
+
+
+def effective_bankroll():
+    return PAPER_BANKROLL if DRY_RUN else BANKROLL
+
+
+def effective_daily_risk_budget():
+    return PAPER_DAILY_RISK_BUDGET if DRY_RUN else DAILY_RISK_BUDGET
+
+
+def capital_gates_enabled():
+    return not (DRY_RUN and PAPER_IGNORE_CAPITAL_GATES)

@@ -62,6 +62,9 @@ def first_run_setup():
         f.write(f"DAILY_LOSS_LIMIT=50\n")
         f.write(f"MAX_POSITIONS=10\n")
         f.write(f"DAILY_RISK_BUDGET=50\n")
+        f.write(f"PAPER_BANKROLL=250\n")
+        f.write(f"PAPER_DAILY_RISK_BUDGET=250\n")
+        f.write(f"PAPER_IGNORE_CAPITAL_GATES=true\n")
         f.write(f"MAX_TRADER_EXPOSURE_PCT=0.12\n")
         f.write(f"MAX_MARKET_EXPOSURE_PCT=0.15\n")
         f.write(f"MIN_SIGNAL_CONFIRM_SEC=20\n")
@@ -130,7 +133,7 @@ def show_banner():
     console.print()
     mode = "[yellow]WATCH MODE[/yellow] (signals only)" if config.DRY_RUN else "[red bold]LIVE TRADING[/red bold]"
     console.print(f"  Mode:      {mode}")
-    console.print(f"  Bankroll:  [cyan]${config.BANKROLL:,.0f}[/cyan]")
+    console.print(f"  Bankroll:  [cyan]${config.effective_bankroll():,.0f}[/cyan]")
     console.print(f"  Stake:     [cyan]{config.STAKE_PCT*100:.0f}%[/cyan] of whale trade")
     console.print(f"  Following: up to [cyan]{config.MAX_TRADERS}[/cyan] approved traders")
     console.print(f"  Refresh:   every [cyan]{config.POLL_INTERVAL}s[/cyan]")
@@ -141,6 +144,12 @@ def show_banner():
     console.print(f"  Settle:    refresh open journals every [cyan]{config.SETTLEMENT_POLL_SEC}s[/cyan]")
     fallback = "[green]consensus fallback on[/green]" if config.ENABLE_CONSENSUS_STRATEGY else "[dim]consensus fallback off[/dim]"
     console.print(f"  Strategy:  {fallback}")
+    if config.DRY_RUN:
+        gate_mode = "off" if config.PAPER_IGNORE_CAPITAL_GATES else "on"
+        console.print(
+            f"  Research:  paper budget [cyan]${config.effective_daily_risk_budget():,.0f}[/cyan], "
+            f"capital gates [cyan]{gate_mode}[/cyan]"
+        )
     console.print()
 
     if config.DRY_RUN:
