@@ -97,28 +97,34 @@ def render_dashboard(traders=None, cycle_count=0):
 
     # ── Stats + Risk side by side ──
     pnl = models.get_latest_pnl()
-    journal = models.get_trade_journal_summary()
-    total = pnl.get("total_trades", 0)
-    wins = pnl.get("win_count", 0)
-    losses = pnl.get("loss_count", 0)
-    realized = pnl.get("realized_pnl", 0)
+    performance = models.get_performance_snapshot()
+    realized = performance.get("realized_pnl", 0)
     unrealized = pnl.get("unrealized_pnl", 0)
-    wr = f"{wins/total*100:.0f}%" if total > 0 else "-"
-    journal_closed = journal.get("closed_entries", 0) or 0
-    journal_wins = journal.get("wins", 0) or 0
-    journal_wr = f"{journal_wins/journal_closed*100:.0f}%" if journal_closed > 0 else "-"
+    resolved = performance.get("closed_entries", 0) or 0
+    open_entries = performance.get("open_entries", 0) or 0
+    simulated = performance.get("simulated_entries", 0) or 0
+    wins = performance.get("wins", 0) or 0
+    losses = performance.get("losses", 0) or 0
+    flats = performance.get("flat_count", 0) or 0
+    decided = performance.get("decision_count", 0) or 0
+    wr = (
+        f"{performance.get('win_rate', 0):.0f}%"
+        if performance.get("win_rate") is not None
+        else "N/A"
+    )
 
     stats_lines = [
         f"  Bankroll     [cyan]${config.BANKROLL:,.0f}[/cyan]",
         f"  Stake        [cyan]{config.STAKE_PCT*100:.0f}%[/cyan] of whale",
         f"  Score Gate   [cyan]>={config.MIN_TRADER_SCORE:.0f}[/cyan]",
         f"  Confirm      [cyan]{config.MIN_SIGNAL_CONFIRM_SEC}s[/cyan] delay",
-        f"  Trades       {total}  ([green]{wins}W[/green] / [red]{losses}L[/red])",
-        f"  Win Rate     {wr}",
-        f"  Journal      {journal.get('open_entries', 0)} open / {journal_closed} closed",
-        f"  Journal PnL  {'[green]' if journal.get('realized_pnl', 0) >= 0 else '[red]'}${journal.get('realized_pnl', 0):,.2f}[/]",
-        f"  Entry Drift  {journal.get('avg_entry_drift', 0):.3f}",
-        f"  Journal WR   {journal_wr}",
+        f"  Simulated    {simulated} entries",
+        f"  Closed       {resolved}  ([green]{wins}W[/green] / [red]{losses}L[/red] / {flats} flat)",
+        f"  Win Rate     {wr}  on {decided} decided trades",
+        f"  Open         {open_entries}",
+        f"  Journal PnL  {'[green]' if realized >= 0 else '[red]'}${realized:,.2f}[/]",
+        f"  Entry Drift  {performance.get('avg_entry_drift', 0):.3f}",
+        f"  Basis        closed/settled journal only",
         f"  Realized     {'[green]' if realized >= 0 else '[red]'}${realized:,.2f}[/]",
         f"  Unrealized   {'[green]' if unrealized >= 0 else '[red]'}${unrealized:,.2f}[/]",
     ]
