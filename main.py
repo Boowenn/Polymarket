@@ -215,10 +215,14 @@ def run_cycle(cycle_count):
         models.log_risk_event("SETTLEMENT_ERROR", str(e), "skipped")
 
     # 6. Update PnL snapshot
-    mirrored = models.get_mirrored_trades()
-    wins = sum(1 for t in mirrored if t.get("our_status") in ("filled", "dry_run"))
-    total = len(mirrored)
-    models.log_pnl(0, 0, total, wins, total - wins)
+    performance = models.get_performance_snapshot()
+    models.log_pnl(
+        performance["realized_pnl"],
+        0,
+        performance["closed_entries"],
+        performance["wins"],
+        performance["losses"],
+    )
 
     # 7. Render dashboard
     dashboard.render_dashboard(traders=traders, cycle_count=cycle_count)

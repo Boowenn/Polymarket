@@ -694,7 +694,13 @@ def get_trade_journal_summary(since_ts=None):
             COALESCE(SUM(realized_pnl), 0) AS realized_pnl,
             COALESCE(AVG(ABS(COALESCE(tradable_price, signal_price) - signal_price)), 0) AS avg_entry_drift,
             SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins,
-            SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) AS losses
+            SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) AS losses,
+            SUM(
+                CASE
+                    WHEN exit_timestamp IS NOT NULL AND ABS(COALESCE(realized_pnl, 0)) <= 0.000001 THEN 1
+                    ELSE 0
+                END
+            ) AS flat_count
         FROM trade_journal
     """
     params = []
@@ -712,6 +718,32 @@ def get_trade_journal_summary(since_ts=None):
         "avg_entry_drift": 0,
         "wins": 0,
         "losses": 0,
+        "flat_count": 0,
+    }
+
+
+def get_performance_snapshot(since_ts=None):
+    summary = get_trade_journal_summary(since_ts=since_ts)
+    total_entries = int(summary.get("total_entries", 0) or 0)
+    open_entries = int(summary.get("open_entries", 0) or 0)
+    closed_entries = int(summary.get("closed_entries", 0) or 0)
+    wins = int(summary.get("wins", 0) or 0)
+    losses = int(summary.get("losses", 0) or 0)
+    flat_count = int(summary.get("flat_count", 0) or 0)
+    decision_count = wins + losses
+    win_rate = round(wins / decision_count * 100, 1) if decision_count > 0 else None
+
+    return {
+        "simulated_entries": total_entries,
+        "open_entries": open_entries,
+        "closed_entries": closed_entries,
+        "wins": wins,
+        "losses": losses,
+        "flat_count": flat_count,
+        "decision_count": decision_count,
+        "win_rate": win_rate,
+        "realized_pnl": float(summary.get("realized_pnl", 0) or 0),
+        "avg_entry_drift": float(summary.get("avg_entry_drift", 0) or 0),
     }
 
 

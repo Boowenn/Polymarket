@@ -70,13 +70,9 @@ def get_dashboard_data():
     traders = models.get_tracked_traders(limit=max(config.MAX_TRADERS * 2, config.MAX_TRADERS))
     recent = models.get_recent_trades(80)
     pnl = models.get_latest_pnl()
-    journal = models.get_trade_journal_summary()
+    performance = models.get_performance_snapshot()
     risk = models.get_recent_risk_logs(20)
     mirrored = models.get_mirrored_trades()
-
-    total = pnl.get("total_trades", 0)
-    wins = pnl.get("win_count", 0)
-    losses = pnl.get("loss_count", 0)
 
     buy_count = sum(1 for t in recent if t["side"] == "BUY")
     sell_count = len(recent) - buy_count
@@ -92,15 +88,15 @@ def get_dashboard_data():
             }
             for t in recent
         ],
-        "pnl": {
-            "total": total,
-            "wins": wins,
-            "losses": losses,
-            "win_rate": round(wins / total * 100, 1) if total > 0 else 0,
-            "realized": pnl.get("realized_pnl", 0),
-            "unrealized": pnl.get("unrealized_pnl", 0),
+        "performance": {
+            **performance,
+            "win_rate_label": (
+                f"{performance['win_rate']:.1f}%"
+                if performance["win_rate"] is not None
+                else "N/A"
+            ),
+            "unrealized_pnl": pnl.get("unrealized_pnl", 0),
         },
-        "journal": journal,
         "risk_logs": [{**r, "time_str": ts_fmt(r["timestamp"])} for r in risk],
         "config": {
             "dry_run": config.DRY_RUN,
@@ -216,10 +212,14 @@ def bot_loop():
             models.log_risk_event("SETTLEMENT_ERROR", str(e), "skipped")
 
         # PnL snapshot
-        mirrored = models.get_mirrored_trades()
-        wins = sum(1 for t in mirrored if t.get("our_status") in ("filled", "dry_run"))
-        total = len(mirrored)
-        models.log_pnl(0, 0, total, wins, total - wins)
+        performance = models.get_performance_snapshot()
+        models.log_pnl(
+            performance["realized_pnl"],
+            0,
+            performance["closed_entries"],
+            performance["wins"],
+            performance["losses"],
+        )
 
         # Push to all browsers
         push_update()
