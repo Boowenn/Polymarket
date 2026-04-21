@@ -577,10 +577,16 @@ function statusClass(status) {
 }
 
 function tradeStatusLabel(row) {
-  if (!row.mirrored) return { cls: 'status-chip status-signal', text: '仅信号' };
-  if (row.our_status === 'dry_run') return { cls: 'status-chip status-approved', text: '模拟建仓' };
-  if (row.our_status === 'filled') return { cls: 'status-chip status-approved', text: '已成交' };
-  return { cls: 'status-chip status-observe', text: row.our_status || '已镜像' };
+  if (!row.mirrored) return { cls: 'status-chip status-signal', text: 'signal' };
+  const status = String(row.our_status || '').toLowerCase();
+  if (status === 'dry_run') return { cls: 'status-chip status-approved', text: 'dry-run' };
+  if (status === 'filled' || status === 'matched' || status === 'order_status_matched') {
+    return { cls: 'status-chip status-approved', text: 'filled' };
+  }
+  if (status === 'live' || status === 'order_status_live' || status === 'delayed') {
+    return { cls: 'status-chip status-observe', text: status };
+  }
+  return { cls: 'status-chip status-observe', text: row.our_status || 'pending' };
 }
 
 function startCountdown() {
@@ -605,59 +611,78 @@ function renderPerformance(perf) {
   const ring = document.getElementById('ring-circle');
   const ringLabel = document.getElementById('ring-label');
   const circleLength = 276.46;
-  const shadowEntries = Number(perf.shadow_entries || 0);
-  const shadowOpenEntries = Number(perf.shadow_open_entries || 0);
-  const shadowClosedEntries = Number(perf.shadow_closed_entries || 0);
+  const samples = perf.sample_metrics || {};
+  const executed = samples.executed || {};
+  const shadow = samples.shadow || {};
+  const experiment = samples.experiment || {};
+  const executedEntries = Number(executed.total_entries ?? perf.simulated_entries ?? 0);
+  const executedClosedEntries = Number(executed.closed_entries ?? perf.closed_entries ?? 0);
+  const executedOpenEntries = Number(executed.open_entries ?? perf.open_entries ?? 0);
+  const executedWins = Number(executed.wins ?? perf.wins ?? 0);
+  const executedLosses = Number(executed.losses ?? perf.losses ?? 0);
+  const executedFlats = Number(executed.flat_count ?? perf.flat_count ?? 0);
+  const executedDecisionCount = Number(executed.decision_count ?? perf.decision_count ?? 0);
+  const executedWinRate = executed.win_rate ?? perf.win_rate;
+  const executedWinRateLabel =
+    executedWinRate === null || executedWinRate === undefined
+      ? (perf.win_rate_label || 'N/A')
+      : `${Number(executedWinRate).toFixed(1)}%`;
+  const executedCloseRate = Number(executed.close_rate ?? perf.close_rate ?? 0);
+  const shadowEntries = Number(shadow.total_entries ?? perf.shadow_entries ?? 0);
+  const shadowOpenEntries = Number(shadow.open_entries ?? perf.shadow_open_entries ?? 0);
+  const shadowClosedEntries = Number(shadow.closed_entries ?? perf.shadow_closed_entries ?? 0);
+  const shadowDecisionCount = Number(shadow.decision_count ?? perf.shadow_decision_count ?? 0);
+  const shadowWinRate = shadow.win_rate ?? perf.shadow_win_rate;
+  const experimentEntries = Number(experiment.total_entries ?? perf.experiment_entries ?? 0);
+  const experimentOpenEntries = Number(experiment.open_entries ?? perf.experiment_open_entries ?? 0);
+  const experimentClosedEntries = Number(experiment.closed_entries ?? perf.experiment_closed_entries ?? 0);
+  const experimentDecisionCount = Number(experiment.decision_count ?? perf.experiment_decision_count ?? 0);
+  const experimentWinRate = experiment.win_rate ?? perf.experiment_win_rate;
   const stage2Entries = Number(perf.repeat_entry_experiment_entries || 0);
-  const stage2OpenEntries = Number(perf.repeat_entry_experiment_open_entries || 0);
   const stage2ClosedEntries = Number(perf.repeat_entry_experiment_closed_entries || 0);
   const stage2Status = perf.repeat_entry_experiment_status || 'idle';
 
-  document.getElementById('s-simulated').textContent = perf.simulated_entries;
-  document.getElementById('s-closed').textContent = perf.closed_entries;
-  document.getElementById('s-open').textContent = perf.open_entries;
+  document.getElementById('s-simulated').textContent = executedEntries;
+  document.getElementById('s-closed').textContent = executedClosedEntries;
+  document.getElementById('s-open').textContent = executedOpenEntries;
   document.getElementById('s-simulated-note').textContent =
-    shadowEntries > 0
-      ? `Executed ${perf.simulated_entries} / shadow ${shadowEntries} / stage2 ${stage2Entries}`
-      : 'Executed entries only';
-  document.getElementById('s-closed-note').innerHTML =
-    shadowEntries > 0
-      ? `Open executed <span id="s-open">${perf.open_entries}</span> · shadow ${shadowOpenEntries}/${shadowClosedEntries} · stage2 ${stage2OpenEntries}/${stage2ClosedEntries}`
-      : `Open executed <span id="s-open">${perf.open_entries}</span>`;
-  document.getElementById('s-winrate').textContent = perf.win_rate_label;
-  document.getElementById('s-winrate').className = `stat-value ${perf.win_rate === null ? '' : (perf.win_rate >= 50 ? 'green' : 'red')}`;
+    `Executed ${executedEntries} · shadow ${shadowEntries} · experiment ${experimentEntries}`;
+  document.getElementById('s-closed-note').textContent =
+    `Executed close ${executedCloseRate.toFixed(1)}% · shadow ${shadowClosedEntries}/${shadowEntries} · experiment ${experimentClosedEntries}/${experimentEntries}`;
+  document.getElementById('s-winrate').textContent = executedWinRateLabel;
+  document.getElementById('s-winrate').className = `stat-value ${executedWinRate === null || executedWinRate === undefined ? '' : (executedWinRate >= 50 ? 'green' : 'red')}`;
   document.getElementById('s-winrate-note').textContent =
-    perf.decision_count > 0
-      ? `按 ${perf.decision_count} 笔已判定 executed 样本统计`
-      : '暂无可判定 executed 样本';
+    executedDecisionCount > 0
+      ? `按 ${executedDecisionCount} 笔 executed 决策样本统计，close rate ${executedCloseRate.toFixed(1)}%`
+      : `暂无可判定 executed 样本，close rate ${executedCloseRate.toFixed(1)}%`;
 
   const realized = document.getElementById('s-realized');
-  realized.textContent = fmtSignedMoney(perf.realized_pnl);
-  realized.className = `stat-value ${Number(perf.realized_pnl) >= 0 ? 'green' : 'red'}`;
-  document.getElementById('s-drift').textContent = Number(perf.avg_entry_drift || 0).toFixed(3);
+  realized.textContent = fmtSignedMoney(executed.realized_pnl ?? perf.realized_pnl ?? 0);
+  realized.className = `stat-value ${Number(executed.realized_pnl ?? perf.realized_pnl ?? 0) >= 0 ? 'green' : 'red'}`;
+  document.getElementById('s-drift').textContent = Number(executed.avg_entry_drift ?? perf.avg_entry_drift ?? 0).toFixed(3);
 
-  document.getElementById('ring-wins').textContent = perf.wins;
-  document.getElementById('ring-losses').textContent = perf.losses;
-  document.getElementById('ring-flats').textContent = perf.flat_count;
-  document.getElementById('ring-closed').textContent = perf.closed_entries;
-  document.getElementById('ring-decided').textContent = perf.decision_count;
-  document.getElementById('ring-open').textContent = perf.open_entries;
+  document.getElementById('ring-wins').textContent = executedWins;
+  document.getElementById('ring-losses').textContent = executedLosses;
+  document.getElementById('ring-flats').textContent = executedFlats;
+  document.getElementById('ring-closed').textContent = executedClosedEntries;
+  document.getElementById('ring-decided').textContent = executedDecisionCount;
+  document.getElementById('ring-open').textContent = executedOpenEntries;
 
-  if (perf.win_rate === null) {
+  if (executedWinRate === null || executedWinRate === undefined) {
     ring.setAttribute('stroke-dashoffset', circleLength);
     ring.setAttribute('stroke', 'rgba(142, 162, 189, 0.5)');
     ringLabel.textContent = 'N/A';
   } else {
-    ring.setAttribute('stroke-dashoffset', circleLength * (1 - perf.win_rate / 100));
-    ring.setAttribute('stroke', perf.win_rate >= 50 ? 'var(--green)' : 'var(--red)');
-    ringLabel.textContent = `${perf.win_rate.toFixed(0)}%`;
+    ring.setAttribute('stroke-dashoffset', circleLength * (1 - executedWinRate / 100));
+    ring.setAttribute('stroke', executedWinRate >= 50 ? 'var(--green)' : 'var(--red)');
+    ringLabel.textContent = `${Number(executedWinRate).toFixed(0)}%`;
   }
 
   document.getElementById('performance-note').textContent =
-    perf.closed_entries > 0
-      ? `当前已平仓 ${perf.closed_entries} 笔 executed 样本，其中 ${perf.decision_count} 笔已经明确胜负。${shadowEntries > 0 ? `另有 ${shadowEntries} 笔 blocked shadow sample（${shadowOpenEntries} 未结算 / ${shadowClosedEntries} 已结算），单独用于第一阶段阻断分析。` : '胜率只按 executed 样本统计。'}${stage2Entries > 0 ? ` 第二阶段 repeat-entry experiment 已记录 ${stage2Entries} 笔（${stage2ClosedEntries} 已结算，状态 ${stage2Status}）。` : ''}`
-      : shadowEntries > 0
-        ? `当前还没有任何 executed 样本平仓，但已经记录 ${shadowEntries} 笔 blocked shadow sample（${shadowOpenEntries} 未结算 / ${shadowClosedEntries} 已结算）。这类样本会等自然结算回填，用来评估“被风控挡掉的单”到底该不该放行。${stage2Entries > 0 ? ` 第二阶段 repeat-entry experiment 同时已记录 ${stage2Entries} 笔（${stage2ClosedEntries} 已结算，状态 ${stage2Status}）。` : ''}`
+    executedClosedEntries > 0
+      ? `Executed 已平仓 ${executedClosedEntries} 笔，其中 ${executedDecisionCount} 笔已经明确胜负，win rate ${executedWinRateLabel}。Shadow 单独统计为 ${shadowEntries} 笔（${shadowClosedEntries} 已结算，${shadowDecisionCount} 笔已判定，${shadowWinRate === null || shadowWinRate === undefined ? 'N/A' : `${Number(shadowWinRate).toFixed(1)}%`}）。Experiment 单独统计为 ${experimentEntries} 笔（${experimentClosedEntries} 已结算，${experimentDecisionCount} 笔已判定，${experimentWinRate === null || experimentWinRate === undefined ? 'N/A' : `${Number(experimentWinRate).toFixed(1)}%`}）。${stage2Entries > 0 ? ` Repeat-entry stage2 当前 ${stage2Entries} 笔，${stage2ClosedEntries} 笔已结算，状态 ${stage2Status}。` : ''}`
+      : shadowEntries > 0 || experimentEntries > 0
+        ? `当前还没有任何 executed 样本平仓。Shadow 已记录 ${shadowEntries} 笔（${shadowClosedEntries} 已结算），experiment 已记录 ${experimentEntries} 笔（${experimentClosedEntries} 已结算），它们只用于研究，不直接证明可执行 edge。`
         : '当前还没有任何已平仓 / 已结算样本，所以这里显示 N/A，而不是把模拟建仓次数误算成全胜。';
 }
 
@@ -759,7 +784,7 @@ function render(data) {
   } else {
     bankrollNote.textContent = `跟单比例 ${config.stake_pct}%`;
   }
-  bankrollNote.textContent = `${bankrollNote.textContent} ﾂｷ scope ${config.market_scope_label}`;
+  bankrollNote.textContent = `${bankrollNote.textContent} · scope ${config.market_scope_label}`;
   document.getElementById('s-signals').textContent = stats.signal_count;
   document.getElementById('s-buys').textContent = stats.buy_count;
   document.getElementById('s-sells').textContent = stats.sell_count;

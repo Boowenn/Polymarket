@@ -108,6 +108,7 @@ def get_dashboard_data():
                 if performance["win_rate"] is not None
                 else "N/A"
             ),
+            "close_rate_label": f"{float(performance.get('close_rate', 0) or 0):.1f}%",
             "unrealized_pnl": pnl.get("unrealized_pnl", 0),
         },
         "blocked_reasons": blocked_reasons,

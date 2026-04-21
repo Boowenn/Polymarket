@@ -71,11 +71,20 @@ The report summarizes:
 
 See `.env.example` for all configuration values.
 
-## Design document
+## Research Governance Skill
 
-Long-term maintenance and AI-learning design:
+Long-term maintenance, metric definitions, and rollout governance now live in the repo skill:
 
-- `docs/AI_SELF_LEARNING_STRATEGY_DESIGN.md`
+- `.codex/skills/polymarket-research-governance/SKILL.md`
+- `.codex/skills/polymarket-research-governance/references/governance.md`
+
+Authoritative rules:
+
+- keep `executed`, `shadow`, and `experiment` separated in reports and dashboards
+- use `decision_count = wins + losses`
+- use `win_rate = wins / decision_count`
+- use `close_rate = closed_entries / total_entries`
+- use open `trade_journal` executed rows for capital, exposure, and max-position guards
 
 Relevant scope controls:
 

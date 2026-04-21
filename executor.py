@@ -10,6 +10,76 @@ logger = logging.getLogger("executor")
 _clob_client = None
 
 
+def _safe_float(value, default=None):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _fixed_math_to_float(value):
+    raw = _safe_float(value)
+    if raw is None:
+        return None
+    return raw / 1_000_000
+
+
+def _normalize_order_status(status):
+    return str(status or "").strip().lower()
+
+
+def _normalize_live_fill(client, order_id, response, side, fallback_price):
+    status = str((response or {}).get("status", "submitted") or "submitted")
+    matched_size = None
+    matched_price = None
+
+    if order_id and order_id != "unknown":
+        for attempt in range(2):
+            try:
+                order_state = client.get_order(order_id) or {}
+            except Exception as exc:
+                logger.warning(f"Failed to reconcile order {order_id}: {exc}")
+                break
+
+            state_status = order_state.get("status")
+            if state_status:
+                status = str(state_status)
+
+            matched_size = _fixed_math_to_float(order_state.get("size_matched"))
+            matched_price = _safe_float(order_state.get("price"))
+            normalized = _normalize_order_status(state_status)
+            if matched_size and matched_size > 0:
+                break
+            if normalized not in {"order_status_live", "order_status_matched"}:
+                break
+            if attempt == 0:
+                time.sleep(1)
+
+    if matched_size is None:
+        normalized = _normalize_order_status(status)
+        if normalized in {"matched", "order_status_matched"}:
+            making_amount = _fixed_math_to_float((response or {}).get("makingAmount"))
+            taking_amount = _fixed_math_to_float((response or {}).get("takingAmount"))
+            if str(side or "").upper() == "BUY":
+                matched_size = taking_amount
+                if matched_size and making_amount is not None:
+                    matched_price = making_amount / matched_size
+            else:
+                matched_size = making_amount
+                if matched_size and taking_amount is not None:
+                    matched_price = taking_amount / matched_size
+        else:
+            matched_size = 0.0
+
+    matched_size = max(0.0, round(float(matched_size or 0), 4))
+    if matched_size <= 0:
+        return status, 0.0, 0.0, fallback_price
+
+    booked_price = float(matched_price or fallback_price or 0)
+    booked_value = round(matched_size * booked_price, 4)
+    return status, matched_size, booked_value, booked_price
+
+
 def _experiment_trade_id(signal, experiment_key):
     return f"{signal['id']}::{experiment_key}"
 
@@ -181,31 +251,39 @@ def execute_trade(signal):
         resp = client.post_order(order, orderType=OrderType.FAK)
 
         order_id = resp.get("orderID", resp.get("id", "unknown"))
-        status = resp.get("status", "submitted")
+        status, booked_size, booked_value, booked_price = _normalize_live_fill(
+            client,
+            order_id,
+            resp,
+            signal["side"],
+            protected_price,
+        )
         models.mark_trade_mirrored(
             signal["id"],
             order_id,
             signal["side"],
-            our_size,
-            protected_price,
+            booked_size,
+            booked_price,
             status,
         )
-        models.upsert_trade_journal(
-            signal,
-            size=our_size,
-            value=our_value,
-            status=status,
-            tradable_price=tradable_price,
-            protected_price=protected_price,
-            sample_type="executed",
-        )
+        if booked_size > 0:
+            models.upsert_trade_journal(
+                signal,
+                size=booked_size,
+                value=booked_value,
+                status=status,
+                tradable_price=tradable_price,
+                protected_price=booked_price,
+                sample_type="executed",
+            )
 
         logger.info(
-            f"[LIVE] {source} {trader_name}: {signal['side']} {our_size:.4f} "
+            f"[LIVE] {source} {trader_name}: {signal['side']} planned={our_size:.4f} "
             f"signal=${signal['price']:.3f} tradable=${tradable_price:.3f} "
-            f"limit=${protected_price:.3f} -> order {order_id} ({status})"
+            f"limit=${protected_price:.3f} filled={booked_size:.4f} "
+            f"booked=${booked_price:.3f} -> order {order_id} ({status})"
         )
-        return {"status": status, "order_id": order_id, "size": our_size, "value": our_value}
+        return {"status": status, "order_id": order_id, "size": booked_size, "value": booked_value}
 
     except Exception as exc:
         error_msg = str(exc)
