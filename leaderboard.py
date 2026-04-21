@@ -5,12 +5,43 @@ import models
 import strategy
 
 
-def fetch_top_traders(category=None, period="DAY", order_by="PNL", limit=None):
-    """Fetch a wider candidate pool, then let quality filters choose who is followable."""
-    if category is None:
-        category = config.LEADERBOARD_CATEGORY
+def _slice_priority(period, order_by):
+    pairs = config.discovery_slice_pairs()
+    try:
+        return pairs.index((period, order_by))
+    except ValueError:
+        return len(pairs)
+
+
+def _normalize_trader(entry, period, order_by):
+    return {
+        "wallet": entry.get("proxyWallet", ""),
+        "username": entry.get("userName", "unknown"),
+        "rank": int(entry.get("rank", 0) or 0),
+        "pnl": float(entry.get("pnl", 0) or 0),
+        "volume": float(entry.get("vol", 0) or 0),
+        "discovery_sources": [f"{period}/{order_by}"],
+        "best_source": f"{period}/{order_by}",
+        "best_source_priority": _slice_priority(period, order_by),
+    }
+
+
+def _merge_trader(existing, candidate):
+    existing["rank"] = min(int(existing.get("rank", 999999) or 999999), int(candidate.get("rank", 999999) or 999999))
+    existing["pnl"] = max(float(existing.get("pnl", 0) or 0), float(candidate.get("pnl", 0) or 0))
+    existing["volume"] = max(float(existing.get("volume", 0) or 0), float(candidate.get("volume", 0) or 0))
+    for source in candidate.get("discovery_sources", []):
+        if source not in existing["discovery_sources"]:
+            existing["discovery_sources"].append(source)
+    if candidate.get("best_source_priority", 999999) < existing.get("best_source_priority", 999999):
+        existing["best_source"] = candidate.get("best_source", "")
+        existing["best_source_priority"] = candidate.get("best_source_priority", 999999)
+    return existing
+
+
+def _fetch_leaderboard_slice(category, period, order_by, limit):
     if limit is None:
-        limit = max(config.MAX_TRADERS * config.LEADERBOARD_CANDIDATE_MULTIPLIER, config.MAX_TRADERS)
+        limit = config.leaderboard_slice_limit()
 
     resp = requests.get(
         f"{config.DATA_API_BASE}/v1/leaderboard",
@@ -23,19 +54,40 @@ def fetch_top_traders(category=None, period="DAY", order_by="PNL", limit=None):
         timeout=15,
     )
     resp.raise_for_status()
-    data = resp.json()
+    return resp.json()
 
-    traders = []
-    for entry in data:
-        traders.append(
-            {
-                "wallet": entry.get("proxyWallet", ""),
-                "username": entry.get("userName", "unknown"),
-                "rank": entry.get("rank", 0),
-                "pnl": float(entry.get("pnl", 0) or 0),
-                "volume": float(entry.get("vol", 0) or 0),
-            }
+
+def fetch_top_traders(category=None, period=None, order_by=None, limit=None):
+    """Fetch a wider candidate pool across multiple leaderboard slices, then dedupe wallets."""
+    if category is None:
+        category = config.LEADERBOARD_CATEGORY
+
+    if period is not None and order_by is not None:
+        data = _fetch_leaderboard_slice(category, period, order_by, limit)
+        return [_normalize_trader(entry, period, order_by) for entry in data]
+
+    merged = {}
+    for slice_period, slice_order in config.discovery_slice_pairs():
+        data = _fetch_leaderboard_slice(category, slice_period, slice_order, limit)
+        for entry in data:
+            trader = _normalize_trader(entry, slice_period, slice_order)
+            wallet = trader["wallet"]
+            if not wallet:
+                continue
+            if wallet in merged:
+                _merge_trader(merged[wallet], trader)
+            else:
+                merged[wallet] = trader
+
+    traders = list(merged.values())
+    traders.sort(
+        key=lambda trader: (
+            -len(trader.get("discovery_sources", [])),
+            int(trader.get("best_source_priority", 999999) or 999999),
+            int(trader.get("rank", 999999) or 999999),
+            -(float(trader.get("volume", 0) or 0)),
         )
+    )
     return traders
 
 

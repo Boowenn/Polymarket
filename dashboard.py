@@ -112,6 +112,12 @@ def render_dashboard(traders=None, cycle_count=0):
     losses = performance.get("losses", 0) or 0
     flats = performance.get("flat_count", 0) or 0
     decided = performance.get("decision_count", 0) or 0
+    shadow_entries = performance.get("shadow_entries", 0) or 0
+    shadow_open = performance.get("shadow_open_entries", 0) or 0
+    shadow_closed = performance.get("shadow_closed_entries", 0) or 0
+    stage2_entries = performance.get("repeat_entry_experiment_entries", 0) or 0
+    stage2_open = performance.get("repeat_entry_experiment_open_entries", 0) or 0
+    stage2_closed = performance.get("repeat_entry_experiment_closed_entries", 0) or 0
     wr = (
         f"{performance.get('win_rate', 0):.0f}%"
         if performance.get("win_rate") is not None
@@ -122,10 +128,17 @@ def render_dashboard(traders=None, cycle_count=0):
         f"  Bankroll     [cyan]${config.effective_bankroll():,.0f}[/cyan]",
         f"  Stake        [cyan]{config.STAKE_PCT*100:.0f}%[/cyan] of whale",
         f"  Universe     [cyan]{config.market_scope_label()}[/cyan]",
-        f"  Discovery    {config.LEADERBOARD_CATEGORY} x{config.LEADERBOARD_CANDIDATE_MULTIPLIER}",
+        f"  Discovery    {config.LEADERBOARD_CATEGORY} {config.discovery_label()}",
+        f"  Monitor      {config.monitored_trader_limit()} discovered traders",
+        f"  Workers      {config.MONITOR_FETCH_WORKERS} parallel fetchers",
         f"  Score Gate   [cyan]>={config.MIN_TRADER_SCORE:.0f}[/cyan]",
         f"  Confirm      [cyan]{config.MIN_SIGNAL_CONFIRM_SEC}s[/cyan] delay",
         f"  Simulated    {simulated} entries",
+        f"  Shadow       {shadow_entries} blocked samples ({shadow_open} open / {shadow_closed} closed)",
+        (
+            f"  Stage2       {stage2_entries} repeat-entry experiment "
+            f"({stage2_open} open / {stage2_closed} closed)"
+        ),
         f"  Closed       {resolved}  ([green]{wins}W[/green] / [red]{losses}L[/red] / {flats} flat)",
         f"  Win Rate     {wr}  on {decided} decided trades",
         f"  Open         {open_entries}",
@@ -137,7 +150,7 @@ def render_dashboard(traders=None, cycle_count=0):
         ),
         f"  Journal PnL  {'[green]' if realized >= 0 else '[red]'}${realized:,.2f}[/]",
         f"  Entry Drift  {performance.get('avg_entry_drift', 0):.3f}",
-        f"  Basis        closed/settled journal only",
+        f"  Basis        win rate uses executed fills; shadow samples tracked separately",
         f"  Realized     {'[green]' if realized >= 0 else '[red]'}${realized:,.2f}[/]",
         f"  Unrealized   {'[green]' if unrealized >= 0 else '[red]'}${unrealized:,.2f}[/]",
     ]

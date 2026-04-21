@@ -57,12 +57,18 @@ def first_run_setup():
         f.write(f"STAKE_PCT={float(stake) / 100}\n")
         f.write(f"POLL_INTERVAL={poll}\n")
         f.write(f"MAX_TRADERS={traders}\n")
+        f.write(f"MONITOR_FETCH_WORKERS=12\n")
         f.write(f"LEADERBOARD_CATEGORY=SPORTS\n")
         f.write(f"LEADERBOARD_CANDIDATE_MULTIPLIER=6\n")
+        f.write(f"LEADERBOARD_DISCOVERY_PERIODS=day,week,month\n")
+        f.write(f"LEADERBOARD_DISCOVERY_ORDER_BY=pnl,vol\n")
         f.write(f"MARKET_SCOPE=sports,esports\n")
         f.write(f"ESPORT_SPORT_CODES=codmw,cs2,dota2,hok,lcs,lol,lpl,mlbb,ow,pubg,r6siege,rl,sc2,val,wildrift\n")
         f.write(f"MARKET_SCOPE_CACHE_SEC=3600\n")
         f.write(f"DRY_RUN={dry_run}\n")
+        f.write(f"DRY_RUN_RECORD_BLOCKED_SAMPLES=true\n")
+        f.write(f"ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT=true\n")
+        f.write(f"REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES=1\n")
         f.write(f"MAX_TRADE_PCT=0.05\n")
         f.write(f"DAILY_LOSS_LIMIT=50\n")
         f.write(f"MAX_POSITIONS=10\n")
@@ -143,9 +149,11 @@ def show_banner():
     console.print(f"  Following: up to [cyan]{config.MAX_TRADERS}[/cyan] approved traders")
     console.print(f"  Universe:  [cyan]{config.market_scope_label()}[/cyan]")
     console.print(
-        f"  Discovery: [cyan]{config.LEADERBOARD_CATEGORY}[/cyan] leaderboard x"
-        f"[cyan]{config.LEADERBOARD_CANDIDATE_MULTIPLIER}[/cyan]"
+        f"  Discovery: [cyan]{config.LEADERBOARD_CATEGORY}[/cyan] "
+        f"[cyan]{config.discovery_label()}[/cyan]"
     )
+    console.print(f"  Monitor:   up to [cyan]{config.monitored_trader_limit()}[/cyan] discovered traders")
+    console.print(f"  Workers:   [cyan]{config.MONITOR_FETCH_WORKERS}[/cyan] parallel fetchers")
     console.print(f"  Refresh:   every [cyan]{config.POLL_INTERVAL}s[/cyan]")
     console.print(f"  Filter:    trader score [cyan]>={config.MIN_TRADER_SCORE:.0f}[/cyan]")
     console.print(f"  Observe:   snapshot trader state every [cyan]{config.PROFILE_HISTORY_INTERVAL_SEC}s[/cyan]")
@@ -158,7 +166,9 @@ def show_banner():
         gate_mode = "off" if config.PAPER_IGNORE_CAPITAL_GATES else "on"
         console.print(
             f"  Research:  paper budget [cyan]${config.effective_daily_risk_budget():,.0f}[/cyan], "
-            f"capital gates [cyan]{gate_mode}[/cyan]"
+            f"capital gates [cyan]{gate_mode}[/cyan], "
+            f"blocked shadows [cyan]{'on' if config.DRY_RUN_RECORD_BLOCKED_SAMPLES else 'off'}[/cyan], "
+            f"stage2 repeat-entry [cyan]{'on' if config.stage2_repeat_entry_experiment_enabled() else 'off'}[/cyan]"
         )
     console.print()
 

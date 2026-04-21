@@ -33,6 +33,10 @@ def _rows(query, params=()):
         return [dict(row) for row in conn.execute(query, params).fetchall()]
 
 
+def _sample_type(row):
+    return (row.get("sample_type") or "executed").strip().lower() or "executed"
+
+
 def load_window_data(since_ts):
     trades = _rows(
         """
@@ -80,7 +84,7 @@ def summarize_sources(journal_rows):
     )
 
     for row in journal_rows:
-        source = row.get("signal_source", "copy") or "copy"
+        source = f"{row.get('signal_source', 'copy') or 'copy'}/{_sample_type(row)}"
         bucket = buckets[source]
         bucket["source"] = source
         bucket["entries"] += 1
@@ -341,8 +345,8 @@ def build_recommendations(journal_summary, risk_counts, trader_rows, source_rows
     if len(unstable) >= 2:
         recommendations.append("多名交易员状态频繁来回切换，画像门槛偏松。可把 MIN_TRADER_SCORE 提到 65，或把 MAX_BURST_TRADES_PER_60S 降到 10。")
 
-    copy_source = next((row for row in source_rows if row["source"] == "copy"), None)
-    consensus_source = next((row for row in source_rows if row["source"] == "consensus"), None)
+    copy_source = next((row for row in source_rows if row["source"] == "copy/executed"), None)
+    consensus_source = next((row for row in source_rows if row["source"] == "consensus/executed"), None)
     if consensus_source and consensus_source["closed_entries"] >= 3 and consensus_source["realized_pnl"] < 0:
         recommendations.append("共识策略的已闭合样本为负。提高 MIN_CONSENSUS_SCORE，或暂时关闭 ENABLE_CONSENSUS_STRATEGY。")
     if copy_source and copy_source["closed_entries"] >= 3 and copy_source["realized_pnl"] < 0 and stable:
@@ -354,15 +358,76 @@ def build_recommendations(journal_summary, risk_counts, trader_rows, source_rows
     return recommendations[:6]
 
 
+def build_block_reason_recommendations(rows):
+    recommendations = []
+    if not rows:
+        return recommendations
+
+    top_candidate = next((row for row in rows if row["action"] == "experiment"), None)
+    if top_candidate:
+        recommendations.append(
+            "第一阶段最该优化的是 "
+            f"{top_candidate['label']}。当前 shadow blocked 样本 {top_candidate['total_entries']}，"
+            f"已结算 {top_candidate['closed_entries']}，shadow PnL {_fmt_money(top_candidate['realized_pnl'])}。"
+            "不要直接放松滑点保护，先做受控的二次入场实验。"
+        )
+
+    drift_row = next((row for row in rows if row["category"] == "market_drift"), None)
+    if drift_row and drift_row["closed_entries"] >= 5 and drift_row["realized_pnl"] < 0:
+        recommendations.append(
+            "Price Drift Guard 目前更像保护层，不该整体放松。"
+            "如果后面要试，只能把 0.03-0.04 这类轻微超阈值单独拆出来做小样本实验。"
+        )
+
+    empty_book_row = next((row for row in rows if row["category"] == "no_book_levels"), None)
+    if empty_book_row and empty_book_row["total_entries"] >= 20:
+        recommendations.append(
+            "No Executable Book 的量很大，但这不等于可以强行追单。"
+            "正确方向是补 delayed recheck / 再报价观察，而不是穿透空簿直接成交。"
+        )
+
+    return recommendations[:3]
+
+
+def build_stage2_recommendations(experiment_row):
+    if not experiment_row:
+        return []
+
+    recommendations = []
+    if not config.stage2_repeat_entry_experiment_enabled():
+        recommendations.append("第二阶段 repeat-entry 实验开关当前是关闭的。开启后才会开始积累独立样本。")
+        return recommendations
+
+    closed_entries = int(experiment_row.get("closed_entries", 0) or 0)
+    if int(experiment_row.get("total_entries", 0) or 0) == 0:
+        recommendations.append("第二阶段 repeat-entry 实验已就绪，但还没有记录到任何样本。继续运行，等新的重复入场信号出现。")
+        return recommendations
+
+    if closed_entries < 30:
+        recommendations.append(
+            f"第二阶段 repeat-entry 实验还在收集期，目前已结算 {closed_entries} 笔，"
+            "还不能据此改默认风控。"
+        )
+    if float(experiment_row.get("top_market_share", 0) or 0) > 40:
+        recommendations.append(
+            "第二阶段样本仍然偏向少数市场。即便 PnL 为正，也先不要把局部 edge 当成通用规则。"
+        )
+    if float(experiment_row.get("top_trader_share", 0) or 0) > 50:
+        recommendations.append(
+            "第二阶段样本仍然偏向少数交易员。需要更多分散样本后再判断 repeat-entry 是否值得默认放宽。"
+        )
+    return recommendations[:3]
+
+
 def print_source_table(rows):
     if not rows:
         print("No simulated entries yet.")
         return
     print("Source performance:")
-    print("source       entries  closed  open  win_rate  pnl        avg_drift")
+    print("source              entries  closed  open  win_rate  pnl        avg_drift")
     for row in rows:
         print(
-            f"{row['source'][:11]:11s}  "
+            f"{row['source'][:18]:18s}  "
             f"{row['entries']:7d}  "
             f"{row['closed_entries']:6d}  "
             f"{row['open_entries']:4d}  "
@@ -370,6 +435,51 @@ def print_source_table(rows):
             f"{_fmt_money(row['realized_pnl']):>9s}  "
             f"{row['avg_entry_drift']:.3f}"
         )
+
+
+def print_block_reason_table(rows, limit=8):
+    print("Blocked shadow reason analysis:")
+    if not rows:
+        print("none")
+        return
+    print("reason                 action      entries  closed  win%    pnl        pnl/sample  mkts  traders")
+    for row in rows[:limit]:
+        win_rate = f"{row['win_rate']:.1f}%" if row["win_rate"] is not None else "N/A"
+        print(
+            f"{row['label'][:20]:20s}  "
+            f"{row['action'][:10]:10s}  "
+            f"{row['total_entries']:7d}  "
+            f"{row['closed_entries']:6d}  "
+            f"{win_rate:6s}  "
+            f"{_fmt_money(row['realized_pnl']):>9s}  "
+            f"{row['pnl_per_entry']:10.4f}  "
+            f"{row['distinct_markets']:4d}  "
+            f"{row['distinct_traders']:7d}"
+        )
+        print(f"  raw={row['top_raw_reason']}")
+        print(f"  note={row['note']}")
+
+
+def print_stage2_experiment(row):
+    print("Stage 2 repeat-entry experiment:")
+    if not row:
+        print("none")
+        return
+    enabled = "on" if config.stage2_repeat_entry_experiment_enabled() else "off"
+    win_rate = f"{row['win_rate']:.1f}%" if row["win_rate"] is not None else "N/A"
+    print(
+        f"enabled={enabled}  status={row['status']}  entries={row['total_entries']}  "
+        f"closed={row['closed_entries']}  open={row['open_entries']}  win_rate={win_rate}  "
+        f"realized_pnl={_fmt_money(row['realized_pnl'])}  avg_entry_drift={row['avg_entry_drift']:.3f}"
+    )
+    print(
+        f"distinct_markets={row['distinct_markets']}  closed_markets={row['closed_distinct_markets']}  "
+        f"distinct_traders={row['distinct_traders']}  closed_traders={row['closed_distinct_traders']}"
+    )
+    if row["top_market"]:
+        print(f"top_market={row['top_market']}  share={row['top_market_share']:.1f}%")
+    if row["top_trader"]:
+        print(f"top_trader={row['top_trader']}  share={row['top_trader_share']:.1f}%")
 
 
 def print_trader_table(title, rows, limit=5):
@@ -407,19 +517,28 @@ def main():
 
     trades, journal_rows, history_rows, risk_rows = load_window_data(since_ts)
     journal_summary = models.get_trade_journal_summary(since_ts=since_ts)
+    executed_summary = models.get_trade_journal_summary(since_ts=since_ts, sample_types=("executed",))
+    shadow_summary = models.get_trade_journal_summary(since_ts=since_ts, sample_types=("shadow",))
+    repeat_entry_experiment = models.get_experiment_analysis(config.REPEAT_ENTRY_EXPERIMENT_KEY, since_ts=since_ts)
+    blocked_reason_rows = models.get_block_reason_analysis(since_ts=since_ts, sample_types=("shadow",), limit=8)
     source_rows = summarize_sources(journal_rows)
     trader_rows = summarize_traders(journal_rows, history_rows)
     risk_counts, raw_reasons = categorize_risk_logs(risk_rows)
     candidates = select_candidate_traders(trader_rows)
     review = select_review_traders(trader_rows)
     recommendations = build_recommendations(journal_summary, risk_counts, trader_rows, source_rows)
+    recommendations = (
+        build_stage2_recommendations(repeat_entry_experiment)
+        + build_block_reason_recommendations(blocked_reason_rows)
+        + recommendations
+    )[:6]
 
     total_signals = len(trades)
     copy_signals = sum(1 for row in trades if (row.get("signal_source") or "copy") == "copy")
     consensus_signals = sum(1 for row in trades if (row.get("signal_source") or "copy") == "consensus")
     mirrored_signals = sum(1 for row in trades if int(row.get("mirrored", 0) or 0) == 1)
-    closed_entries = int(journal_summary.get("closed_entries", 0) or 0)
-    wins = int(journal_summary.get("wins", 0) or 0)
+    closed_entries = int(executed_summary.get("closed_entries", 0) or 0)
+    wins = int(executed_summary.get("wins", 0) or 0)
     win_rate = (wins / closed_entries) if closed_entries else 0.0
 
     print()
@@ -439,12 +558,18 @@ def main():
     print("Overview:")
     print(
         f"signals={total_signals}  copy={copy_signals}  consensus={consensus_signals}  "
-        f"simulated_entries={int(journal_summary.get('total_entries', 0) or 0)}  mirrored={mirrored_signals}"
+        f"research_entries={int(journal_summary.get('total_entries', 0) or 0)}  "
+        f"executed_entries={int(executed_summary.get('total_entries', 0) or 0)}  "
+        f"shadow_entries={int(shadow_summary.get('total_entries', 0) or 0)}  "
+        f"stage2_repeat_entries={int(repeat_entry_experiment.get('total_entries', 0) or 0)}  "
+        f"mirrored={mirrored_signals}"
     )
     print(
-        f"closed={closed_entries}  open={int(journal_summary.get('open_entries', 0) or 0)}  "
-        f"win_rate={win_rate*100:.1f}%  realized_pnl={_fmt_money(journal_summary.get('realized_pnl', 0))}  "
-        f"avg_entry_drift={float(journal_summary.get('avg_entry_drift', 0) or 0):.3f}"
+        f"executed_closed={closed_entries}  executed_open={int(executed_summary.get('open_entries', 0) or 0)}  "
+        f"shadow_closed={int(shadow_summary.get('closed_entries', 0) or 0)}  shadow_open={int(shadow_summary.get('open_entries', 0) or 0)}  "
+        f"stage2_repeat_closed={int(repeat_entry_experiment.get('closed_entries', 0) or 0)}  "
+        f"win_rate={win_rate*100:.1f}%  realized_pnl={_fmt_money(executed_summary.get('realized_pnl', 0))}  "
+        f"avg_entry_drift={float(executed_summary.get('avg_entry_drift', 0) or 0):.3f}"
     )
     print(
         f"profile_snapshots={len(history_rows)}  tracked_traders={len({row.get('wallet') for row in history_rows if row.get('wallet')})}  "
@@ -453,6 +578,12 @@ def main():
     print()
 
     print_source_table(source_rows)
+    print()
+
+    print_block_reason_table(blocked_reason_rows, limit=8)
+    print()
+
+    print_stage2_experiment(repeat_entry_experiment)
     print()
 
     print_trader_table("Best observed traders:", candidates, limit=args.top)

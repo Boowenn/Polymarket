@@ -18,10 +18,16 @@ if not os.path.exists(env_path):
     with open(env_path, "w") as f:
         f.write("DRY_RUN=true\nBANKROLL=1000\nSTAKE_PCT=0.01\n")
         f.write("POLL_INTERVAL=15\nMAX_TRADERS=5\n")
+        f.write("MONITOR_FETCH_WORKERS=12\n")
         f.write("LEADERBOARD_CATEGORY=SPORTS\nLEADERBOARD_CANDIDATE_MULTIPLIER=6\n")
+        f.write("LEADERBOARD_DISCOVERY_PERIODS=day,week,month\n")
+        f.write("LEADERBOARD_DISCOVERY_ORDER_BY=pnl,vol\n")
         f.write("MARKET_SCOPE=sports,esports\n")
         f.write("ESPORT_SPORT_CODES=codmw,cs2,dota2,hok,lcs,lol,lpl,mlbb,ow,pubg,r6siege,rl,sc2,val,wildrift\n")
         f.write("MARKET_SCOPE_CACHE_SEC=3600\n")
+        f.write("DRY_RUN_RECORD_BLOCKED_SAMPLES=true\n")
+        f.write("ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT=true\n")
+        f.write("REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES=1\n")
         f.write("MAX_TRADE_PCT=0.05\nDAILY_LOSS_LIMIT=50\nMAX_POSITIONS=10\n")
         f.write("DAILY_RISK_BUDGET=50\nPAPER_BANKROLL=250\nPAPER_DAILY_RISK_BUDGET=250\n")
         f.write("PAPER_IGNORE_CAPITAL_GATES=true\nMAX_TRADER_EXPOSURE_PCT=0.12\n")
@@ -72,12 +78,12 @@ def ts_fmt(ts):
 
 
 def get_dashboard_data():
-    traders = models.get_tracked_traders(
-        limit=max(config.MAX_TRADERS * config.LEADERBOARD_CANDIDATE_MULTIPLIER, config.MAX_TRADERS)
-    )
+    traders = models.get_tracked_traders(limit=config.monitored_trader_limit())
     recent = models.get_recent_trades(80)
     pnl = models.get_latest_pnl()
     performance = models.get_performance_snapshot()
+    blocked_reasons = models.get_block_reason_analysis(sample_types=("shadow",), limit=6)
+    repeat_entry_experiment = models.get_experiment_analysis(config.REPEAT_ENTRY_EXPERIMENT_KEY)
     risk = models.get_recent_risk_logs(20)
     mirrored = models.get_mirrored_trades()
 
@@ -104,6 +110,8 @@ def get_dashboard_data():
             ),
             "unrealized_pnl": pnl.get("unrealized_pnl", 0),
         },
+        "blocked_reasons": blocked_reasons,
+        "repeat_entry_experiment": repeat_entry_experiment,
         "risk_logs": [{**r, "time_str": ts_fmt(r["timestamp"])} for r in risk],
         "config": {
             "dry_run": config.DRY_RUN,
@@ -112,9 +120,12 @@ def get_dashboard_data():
             "stake_pct": config.STAKE_PCT * 100,
             "poll_interval": config.POLL_INTERVAL,
             "max_traders": config.MAX_TRADERS,
+            "monitor_fetch_workers": config.MONITOR_FETCH_WORKERS,
             "market_scope_label": config.market_scope_label(),
             "leaderboard_category": config.LEADERBOARD_CATEGORY,
             "leaderboard_candidate_multiplier": config.LEADERBOARD_CANDIDATE_MULTIPLIER,
+            "leaderboard_discovery_label": config.discovery_label(),
+            "monitored_trader_limit": config.monitored_trader_limit(),
             "min_trader_score": config.MIN_TRADER_SCORE,
             "profile_history_interval_sec": config.PROFILE_HISTORY_INTERVAL_SEC,
             "min_signal_confirm_sec": config.MIN_SIGNAL_CONFIRM_SEC,
@@ -122,6 +133,9 @@ def get_dashboard_data():
             "consensus_enabled": config.ENABLE_CONSENSUS_STRATEGY,
             "paper_daily_risk_budget": config.effective_daily_risk_budget(),
             "paper_ignore_capital_gates": config.PAPER_IGNORE_CAPITAL_GATES,
+            "dry_run_record_blocked_samples": config.DRY_RUN_RECORD_BLOCKED_SAMPLES,
+            "stage2_repeat_entry_experiment_enabled": config.stage2_repeat_entry_experiment_enabled(),
+            "repeat_entry_experiment_max_extra_entries": config.REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES,
         },
         "stats": {
             "buy_count": buy_count,

@@ -8,8 +8,8 @@ import models
 class RiskCheck:
     """Hard risk gate for copy and strategy signals."""
 
-    def check(self, trade_signal):
-        checks = [
+    def _ordered_checks(self):
+        return [
             self._check_duplicate,
             self._check_trader_quality,
             self._check_signal_age,
@@ -24,7 +24,8 @@ class RiskCheck:
             self._check_cooldown,
         ]
 
-        for check_fn in checks:
+    def check(self, trade_signal):
+        for check_fn in self._ordered_checks():
             approved, reason = check_fn(trade_signal)
             if not approved:
                 models.log_risk_event(
@@ -38,6 +39,34 @@ class RiskCheck:
                 )
                 return False, reason
         return True, "all checks passed"
+
+    def check_repeat_entry_experiment(self, trade_signal):
+        if not config.stage2_repeat_entry_experiment_enabled():
+            return False, "stage2 experiment disabled"
+        if trade_signal.get("signal_source", "copy") != "copy":
+            return False, "stage2 experiment only applies to copy signals"
+
+        approved, reason = self._check_repeat_harvest(trade_signal)
+        if approved:
+            return False, "repeat gate not triggered"
+
+        experiment_entries = models.get_experiment_entry_count(
+            config.REPEAT_ENTRY_EXPERIMENT_KEY,
+            trade_signal.get("trader_wallet", ""),
+            trade_signal.get("condition_id", ""),
+            trade_signal.get("outcome", ""),
+        )
+        if experiment_entries >= config.REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES:
+            return False, "stage2 repeat-entry experiment quota reached"
+
+        for check_fn in self._ordered_checks():
+            if check_fn == self._check_repeat_harvest:
+                continue
+            approved, reason = check_fn(trade_signal)
+            if not approved:
+                return False, reason
+
+        return True, "repeat-entry experiment allowed"
 
     def _planned_value(self, signal):
         planned_value = signal.get("_planned_value")

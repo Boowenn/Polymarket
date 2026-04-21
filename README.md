@@ -9,6 +9,8 @@ A defensive Polymarket copy-trading bot focused on paper trading, trader screeni
 - Blocks suspicious flow such as micro-order spam, burst trading, same-second bursts, and fast flip scalping.
 - Uses order book checks before mirroring to avoid wide spread, drift, and impact traps.
 - Supports `DRY_RUN=true` so you can simulate copy-trading without funding an account.
+- In `DRY_RUN`, blocked signals can also be written into the journal as shadow research samples so liquidity gates do not erase observation data.
+- Supports a stage-2 repeat-entry experiment that keeps the original blocked control sample and separately journals one capped second-entry shadow sample for later comparison.
 - Records signal price, tradable price, protected execution price, and final exit or settlement price in a trade journal.
 - Backfills journal exits from closed-market settlement data.
 - Captures trader profile history over time and generates observation reports with improvement suggestions.
@@ -75,3 +77,8 @@ Relevant scope controls:
 - `MARKET_SCOPE=sports` to exclude esports.
 - `MARKET_SCOPE=esports` to focus only on esports.
 - `LEADERBOARD_CANDIDATE_MULTIPLIER` to widen the sports leaderboard candidate pool before trader-quality filtering.
+- `LEADERBOARD_DISCOVERY_PERIODS=day,week,month` and `LEADERBOARD_DISCOVERY_ORDER_BY=pnl,vol` to merge multiple sports leaderboard slices into one larger monitored pool.
+- `MONITOR_FETCH_WORKERS=12` to fetch trader activity in parallel so the bot can scan a larger pool without aging signals out.
+- `DRY_RUN_RECORD_BLOCKED_SAMPLES=true` to keep blocked-but-interesting signals as shadow samples for later settlement analysis.
+- `ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT=true` to start collecting the second-stage repeat-entry experiment without changing live execution.
+- `REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES=1` to keep the experiment tightly capped to one extra re-entry shadow sample per trader/market/outcome.

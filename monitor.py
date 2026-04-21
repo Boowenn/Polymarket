@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 
 import requests
@@ -50,6 +51,11 @@ def parse_activity_to_trades(wallet, activities):
 
 
 def detect_new_trades(trader):
+    trades = collect_trader_trades(trader)
+    return ingest_trades(trades)
+
+
+def collect_trader_trades(trader):
     wallet = trader["wallet"]
     latest_trade_ts = models.get_latest_trade_timestamp(wallet)
     lookback_floor = time.time() - max(config.POLL_INTERVAL * 3, 60, config.CONSENSUS_WINDOW_SEC)
@@ -60,12 +66,12 @@ def detect_new_trades(trader):
         return []
 
     trades = parse_activity_to_trades(wallet, activities)
-    inserted = []
     for trade in trades:
         trade["trader_username"] = trader.get("username", wallet[:10])
         trade["signal_score"] = float(trader.get("quality_score", 0) or 0)
         scope_info = market_scope.evaluate_trade_scope(trade)
         trade["market_scope"] = scope_info["market_scope"]
+        trade["scope_reason"] = scope_info["scope_reason"]
 
         base_note = trader.get("profile_note", "")
         if scope_info["allowed"]:
@@ -76,6 +82,12 @@ def detect_new_trades(trader):
             trade["signal_note"] = (
                 f"market scope skipped: {scope_info['scope_reason']}; scope={scope_info['market_scope']}"
             )
+    return trades
+
+
+def ingest_trades(trades):
+    inserted = []
+    for trade in sorted(trades, key=lambda item: float(item.get("timestamp", 0) or 0)):
         if models.trade_exists(trade["id"]):
             continue
 
@@ -83,13 +95,13 @@ def detect_new_trades(trader):
         models.close_open_journal_entries(trade)
         inserted.append(trade)
 
-        if not scope_info["allowed"]:
+        if trade.get("signal_source") == "scope_skip":
             models.log_risk_event(
                 "SCOPE_SKIP",
                 (
-                    f"{trade.get('trader_username', wallet[:10])} "
+                    f"{trade.get('trader_username', trade.get('trader_wallet', '')[:10])} "
                     f"{trade.get('market_slug', '')[:40]} "
-                    f"({scope_info['scope_reason']})"
+                    f"({trade.get('scope_reason', 'scope_disabled')})"
                 ),
                 "not_mirrored",
             )
@@ -127,16 +139,20 @@ def _collect_actionable_signals():
 
 def scan_all_traders():
     """Ingest new activity, then release only confirmed, un-reversed signals."""
-    traders = models.get_tracked_traders(
-        limit=max(config.MAX_TRADERS * config.LEADERBOARD_CANDIDATE_MULTIPLIER, config.MAX_TRADERS)
-    )
-    for trader in traders:
-        try:
-            detect_new_trades(trader)
-        except Exception as exc:
-            models.log_risk_event(
-                "MONITOR_ERROR",
-                f"Failed to fetch trades for {trader['username']} ({trader['wallet'][:10]}...): {exc}",
-                "skipped",
-            )
+    traders = models.get_tracked_traders(limit=config.monitored_trader_limit())
+    prepared_trades = []
+    max_workers = min(config.MONITOR_FETCH_WORKERS, max(1, len(traders)))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_map = {executor.submit(collect_trader_trades, trader): trader for trader in traders}
+        for future in as_completed(future_map):
+            trader = future_map[future]
+            try:
+                prepared_trades.extend(future.result())
+            except Exception as exc:
+                models.log_risk_event(
+                    "MONITOR_ERROR",
+                    f"Failed to fetch trades for {trader['username']} ({trader['wallet'][:10]}...): {exc}",
+                    "skipped",
+                )
+    ingest_trades(prepared_trades)
     return _collect_actionable_signals()

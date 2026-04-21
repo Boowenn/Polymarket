@@ -1,8 +1,133 @@
 import sqlite3
 import time
+from collections import Counter, defaultdict
 from contextlib import contextmanager
 
 import config
+
+
+BLOCK_REASON_META = {
+    "repeat_harvest": {
+        "label": "Repeat Entry Limit",
+        "default_action": "experiment",
+        "note": "Best first optimization target. Test only a capped second entry when trader direction and book quality still agree.",
+    },
+    "no_book_levels": {
+        "label": "No Executable Book",
+        "default_action": "watch",
+        "note": "Do not chase empty books. If you test this, re-check later instead of forcing an immediate fill.",
+    },
+    "market_drift": {
+        "label": "Price Drift Guard",
+        "default_action": "keep",
+        "note": "Leave the drift guard in place overall. If you test anything, isolate only slight overshoots in a separate experiment.",
+    },
+    "top_level_thin": {
+        "label": "Top Level Thin",
+        "default_action": "watch",
+        "note": "Positive shadow results are still concentrated. Only test with smaller size and the same slippage caps.",
+    },
+    "spread_too_wide": {
+        "label": "Spread Too Wide",
+        "default_action": "keep",
+        "note": "Direct anti-slippage protection. Small sample and negative outcomes do not justify loosening it.",
+    },
+    "timing_gate": {
+        "label": "Timing / Confirmation",
+        "default_action": "watch",
+        "note": "Possible later tuning area, but not before repeat-entry and liquidity analysis settles.",
+    },
+    "price_band": {
+        "label": "Price Band",
+        "default_action": "keep",
+        "note": "Do not loosen longshot price bands on a thin sample.",
+    },
+    "capital_gate": {
+        "label": "Capital Gate",
+        "default_action": "watch",
+        "note": "Useful for dry-run coverage, but this is not where true execution edge comes from.",
+    },
+    "trader_quality": {
+        "label": "Trader Quality",
+        "default_action": "keep",
+        "note": "Core anti-farming defense. Keep the quality gate strict until live fill quality is proven.",
+    },
+    "whipsaw": {
+        "label": "Whipsaw Trap",
+        "default_action": "keep",
+        "note": "Explicit anti-bait defense. Do not loosen reversal protection.",
+    },
+    "cooldown": {
+        "label": "Cooldown",
+        "default_action": "watch",
+        "note": "May overlap with repeat-entry blocking. Review only after the repeat-entry experiment.",
+    },
+    "other": {
+        "label": "Other",
+        "default_action": "watch",
+        "note": "Miscellaneous blocked reasons. Needs more samples before any tuning.",
+    },
+    "unknown": {
+        "label": "Unknown",
+        "default_action": "watch",
+        "note": "Unknown blocked reason. Keep collecting data.",
+    },
+}
+
+
+def normalize_block_reason(reason):
+    text = str(reason or "").strip()
+    lowered = text.casefold()
+
+    if not lowered:
+        return "unknown"
+    if lowered.startswith("already mirrored this trader/market today"):
+        return "repeat_harvest"
+    if lowered.startswith("no executable book levels"):
+        return "no_book_levels"
+    if lowered.startswith("market drift too large"):
+        return "market_drift"
+    if lowered.startswith("top level too thin"):
+        return "top_level_thin"
+    if lowered.startswith("spread too wide"):
+        return "spread_too_wide"
+    if lowered.startswith("cooldown active"):
+        return "cooldown"
+    if "trader not approved" in lowered or "score too low" in lowered or "profile missing" in lowered:
+        return "trader_quality"
+    if "daily risk budget" in lowered or "exposure too high" in lowered or "max positions reached" in lowered:
+        return "capital_gate"
+    if "waiting confirmation" in lowered or "stale signal" in lowered:
+        return "timing_gate"
+    if "price outside copy band" in lowered or lowered == "invalid price":
+        return "price_band"
+    if "reversed same market" in lowered:
+        return "whipsaw"
+    return "other"
+
+
+def block_reason_label(category):
+    return BLOCK_REASON_META.get(category, BLOCK_REASON_META["other"])["label"]
+
+
+def _block_reason_note(category):
+    return BLOCK_REASON_META.get(category, BLOCK_REASON_META["other"])["note"]
+
+
+def _block_reason_action(category, closed_entries, decision_count, realized_pnl):
+    action = BLOCK_REASON_META.get(category, BLOCK_REASON_META["other"])["default_action"]
+
+    if category == "repeat_harvest" and (closed_entries < 8 or decision_count < 8):
+        return "watch"
+    if category == "market_drift" and decision_count >= 5 and realized_pnl < 0:
+        return "keep"
+    if category == "spread_too_wide" and decision_count >= 3 and realized_pnl < 0:
+        return "keep"
+    return action
+
+
+def _block_reason_action_order(action):
+    return {"experiment": 0, "watch": 1, "keep": 2}.get(action, 3)
 
 
 def get_connection():
@@ -29,7 +154,11 @@ def _table_columns(conn, table_name):
 
 def _ensure_column(conn, table_name, column_name, ddl):
     if column_name not in _table_columns(conn, table_name):
-        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl}")
+        try:
+            conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {ddl}")
+        except sqlite3.OperationalError as exc:
+            if "duplicate column name" not in str(exc).lower():
+                raise
 
 
 def init_db():
@@ -156,6 +285,9 @@ def init_db():
                 entry_value         REAL,
                 entry_timestamp     REAL,
                 entry_status        TEXT,
+                sample_type         TEXT DEFAULT 'executed',
+                experiment_key      TEXT DEFAULT '',
+                entry_reason        TEXT DEFAULT '',
                 exit_price          REAL,
                 exit_timestamp      REAL,
                 exit_reason         TEXT,
@@ -170,6 +302,9 @@ def init_db():
         _ensure_column(conn, "trades", "signal_note", "TEXT DEFAULT ''")
         _ensure_column(conn, "trades", "market_scope", "TEXT DEFAULT ''")
         _ensure_column(conn, "trade_journal", "market_scope", "TEXT DEFAULT ''")
+        _ensure_column(conn, "trade_journal", "sample_type", "TEXT DEFAULT 'executed'")
+        _ensure_column(conn, "trade_journal", "experiment_key", "TEXT DEFAULT ''")
+        _ensure_column(conn, "trade_journal", "entry_reason", "TEXT DEFAULT ''")
 
         conn.executescript(
             """
@@ -182,6 +317,7 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_profile_history_wallet_ts ON trader_profile_history(wallet, snapshot_ts DESC);
             CREATE INDEX IF NOT EXISTS idx_profile_history_status_ts ON trader_profile_history(status, snapshot_ts DESC);
             CREATE INDEX IF NOT EXISTS idx_journal_open ON trade_journal(trader_wallet, condition_id, outcome, exit_timestamp);
+            CREATE INDEX IF NOT EXISTS idx_journal_sample_experiment ON trade_journal(sample_type, experiment_key, entry_timestamp DESC);
             """
         )
 
@@ -507,7 +643,12 @@ def upsert_trade_journal(
     status,
     tradable_price=None,
     protected_price=None,
+    sample_type="executed",
+    trade_id=None,
+    experiment_key="",
+    entry_reason="",
 ):
+    journal_trade_id = trade_id or signal["id"]
     with db() as conn:
         conn.execute(
             """
@@ -515,9 +656,9 @@ def upsert_trade_journal(
                 trade_id, trader_wallet, trader_username, condition_id, token_id,
                 market_slug, market_scope, outcome, entry_side, signal_source, signal_price,
                 tradable_price, protected_price, entry_size, entry_value,
-                entry_timestamp, entry_status
+                entry_timestamp, entry_status, sample_type, experiment_key, entry_reason
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(trade_id) DO UPDATE SET
                 trader_username=excluded.trader_username,
                 market_scope=excluded.market_scope,
@@ -525,10 +666,13 @@ def upsert_trade_journal(
                 protected_price=excluded.protected_price,
                 entry_size=excluded.entry_size,
                 entry_value=excluded.entry_value,
-                entry_status=excluded.entry_status
+                entry_status=excluded.entry_status,
+                sample_type=excluded.sample_type,
+                experiment_key=excluded.experiment_key,
+                entry_reason=excluded.entry_reason
             """,
             (
-                signal["id"],
+                journal_trade_id,
                 signal.get("trader_wallet", ""),
                 signal.get("trader_username", ""),
                 signal.get("condition_id", ""),
@@ -545,6 +689,9 @@ def upsert_trade_journal(
                 float(value or 0),
                 float(signal.get("timestamp", time.time()) or time.time()),
                 status,
+                sample_type,
+                experiment_key,
+                entry_reason,
             ),
         )
 
@@ -692,7 +839,144 @@ def settle_trade_journal_by_condition(snapshot):
     return updated
 
 
-def get_trade_journal_summary(since_ts=None):
+def get_block_reason_analysis(since_ts=None, sample_types=("shadow",), limit=10):
+    sql = """
+        SELECT
+            entry_reason,
+            market_slug,
+            trader_wallet,
+            exit_timestamp,
+            realized_pnl
+        FROM trade_journal
+    """
+    params = []
+    clauses = []
+    if since_ts is not None:
+        clauses.append("entry_timestamp >= ?")
+        params.append(float(since_ts))
+    if sample_types:
+        placeholders = ",".join("?" for _ in sample_types)
+        clauses.append(f"COALESCE(sample_type, 'executed') IN ({placeholders})")
+        params.extend(sample_types)
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+
+    with db() as conn:
+        rows = conn.execute(sql, params).fetchall()
+
+    buckets = defaultdict(
+        lambda: {
+            "category": "",
+            "label": "",
+            "total_entries": 0,
+            "closed_entries": 0,
+            "open_entries": 0,
+            "wins": 0,
+            "losses": 0,
+            "flat_count": 0,
+            "realized_pnl": 0.0,
+            "markets": set(),
+            "traders": set(),
+            "raw_reason_counts": Counter(),
+            "closed_market_counts": Counter(),
+        }
+    )
+
+    for row in rows:
+        raw_reason = str(row["entry_reason"] or "").strip()
+        category = normalize_block_reason(raw_reason)
+        bucket = buckets[category]
+        bucket["category"] = category
+        bucket["label"] = block_reason_label(category)
+        bucket["total_entries"] += 1
+        market_slug = row["market_slug"] or ""
+        trader_wallet = row["trader_wallet"] or ""
+        if market_slug:
+            bucket["markets"].add(market_slug)
+        if trader_wallet:
+            bucket["traders"].add(trader_wallet)
+        bucket["raw_reason_counts"][raw_reason or "(blank)"] += 1
+
+        if row["exit_timestamp"] is None:
+            bucket["open_entries"] += 1
+            continue
+
+        bucket["closed_entries"] += 1
+        if market_slug:
+            bucket["closed_market_counts"][market_slug] += 1
+
+        pnl = float(row["realized_pnl"] or 0)
+        bucket["realized_pnl"] += pnl
+        if pnl > 0:
+            bucket["wins"] += 1
+        elif pnl < 0:
+            bucket["losses"] += 1
+        else:
+            bucket["flat_count"] += 1
+
+    results = []
+    for bucket in buckets.values():
+        total_entries = int(bucket["total_entries"] or 0)
+        closed_entries = int(bucket["closed_entries"] or 0)
+        decision_count = int(bucket["wins"] or 0) + int(bucket["losses"] or 0)
+        top_market = ""
+        top_market_share = 0.0
+        if bucket["closed_market_counts"]:
+            top_market, top_market_count = bucket["closed_market_counts"].most_common(1)[0]
+            top_market_share = (top_market_count / closed_entries) if closed_entries else 0.0
+
+        action = _block_reason_action(
+            bucket["category"],
+            closed_entries=closed_entries,
+            decision_count=decision_count,
+            realized_pnl=float(bucket["realized_pnl"] or 0),
+        )
+        top_raw_reason, top_raw_reason_count = bucket["raw_reason_counts"].most_common(1)[0]
+
+        results.append(
+            {
+                "category": bucket["category"],
+                "label": bucket["label"],
+                "action": action,
+                "note": _block_reason_note(bucket["category"]),
+                "total_entries": total_entries,
+                "closed_entries": closed_entries,
+                "open_entries": int(bucket["open_entries"] or 0),
+                "wins": int(bucket["wins"] or 0),
+                "losses": int(bucket["losses"] or 0),
+                "flat_count": int(bucket["flat_count"] or 0),
+                "decision_count": decision_count,
+                "win_rate": round(bucket["wins"] / decision_count * 100, 1) if decision_count else None,
+                "close_rate": round(closed_entries / total_entries * 100, 1) if total_entries else 0.0,
+                "realized_pnl": round(float(bucket["realized_pnl"] or 0), 4),
+                "pnl_per_entry": round(float(bucket["realized_pnl"] or 0) / total_entries, 6) if total_entries else 0.0,
+                "pnl_per_closed_entry": (
+                    round(float(bucket["realized_pnl"] or 0) / closed_entries, 6) if closed_entries else 0.0
+                ),
+                "distinct_markets": len(bucket["markets"]),
+                "distinct_traders": len(bucket["traders"]),
+                "top_market": top_market,
+                "top_market_share": round(top_market_share * 100, 1),
+                "top_raw_reason": top_raw_reason,
+                "top_raw_reason_count": int(top_raw_reason_count or 0),
+            }
+        )
+
+    results.sort(
+        key=lambda item: (
+            _block_reason_action_order(item["action"]),
+            -item["total_entries"],
+            -item["closed_entries"],
+            -item["realized_pnl"],
+            item["label"],
+        )
+    )
+    if limit is not None:
+        return results[:limit]
+    return results
+
+
+def get_trade_journal_summary(since_ts=None, sample_types=None, experiment_key=None):
     sql = """
         SELECT
             COUNT(*) AS total_entries,
@@ -711,9 +995,19 @@ def get_trade_journal_summary(since_ts=None):
         FROM trade_journal
     """
     params = []
+    clauses = []
     if since_ts is not None:
-        sql += " WHERE entry_timestamp >= ?"
+        clauses.append("entry_timestamp >= ?")
         params.append(float(since_ts))
+    if sample_types:
+        placeholders = ",".join("?" for _ in sample_types)
+        clauses.append(f"COALESCE(sample_type, 'executed') IN ({placeholders})")
+        params.extend(sample_types)
+    if experiment_key is not None:
+        clauses.append("COALESCE(experiment_key, '') = ?")
+        params.append(str(experiment_key or ""))
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
 
     with db() as conn:
         row = conn.execute(sql, params).fetchone()
@@ -729,8 +1023,125 @@ def get_trade_journal_summary(since_ts=None):
     }
 
 
+def get_experiment_entry_count(experiment_key, trader_wallet, condition_id, outcome, lookback_sec=86400):
+    cutoff = time.time() - lookback_sec
+    with db() as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM trade_journal
+            WHERE COALESCE(sample_type, 'executed') = 'experiment'
+              AND COALESCE(experiment_key, '') = ?
+              AND trader_wallet = ?
+              AND condition_id = ?
+              AND outcome = ?
+              AND entry_timestamp >= ?
+            """,
+            (experiment_key, trader_wallet, condition_id, outcome, cutoff),
+        ).fetchone()
+    return row["cnt"] if row else 0
+
+
+def get_experiment_analysis(experiment_key, since_ts=None):
+    summary = get_trade_journal_summary(
+        since_ts=since_ts,
+        sample_types=("experiment",),
+        experiment_key=experiment_key,
+    )
+    sql = """
+        SELECT
+            market_slug,
+            trader_wallet,
+            exit_timestamp,
+            realized_pnl
+        FROM trade_journal
+        WHERE COALESCE(sample_type, 'executed') = 'experiment'
+          AND COALESCE(experiment_key, '') = ?
+    """
+    params = [experiment_key]
+    if since_ts is not None:
+        sql += " AND entry_timestamp >= ?"
+        params.append(float(since_ts))
+
+    with db() as conn:
+        rows = conn.execute(sql, params).fetchall()
+
+    market_counts = Counter()
+    trader_counts = Counter()
+    closed_market_counts = Counter()
+    closed_trader_counts = Counter()
+    for row in rows:
+        market_slug = row["market_slug"] or ""
+        trader_wallet = row["trader_wallet"] or ""
+        if market_slug:
+            market_counts[market_slug] += 1
+        if trader_wallet:
+            trader_counts[trader_wallet] += 1
+        if row["exit_timestamp"] is not None:
+            if market_slug:
+                closed_market_counts[market_slug] += 1
+            if trader_wallet:
+                closed_trader_counts[trader_wallet] += 1
+
+    total_entries = int(summary.get("total_entries", 0) or 0)
+    closed_entries = int(summary.get("closed_entries", 0) or 0)
+    wins = int(summary.get("wins", 0) or 0)
+    losses = int(summary.get("losses", 0) or 0)
+    decision_count = wins + losses
+    top_market = ""
+    top_market_share = 0.0
+    top_trader = ""
+    top_trader_share = 0.0
+    if closed_market_counts:
+        top_market, top_market_count = closed_market_counts.most_common(1)[0]
+        top_market_share = round(top_market_count / closed_entries * 100, 1) if closed_entries else 0.0
+    if closed_trader_counts:
+        top_trader, top_trader_count = closed_trader_counts.most_common(1)[0]
+        top_trader_share = round(top_trader_count / closed_entries * 100, 1) if closed_entries else 0.0
+
+    status = "idle"
+    if total_entries > 0:
+        status = "collecting"
+    if closed_entries >= 30:
+        status = "review"
+    if closed_entries >= 80:
+        status = "mature"
+
+    return {
+        "experiment_key": experiment_key,
+        "total_entries": total_entries,
+        "open_entries": int(summary.get("open_entries", 0) or 0),
+        "closed_entries": closed_entries,
+        "wins": wins,
+        "losses": losses,
+        "flat_count": int(summary.get("flat_count", 0) or 0),
+        "decision_count": decision_count,
+        "win_rate": round(wins / decision_count * 100, 1) if decision_count else None,
+        "realized_pnl": float(summary.get("realized_pnl", 0) or 0),
+        "avg_entry_drift": float(summary.get("avg_entry_drift", 0) or 0),
+        "pnl_per_entry": (float(summary.get("realized_pnl", 0) or 0) / total_entries) if total_entries else 0.0,
+        "pnl_per_closed_entry": (
+            float(summary.get("realized_pnl", 0) or 0) / closed_entries if closed_entries else 0.0
+        ),
+        "distinct_markets": len(market_counts),
+        "distinct_traders": len(trader_counts),
+        "closed_distinct_markets": len(closed_market_counts),
+        "closed_distinct_traders": len(closed_trader_counts),
+        "top_market": top_market,
+        "top_market_share": top_market_share,
+        "top_trader": top_trader,
+        "top_trader_share": top_trader_share,
+        "status": status,
+    }
+
+
 def get_performance_snapshot(since_ts=None):
-    summary = get_trade_journal_summary(since_ts=since_ts)
+    summary = get_trade_journal_summary(since_ts=since_ts, sample_types=("executed",))
+    shadow_summary = get_trade_journal_summary(since_ts=since_ts, sample_types=("shadow",))
+    research_summary = get_trade_journal_summary(since_ts=since_ts)
+    repeat_experiment = get_experiment_analysis(config.REPEAT_ENTRY_EXPERIMENT_KEY, since_ts=since_ts)
+    blocked_reason_rows = get_block_reason_analysis(since_ts=since_ts, sample_types=("shadow",), limit=1)
+    blocked_reason_focus = blocked_reason_rows[0] if blocked_reason_rows else None
     total_entries = int(summary.get("total_entries", 0) or 0)
     open_entries = int(summary.get("open_entries", 0) or 0)
     closed_entries = int(summary.get("closed_entries", 0) or 0)
@@ -739,6 +1150,13 @@ def get_performance_snapshot(since_ts=None):
     flat_count = int(summary.get("flat_count", 0) or 0)
     decision_count = wins + losses
     win_rate = round(wins / decision_count * 100, 1) if decision_count > 0 else None
+    shadow_entries = int(shadow_summary.get("total_entries", 0) or 0)
+    shadow_open_entries = int(shadow_summary.get("open_entries", 0) or 0)
+    shadow_closed_entries = int(shadow_summary.get("closed_entries", 0) or 0)
+    shadow_wins = int(shadow_summary.get("wins", 0) or 0)
+    shadow_losses = int(shadow_summary.get("losses", 0) or 0)
+    shadow_decision_count = shadow_wins + shadow_losses
+    shadow_win_rate = round(shadow_wins / shadow_decision_count * 100, 1) if shadow_decision_count > 0 else None
 
     return {
         "simulated_entries": total_entries,
@@ -751,6 +1169,35 @@ def get_performance_snapshot(since_ts=None):
         "win_rate": win_rate,
         "realized_pnl": float(summary.get("realized_pnl", 0) or 0),
         "avg_entry_drift": float(summary.get("avg_entry_drift", 0) or 0),
+        "research_entries": int(research_summary.get("total_entries", 0) or 0),
+        "research_open_entries": int(research_summary.get("open_entries", 0) or 0),
+        "research_closed_entries": int(research_summary.get("closed_entries", 0) or 0),
+        "shadow_entries": shadow_entries,
+        "shadow_open_entries": shadow_open_entries,
+        "shadow_closed_entries": shadow_closed_entries,
+        "shadow_wins": shadow_wins,
+        "shadow_losses": shadow_losses,
+        "shadow_decision_count": shadow_decision_count,
+        "shadow_win_rate": shadow_win_rate,
+        "shadow_realized_pnl": float(shadow_summary.get("realized_pnl", 0) or 0),
+        "repeat_entry_experiment_enabled": config.stage2_repeat_entry_experiment_enabled(),
+        "repeat_entry_experiment_entries": int(repeat_experiment.get("total_entries", 0) or 0),
+        "repeat_entry_experiment_open_entries": int(repeat_experiment.get("open_entries", 0) or 0),
+        "repeat_entry_experiment_closed_entries": int(repeat_experiment.get("closed_entries", 0) or 0),
+        "repeat_entry_experiment_wins": int(repeat_experiment.get("wins", 0) or 0),
+        "repeat_entry_experiment_losses": int(repeat_experiment.get("losses", 0) or 0),
+        "repeat_entry_experiment_flat_count": int(repeat_experiment.get("flat_count", 0) or 0),
+        "repeat_entry_experiment_decision_count": int(repeat_experiment.get("decision_count", 0) or 0),
+        "repeat_entry_experiment_win_rate": repeat_experiment.get("win_rate"),
+        "repeat_entry_experiment_realized_pnl": float(repeat_experiment.get("realized_pnl", 0) or 0),
+        "repeat_entry_experiment_distinct_markets": int(repeat_experiment.get("distinct_markets", 0) or 0),
+        "repeat_entry_experiment_distinct_traders": int(repeat_experiment.get("distinct_traders", 0) or 0),
+        "repeat_entry_experiment_top_market": repeat_experiment.get("top_market", ""),
+        "repeat_entry_experiment_top_market_share": float(repeat_experiment.get("top_market_share", 0) or 0),
+        "repeat_entry_experiment_top_trader": repeat_experiment.get("top_trader", ""),
+        "repeat_entry_experiment_top_trader_share": float(repeat_experiment.get("top_trader_share", 0) or 0),
+        "repeat_entry_experiment_status": repeat_experiment.get("status", "idle"),
+        "blocked_reason_focus": blocked_reason_focus,
     }
 
 

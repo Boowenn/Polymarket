@@ -21,8 +21,11 @@ BANKROLL = float(os.getenv("BANKROLL", "1000"))
 STAKE_PCT = float(os.getenv("STAKE_PCT", "0.01"))
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "15"))
 MAX_TRADERS = int(os.getenv("MAX_TRADERS", "5"))
+MONITOR_FETCH_WORKERS = max(1, int(os.getenv("MONITOR_FETCH_WORKERS", "12")))
 LEADERBOARD_CATEGORY = os.getenv("LEADERBOARD_CATEGORY", "SPORTS").strip().upper()
 LEADERBOARD_CANDIDATE_MULTIPLIER = max(1, int(os.getenv("LEADERBOARD_CANDIDATE_MULTIPLIER", "6")))
+LEADERBOARD_DISCOVERY_PERIODS = tuple(_csv_list(os.getenv("LEADERBOARD_DISCOVERY_PERIODS", "day,week,month")))
+LEADERBOARD_DISCOVERY_ORDER_BY = tuple(_csv_list(os.getenv("LEADERBOARD_DISCOVERY_ORDER_BY", "pnl,vol")))
 MARKET_SCOPE = tuple(_csv_list(os.getenv("MARKET_SCOPE", "sports,esports")))
 ESPORT_SPORT_CODES = tuple(
     _csv_list(
@@ -36,6 +39,15 @@ MARKET_SCOPE_CACHE_SEC = max(60, int(os.getenv("MARKET_SCOPE_CACHE_SEC", "3600")
 
 # Mode
 DRY_RUN = os.getenv("DRY_RUN", "true").lower() == "true"
+DRY_RUN_RECORD_BLOCKED_SAMPLES = os.getenv("DRY_RUN_RECORD_BLOCKED_SAMPLES", "true").lower() == "true"
+ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT = (
+    os.getenv("ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT", "true").lower() == "true"
+)
+REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES = max(
+    0,
+    int(os.getenv("REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES", "1")),
+)
+REPEAT_ENTRY_EXPERIMENT_KEY = "repeat_entry_stage2"
 
 # Risk controls
 MAX_TRADE_PCT = float(os.getenv("MAX_TRADE_PCT", "0.05"))
@@ -101,6 +113,10 @@ def capital_gates_enabled():
     return not (DRY_RUN and PAPER_IGNORE_CAPITAL_GATES)
 
 
+def stage2_repeat_entry_experiment_enabled():
+    return DRY_RUN and ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT and REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES > 0
+
+
 def market_scope_set():
     scope = {item for item in MARKET_SCOPE if item}
     return scope or {"sports", "esports"}
@@ -117,3 +133,26 @@ def market_scope_label():
     if {"sports", "esports"}.issubset(scope):
         return "Sports + Esports"
     return " + ".join(item.title() for item in sorted(scope))
+
+
+def leaderboard_slice_limit():
+    return max(MAX_TRADERS * LEADERBOARD_CANDIDATE_MULTIPLIER, MAX_TRADERS)
+
+
+def discovery_slice_pairs():
+    periods = [item.upper() for item in LEADERBOARD_DISCOVERY_PERIODS if item]
+    order_by = [item.upper() for item in LEADERBOARD_DISCOVERY_ORDER_BY if item]
+    if not periods:
+        periods = ["DAY"]
+    if not order_by:
+        order_by = ["PNL"]
+    return [(period, order) for period in periods for order in order_by]
+
+
+def monitored_trader_limit():
+    return leaderboard_slice_limit() * max(1, len(discovery_slice_pairs()))
+
+
+def discovery_label():
+    slices = [f"{period}/{order}" for period, order in discovery_slice_pairs()]
+    return ", ".join(slices)

@@ -10,6 +10,62 @@ logger = logging.getLogger("executor")
 _clob_client = None
 
 
+def _experiment_trade_id(signal, experiment_key):
+    return f"{signal['id']}::{experiment_key}"
+
+
+def _record_blocked_shadow(signal, size, value, reason):
+    if not (config.DRY_RUN and config.DRY_RUN_RECORD_BLOCKED_SAMPLES):
+        return
+
+    assessment = signal.get("_execution_assessment") or {}
+    tradable_price = assessment.get("avg_price")
+    protected_price = assessment.get("limit_price")
+    models.upsert_trade_journal(
+        signal,
+        size=size,
+        value=value,
+        status="blocked_shadow",
+        tradable_price=float(tradable_price) if tradable_price is not None else None,
+        protected_price=float(protected_price) if protected_price is not None else None,
+        sample_type="shadow",
+        entry_reason=reason,
+    )
+
+
+def _record_repeat_entry_experiment(signal, size, value, blocked_reason):
+    if models.normalize_block_reason(blocked_reason) != "repeat_harvest":
+        return
+
+    approved, experiment_reason = risk_checker.check_repeat_entry_experiment(signal)
+    if not approved:
+        logger.info(
+            f"[STAGE2 SKIP] repeat-entry experiment not recorded: {experiment_reason} | "
+            f"{signal.get('market_slug', '')} {signal.get('side', 'BUY')}"
+        )
+        return
+
+    assessment = signal.get("_execution_assessment") or {}
+    tradable_price = assessment.get("avg_price")
+    protected_price = assessment.get("limit_price")
+    models.upsert_trade_journal(
+        signal,
+        size=size,
+        value=value,
+        status="stage2_repeat_entry_shadow",
+        tradable_price=float(tradable_price) if tradable_price is not None else None,
+        protected_price=float(protected_price) if protected_price is not None else None,
+        sample_type="experiment",
+        trade_id=_experiment_trade_id(signal, config.REPEAT_ENTRY_EXPERIMENT_KEY),
+        experiment_key=config.REPEAT_ENTRY_EXPERIMENT_KEY,
+        entry_reason=blocked_reason,
+    )
+    logger.info(
+        f"[STAGE2] repeat-entry experiment recorded | "
+        f"{signal.get('signal_source', 'copy')} {signal.get('market_slug', '')} {signal.get('side', 'BUY')}"
+    )
+
+
 def _get_clob_client():
     global _clob_client
     if _clob_client is not None:
@@ -64,6 +120,8 @@ def execute_trade(signal):
 
     approved, reason = risk_checker.check(signal)
     if not approved:
+        _record_blocked_shadow(signal, our_size, our_value, reason)
+        _record_repeat_entry_experiment(signal, our_size, our_value, reason)
         logger.warning(
             f"BLOCKED: {reason} | {signal.get('signal_source', 'copy')} "
             f"{signal.get('market_slug', '')} {signal.get('side', 'BUY')}"
@@ -98,6 +156,7 @@ def execute_trade(signal):
             status="dry_run",
             tradable_price=tradable_price,
             protected_price=protected_price,
+            sample_type="executed",
         )
         return {"status": "dry_run", "size": our_size, "value": our_value}
 
@@ -138,6 +197,7 @@ def execute_trade(signal):
             status=status,
             tradable_price=tradable_price,
             protected_price=protected_price,
+            sample_type="executed",
         )
 
         logger.info(
