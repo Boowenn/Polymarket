@@ -71,6 +71,12 @@ The report summarizes:
 
 See `.env.example` for all configuration values.
 
+## Design document
+
+Long-term maintenance and AI-learning design:
+
+- `docs/AI_SELF_LEARNING_STRATEGY_DESIGN.md`
+
 Relevant scope controls:
 
 - `MARKET_SCOPE=sports,esports` to allow both traditional sports and esports.
