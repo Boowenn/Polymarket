@@ -85,6 +85,7 @@ ENABLE_GAME_MARKET_ACTIVE_EXIT = os.getenv("ENABLE_GAME_MARKET_ACTIVE_EXIT", "tr
 
 # Risk controls
 MAX_TRADE_PCT = float(os.getenv("MAX_TRADE_PCT", "0.05"))
+MAX_TRADE_VALUE_USDC = float(os.getenv("MAX_TRADE_VALUE_USDC", "0"))
 DAILY_LOSS_LIMIT = float(os.getenv("DAILY_LOSS_LIMIT", "50"))
 SESSION_STOP_LOSS_USDC = float(os.getenv("SESSION_STOP_LOSS_USDC", str(DAILY_LOSS_LIMIT)))
 GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO = float(os.getenv("GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO", "0.70"))
@@ -145,6 +146,13 @@ def effective_bankroll():
 
 def effective_daily_risk_budget():
     return PAPER_DAILY_RISK_BUDGET if DRY_RUN else DAILY_RISK_BUDGET
+
+
+def effective_max_trade_value():
+    pct_cap = effective_bankroll() * MAX_TRADE_PCT
+    if MAX_TRADE_VALUE_USDC > 0:
+        return min(pct_cap, MAX_TRADE_VALUE_USDC)
+    return pct_cap
 
 
 def capital_gates_enabled():

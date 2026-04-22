@@ -180,7 +180,11 @@ def render_dashboard(traders=None, cycle_count=0):
                 f"  Live WR      {live_wr}  on {live_decisions} decided trades",
                 f"  Live CR      {live_cr:.1f}%  ([green]{live_wins}W[/green] / [red]{live_losses}L[/red] / {live_flats} flat)",
                 f"  Risk Budget  ${config.effective_daily_risk_budget():,.0f}  |  Max Pos {config.MAX_POSITIONS}",
-                f"  Max Trade    ${config.effective_bankroll() * config.MAX_TRADE_PCT:,.2f}",
+                (
+                    f"  Max Trade    ${config.effective_max_trade_value():,.2f} "
+                    f"(pct cap ${config.effective_bankroll() * config.MAX_TRADE_PCT:,.2f}"
+                    f"{f', abs cap ${config.MAX_TRADE_VALUE_USDC:,.2f}' if config.MAX_TRADE_VALUE_USDC > 0 else ''})"
+                ),
                 f"  Journal PnL  {'[green]' if live_execution.get('realized_pnl', 0) >= 0 else '[red]'}${float(live_execution.get('realized_pnl', 0) or 0):,.2f}[/]",
                 f"  Entry Drift  {float(live_execution.get('avg_entry_drift', 0) or 0):.3f}",
                 f"  Basis        live-only: archived dry-run / shadow / experiment rows are excluded",

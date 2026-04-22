@@ -437,7 +437,7 @@ def calculate_order_size(signal):
         whale_value = float(signal.get("size", 0) or 0) * price
         desired_value = whale_value * config.STAKE_PCT
 
-    max_value = config.effective_bankroll() * config.MAX_TRADE_PCT
+    max_value = config.effective_max_trade_value()
     our_value = min(desired_value, max_value)
     our_size = our_value / price if price > 0 else 0
     return round(our_size, 4), round(our_value, 4)

@@ -81,7 +81,7 @@ class RiskCheck:
             desired_value = (
                 float(signal.get("size", 0) or 0) * float(signal.get("price", 0) or 0) * config.STAKE_PCT
             )
-        return min(desired_value, config.effective_bankroll() * config.MAX_TRADE_PCT)
+        return min(desired_value, config.effective_max_trade_value())
 
     def _check_duplicate(self, signal):
         with models.db() as conn:

@@ -69,6 +69,7 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - keep `repeat-entry` paused
 - prefer `MAX_POSITIONS=1` or `2`
 - use a tight daily loss limit and daily risk budget
+- prefer an absolute single-trade cap such as `MAX_TRADE_VALUE_USDC=1.0` to `1.5` instead of relying only on `MAX_TRADE_PCT`; with Polymarket's `min_order_size=5`, cent-level caps are usually non-executable
 - enable the live session stop so realized + marked unrealized drawdown can pause new entries before a tiny bankroll spirals
 - keep the real `.env` local-only; do not commit private keys or live wallet settings
 - read the dashboard as a live-only view: real account cash, current guardrails, and true executed fills

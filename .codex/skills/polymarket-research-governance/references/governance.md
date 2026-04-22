@@ -85,6 +85,7 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
 - keep scope narrowed to the intended live segment, such as `sports,esports`
 - keep repeat-entry paused and avoid widening experiments
 - show live guardrails clearly in the dashboard: bankroll, deployed notional, remaining daily budget, max trade size, max positions, wallet type, and funder summary
+- for bankrolls around `$20`, prefer a real absolute single-trade cap such as `$1.0-$1.5`; cent-level caps like `$0.02-$0.08` are usually not executable once `min_order_size=5` is applied
 - surface any live order that stays locally `delayed` beyond the alert threshold before widening size or changing execution rules
 - re-query delayed live orders on a short loop and write back `matched / canceled / expired` before treating them as unresolved execution failures
 - only write `opposite_signal` exits when the bot's mirrored opposite-side order actually books a fill; the copied trader's reversal alone is not enough

@@ -73,6 +73,7 @@ def first_run_setup():
         f.write(f"NO_BOOK_DELAYED_RECHECK_DELAY_SEC=30\n")
         f.write(f"NO_BOOK_DELAYED_RECHECK_MAX_EXTRA_ENTRIES=1\n")
         f.write(f"MAX_TRADE_PCT=0.05\n")
+        f.write(f"MAX_TRADE_VALUE_USDC=0\n")
         f.write(f"DAILY_LOSS_LIMIT=50\n")
         f.write(f"ENABLE_SESSION_STOP_LOSS=true\n")
         f.write(f"SESSION_STOP_LOSS_USDC=50\n")

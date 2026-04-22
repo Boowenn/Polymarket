@@ -24,7 +24,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 6. Before claiming live-readiness, verify wallet auth with a read-only CLOB call.
    For Polymarket proxy wallets, require the correct `POLY_SIGNATURE_TYPE` and `POLY_FUNDER` from the account settings page before any live canary.
 7. For tiny live bankrolls, prefer a smoke-test mindset over a sizing mindset.
-   Surface real guardrails in the dashboard, keep `.env` local-only, block sub-minimum market sizes instead of auto-inflating order size, explicitly alert on live orders that stay `delayed` beyond the configured threshold, and auto-reconcile those delayed orders back to their final CLOB status before drawing conclusions.
+   Surface real guardrails in the dashboard, keep `.env` local-only, block sub-minimum market sizes instead of auto-inflating order size, explicitly alert on live orders that stay `delayed` beyond the configured threshold, and auto-reconcile those delayed orders back to their final CLOB status before drawing conclusions. For bankrolls around `$20`, prefer a small absolute cap such as `$1.0-$1.5` per trade over a pure percentage cap; cent-level caps are usually non-executable because Polymarket books commonly require `min_order_size=5`.
 8. For the first real-money stop, prefer a session-level drawdown cap over a position `%` stop.
    In live mode, use realized + marked unrealized PnL to pause new entries once the drawdown limit is breached. If the book is too thin to mark from executable bids, fall back to Gamma outcome prices instead of silently assuming no drawdown.
 9. For single-game sports and esports markets, add a dedicated active-exit rule before trusting mirrored SELLs alone.

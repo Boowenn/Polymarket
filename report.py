@@ -375,7 +375,7 @@ def build_recommendations(journal_summary, risk_counts, trader_rows, source_rows
             )
         else:
             recommendations.append(
-                "大部分信号被资金/单笔上限挡住了。可适当调大 BANKROLL、MAX_TRADE_PCT 或 DAILY_RISK_BUDGET，但别超过你能承受的真实风险。"
+                "大部分信号被资金/单笔上限挡住了。若要提高成交数，优先评估 BANKROLL、MAX_TRADE_VALUE_USDC、MAX_TRADE_PCT 和 DAILY_RISK_BUDGET 的组合，不要为了成交而放大到超出你能承受的真实风险。"
             )
 
     if risk_counts.get("whipsaw", 0) >= 3:

@@ -35,7 +35,7 @@ if not os.path.exists(env_path):
         f.write("DELAYED_ORDER_ALERT_SEC=120\n")
         f.write("DELAYED_ORDER_RECHECK_SEC=15\n")
         f.write("DELAYED_ORDER_RECHECK_LIMIT=10\n")
-        f.write("MAX_TRADE_PCT=0.05\nDAILY_LOSS_LIMIT=50\nMAX_POSITIONS=10\n")
+        f.write("MAX_TRADE_PCT=0.05\nMAX_TRADE_VALUE_USDC=0\nDAILY_LOSS_LIMIT=50\nMAX_POSITIONS=10\n")
         f.write("ENABLE_SESSION_STOP_LOSS=true\nSESSION_STOP_LOSS_USDC=50\n")
         f.write("ENABLE_GAME_MARKET_ACTIVE_EXIT=true\n")
         f.write("GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO=0.70\n")
@@ -334,7 +334,10 @@ def get_dashboard_data():
             "game_market_active_exit_price_ratio": config.GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO,
             "game_market_active_exit_abs_drop": config.GAME_MARKET_ACTIVE_EXIT_ABS_DROP,
             "max_trade_pct": config.MAX_TRADE_PCT * 100,
-            "max_trade_value": effective_bankroll * config.MAX_TRADE_PCT,
+            "max_trade_pct_cap_value": effective_bankroll * config.MAX_TRADE_PCT,
+            "max_trade_absolute_cap": config.MAX_TRADE_VALUE_USDC,
+            "max_trade_has_absolute_cap": config.MAX_TRADE_VALUE_USDC > 0,
+            "max_trade_value": config.effective_max_trade_value(),
             "max_positions": config.MAX_POSITIONS,
             "open_position_count": open_position_count,
             "max_trader_exposure_pct": config.MAX_TRADER_EXPOSURE_PCT * 100,
