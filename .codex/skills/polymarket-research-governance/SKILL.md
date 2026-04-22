@@ -26,13 +26,15 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 7. For tiny live bankrolls, prefer a smoke-test mindset over a sizing mindset.
    Surface real guardrails in the dashboard, keep `.env` local-only, block sub-minimum market sizes instead of auto-inflating order size, explicitly alert on live orders that stay `delayed` beyond the configured threshold, and auto-reconcile those delayed orders back to their final CLOB status before drawing conclusions.
 8. For the first real-money stop, prefer a session-level drawdown cap over a position `%` stop.
-   In live mode, use realized + executable unrealized PnL to pause new entries once the drawdown limit is breached. Do not auto-flatten on a naive price-percent trigger unless the exit path has already been separately validated.
-9. In live mode, keep actual wallet state separate from historical dry-run research state.
+   In live mode, use realized + marked unrealized PnL to pause new entries once the drawdown limit is breached. If the book is too thin to mark from executable bids, fall back to Gamma outcome prices instead of silently assuming no drawdown.
+9. For single-game sports and esports markets, add a dedicated active-exit rule before trusting mirrored SELLs alone.
+   `Game 1 / Game 2 / Game 3 Winner` style markets can run to near-max loss before the copied trader ever exits. Keep a narrow proactive exit that only targets those single-game markets, uses cooldowns, and only closes journal size that the bot actually sells.
+10. In live mode, keep actual wallet state separate from historical dry-run research state.
    Show real account cash separately from strategy bankroll, and make sure old `dry_run` positions do not consume live deployed-risk, exposure, or max-position views.
-10. Only close `opposite_signal` journal entries after the bot books its own opposite-side fill.
+11. Only close `opposite_signal` journal entries after the bot books its own opposite-side fill.
    A copied trader's raw reversal should not flatten live executed exposure unless the mirrored exit order also filled.
-11. When you intentionally cut over from research to live-only operation, archive the old DB snapshot locally and purge active `dry_run` / `shadow` / `experiment` rows from the runtime DB.
-12. When governance changes land, update this skill and the repo README in the same change.
+12. When you intentionally cut over from research to live-only operation, archive the old DB snapshot locally and purge active `dry_run` / `shadow` / `experiment` rows from the runtime DB.
+13. When governance changes land, update this skill and the repo README in the same change.
 
 ## Guardrails
 
@@ -44,6 +46,8 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never let historical `dry_run` executed positions contaminate live capital gates or live dashboard totals.
 - Never leave archived dry-run / shadow / experiment rows in the active live DB after an explicit live cutover.
 - Never treat a display-only `DAILY_LOSS_LIMIT` label as real protection; if live stop-loss is claimed, it must actually block new entries.
+- Never mark single-game live positions at entry value just because the order book is empty; use a real fallback mark before claiming drawdown is zero.
+- Never auto-close more journal size than the bot actually sold when a proactive exit only fills partially.
 - Never update governance text without checking whether the baseline date and numbers are still current.
 
 ## References

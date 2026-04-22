@@ -192,15 +192,25 @@ def reconcile_delayed_orders(limit=None, min_age_sec=None):
 
         if booked_size > 0:
             signal = _signal_from_trade_row(trade)
-            closed_count = _record_executed_fill(
-                signal,
-                size=booked_size,
-                value=booked_value,
-                status=status,
-                tradable_price=float(trade.get("price", 0) or 0),
-                protected_price=booked_price,
-                fill_ts=time.time(),
-            )
+            if str(trade.get("signal_source", "copy") or "copy").lower() == "bot_exit":
+                closed_count = models.close_open_journal_entries(
+                    signal,
+                    exit_price=booked_price,
+                    exit_ts=time.time(),
+                    close_trade_id=signal.get("id", ""),
+                    exit_reason=f"active_exit:{trade.get('signal_note', 'delayed_reconcile')}",
+                    exit_size=booked_size,
+                )
+            else:
+                closed_count = _record_executed_fill(
+                    signal,
+                    size=booked_size,
+                    value=booked_value,
+                    status=status,
+                    tradable_price=float(trade.get("price", 0) or 0),
+                    protected_price=booked_price,
+                    fill_ts=time.time(),
+                )
             summary["matched"] += 1
             logger.info(
                 f"[LIVE RECONCILE] order {order_id} delayed -> {status} "

@@ -81,11 +81,15 @@ DELAYED_ORDER_RECHECK_LIMIT = max(
     int(os.getenv("DELAYED_ORDER_RECHECK_LIMIT", "10")),
 )
 ENABLE_SESSION_STOP_LOSS = os.getenv("ENABLE_SESSION_STOP_LOSS", "true").lower() == "true"
+ENABLE_GAME_MARKET_ACTIVE_EXIT = os.getenv("ENABLE_GAME_MARKET_ACTIVE_EXIT", "true").lower() == "true"
 
 # Risk controls
 MAX_TRADE_PCT = float(os.getenv("MAX_TRADE_PCT", "0.05"))
 DAILY_LOSS_LIMIT = float(os.getenv("DAILY_LOSS_LIMIT", "50"))
 SESSION_STOP_LOSS_USDC = float(os.getenv("SESSION_STOP_LOSS_USDC", str(DAILY_LOSS_LIMIT)))
+GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO = float(os.getenv("GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO", "0.70"))
+GAME_MARKET_ACTIVE_EXIT_ABS_DROP = float(os.getenv("GAME_MARKET_ACTIVE_EXIT_ABS_DROP", "0.15"))
+GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC = int(os.getenv("GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC", "60"))
 MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "10"))
 DAILY_RISK_BUDGET = float(os.getenv("DAILY_RISK_BUDGET", str(DAILY_LOSS_LIMIT)))
 PAPER_BANKROLL = float(os.getenv("PAPER_BANKROLL", str(BANKROLL)))
@@ -149,6 +153,10 @@ def capital_gates_enabled():
 
 def session_stop_loss_enabled():
     return (not DRY_RUN) and ENABLE_SESSION_STOP_LOSS and SESSION_STOP_LOSS_USDC > 0
+
+
+def game_market_active_exit_enabled():
+    return (not DRY_RUN) and ENABLE_GAME_MARKET_ACTIVE_EXIT
 
 
 def stage2_repeat_entry_experiment_enabled():

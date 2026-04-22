@@ -185,6 +185,7 @@ def render_dashboard(traders=None, cycle_count=0):
                 f"  Entry Drift  {float(live_execution.get('avg_entry_drift', 0) or 0):.3f}",
                 f"  Basis        live-only: archived dry-run / shadow / experiment rows are excluded",
                 f"  Unrealized   {'[green]' if unrealized >= 0 else '[red]'}${unrealized:,.2f}[/]",
+                f"  Marked Value ${float(drawdown.get('marked_value', 0) or 0):,.2f}  |  Executable ${float(drawdown.get('executable_value', 0) or 0):,.2f}",
                 (
                     f"  Stop Loss    [red]ACTIVE[/red] at -${drawdown.get('loss_limit_usdc', 0):,.2f} "
                     f"(total ${drawdown.get('total_pnl', 0):,.2f})"
@@ -194,6 +195,11 @@ def render_dashboard(traders=None, cycle_count=0):
                         if drawdown.get("stop_enabled")
                         else "  Stop Loss    off"
                     )
+                ),
+                (
+                    f"  Active Exit  game-market trigger on ({int(config.GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC)}s cooldown)"
+                    if config.game_market_active_exit_enabled()
+                    else "  Active Exit  off"
                 ),
             ]
         )

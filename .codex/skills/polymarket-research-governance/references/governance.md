@@ -92,9 +92,15 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
 - when live mode is enabled, exclude historical `dry_run` executed positions from live deployed-risk, exposure, and max-position views
 - block orders that fall below the market `min_order_size` instead of automatically increasing size to force a fill
 - prefer the first live stop to be a session-level drawdown cap:
-  use `realized_pnl + executable_unrealized_pnl` to pause new entries once the configured threshold is breached
+  use `realized_pnl + marked_unrealized_pnl` to pause new entries once the configured threshold is breached
+- when the order book is empty or too thin to provide a realistic executable mark:
+  fall back to Gamma outcome prices so single-game markets do not hide a near-full loss as flat unrealized PnL
 - do not rely on a naive position `%` stop as the first live guard:
   Polymarket has no native stop order, and sports/esports books can gap or thin out enough to false-trigger a brittle price-based exit
+- for `Game 1 / Game 2 / Game 3 Winner` style markets:
+  keep a dedicated active-exit rule enabled so the bot can try to flatten on a sharp adverse move before waiting for mirrored SELLs or final settlement
+- when a proactive active exit only fills part of the position:
+  close only the matched journal size and leave the remainder open
 
 This avoids disguising a sizing problem as successful live execution.
 

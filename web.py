@@ -37,6 +37,10 @@ if not os.path.exists(env_path):
         f.write("DELAYED_ORDER_RECHECK_LIMIT=10\n")
         f.write("MAX_TRADE_PCT=0.05\nDAILY_LOSS_LIMIT=50\nMAX_POSITIONS=10\n")
         f.write("ENABLE_SESSION_STOP_LOSS=true\nSESSION_STOP_LOSS_USDC=50\n")
+        f.write("ENABLE_GAME_MARKET_ACTIVE_EXIT=true\n")
+        f.write("GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO=0.70\n")
+        f.write("GAME_MARKET_ACTIVE_EXIT_ABS_DROP=0.15\n")
+        f.write("GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC=60\n")
         f.write("DAILY_RISK_BUDGET=50\nPAPER_BANKROLL=250\nPAPER_DAILY_RISK_BUDGET=250\n")
         f.write("PAPER_IGNORE_CAPITAL_GATES=true\nMAX_TRADER_EXPOSURE_PCT=0.12\n")
         f.write("MAX_MARKET_EXPOSURE_PCT=0.15\nMIN_SIGNAL_CONFIRM_SEC=20\nMAX_SIGNAL_AGE_SEC=90\n")
@@ -59,6 +63,7 @@ import models
 import leaderboard
 import monitor
 import executor
+import active_exit
 import portfolio
 import strategy
 import settlement
@@ -322,8 +327,12 @@ def get_dashboard_data():
             "session_stop_unrealized_pnl": drawdown.get("unrealized_pnl", 0),
             "session_stop_total_pnl": drawdown.get("total_pnl", 0),
             "session_stop_entry_value": drawdown.get("entry_value", 0),
+            "session_stop_marked_value": drawdown.get("marked_value", 0),
             "session_stop_executable_value": drawdown.get("executable_value", 0),
             "session_stop_mark_failures": drawdown.get("mark_failures", 0),
+            "game_market_active_exit_enabled": config.game_market_active_exit_enabled(),
+            "game_market_active_exit_price_ratio": config.GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO,
+            "game_market_active_exit_abs_drop": config.GAME_MARKET_ACTIVE_EXIT_ABS_DROP,
             "max_trade_pct": config.MAX_TRADE_PCT * 100,
             "max_trade_value": effective_bankroll * config.MAX_TRADE_PCT,
             "max_positions": config.MAX_POSITIONS,
@@ -476,6 +485,14 @@ def bot_loop():
         except Exception as e:
             logger.error(f"Delayed reconcile: {e}")
             models.log_risk_event("DELAYED_RECONCILE_ERROR", str(e), "skipped")
+
+        try:
+            exit_summary = active_exit.run_active_exit_cycle(force=True)
+            if exit_summary.get("attempted", 0) or exit_summary.get("pending", 0):
+                logger.warning("Active exit cycle: %s", exit_summary)
+        except Exception as e:
+            logger.error(f"Active exit: {e}")
+            models.log_risk_event("ACTIVE_EXIT_ERROR", str(e), "skipped")
 
         # PnL snapshot
         performance = models.get_performance_snapshot()

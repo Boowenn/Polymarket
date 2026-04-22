@@ -1202,6 +1202,7 @@ function translateSource(source) {
   const text = String(source || 'copy').toLowerCase();
   if (text === 'consensus') return '共识';
   if (text === 'copy') return '跟单';
+  if (text === 'bot_exit') return '主动退出';
   return text;
 }
 
@@ -1665,7 +1666,11 @@ function renderSystem(config, stats, performance, liveExecution) {
   const sessionStopReason = String(config.session_stop_reason || '');
   const sessionStopMarkFailures = Number(config.session_stop_mark_failures || 0);
   const sessionStopEntryValue = Number(config.session_stop_entry_value || 0);
+  const sessionStopMarkedValue = Number(config.session_stop_marked_value || 0);
   const sessionStopExecutableValue = Number(config.session_stop_executable_value || 0);
+  const gameMarketActiveExitEnabled = Boolean(config.game_market_active_exit_enabled);
+  const gameMarketActiveExitPriceRatio = Number(config.game_market_active_exit_price_ratio || 0);
+  const gameMarketActiveExitAbsDrop = Number(config.game_market_active_exit_abs_drop || 0);
   const liveAlert = document.getElementById('live-alert');
   const delayedAlert = document.getElementById('delayed-alert');
   const navExperiments = document.getElementById('nav-experiments');
@@ -1708,8 +1713,8 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('hero-experiment-note').textContent = config.dry_run
     ? '空簿延迟复查会继续收样本，先验证是否值得放宽。'
     : liveEntries > 0
-      ? `只做体育 / 电竞；当前已有 ${liveEntries} 笔真实成交，继续积累纯实盘样本。`
-      : `只做体育 / 电竞；当前还没有真实成交，先验证账户读取、挂单和最小单量拦截是否正常。`;
+      ? `只做体育 / 电竞；当前已有 ${liveEntries} 笔真实成交，${gameMarketActiveExitEnabled ? '单局市场主动退出已开启，' : ''}继续积累纯实盘样本。`
+      : `只做体育 / 电竞；当前还没有真实成交，先验证账户读取、挂单和最小单量拦截是否正常${gameMarketActiveExitEnabled ? '，并让单局市场主动退出护栏保持开启' : ''}。`;
   document.getElementById('hero-guardrail').textContent = `${fmtMoney(maxTradeValue)} / ${maxPositions || 0} 仓`;
   document.getElementById('hero-guardrail-note').textContent = config.dry_run
     ? `纸面日预算 ${fmtMoney(dailyRiskBudget)} · 资本门控 ${config.paper_ignore_capital_gates ? '关闭' : '开启'}`
@@ -1731,7 +1736,7 @@ function renderSystem(config, stats, performance, liveExecution) {
     if (delayedAlert) delayedAlert.classList.add('hidden');
   } else {
     liveAlert.classList.remove('hidden');
-    liveAlert.innerHTML = `<strong>真实资金提醒：</strong>账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，钱包 ${walletText}，funder ${config.funder_short || '未设置'}。当前 ${liveEntries > 0 ? `已有 ${liveEntries} 笔真实成交` : '尚无真实成交'}，低于市场最小单量的机会会被直接跳过，而不是强行放大仓位。`;
+    liveAlert.innerHTML = `<strong>真实资金提醒：</strong>账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，钱包 ${walletText}，funder ${config.funder_short || '未设置'}。当前 ${liveEntries > 0 ? `已有 ${liveEntries} 笔真实成交` : '尚无真实成交'}，低于市场最小单量的机会会被直接跳过，而不是强行放大仓位。${gameMarketActiveExitEnabled ? ` 单局市场会在价格跌到入场价 × ${gameMarketActiveExitPriceRatio.toFixed(2)} 或绝对回撤 ${fmtMoney(gameMarketActiveExitAbsDrop)} 时尝试主动退出。` : ''}`;
     if (delayedAlert) {
       if (config.delayed_order_alert_active) {
         delayedAlert.classList.remove('hidden');
@@ -1761,7 +1766,7 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('sys-guards-label').textContent = config.dry_run ? '研究护栏' : '实盘护栏';
   document.getElementById('sys-guards').textContent = config.dry_run
     ? `单笔上限 ${fmtMoney(maxTradeValue)} · 确认 ${config.min_signal_confirm_sec || 0}s`
-    : `单笔 ${fmtMoney(maxTradeValue)} · 已部署 ${fmtMoney(deployedValue)} · 挂单 ${openOrderCount} · 持仓 ${openPositionCount}/${maxPositions}${delayedOrderCount > 0 ? ` · 延迟 ${delayedOrderCount}` : ''}${sessionStopEnabled ? ` · 止损 ${sessionStopActive ? '已触发' : '已布防'}` : ''}`;
+    : `单笔 ${fmtMoney(maxTradeValue)} · 已部署 ${fmtMoney(deployedValue)} · 挂单 ${openOrderCount} · 持仓 ${openPositionCount}/${maxPositions}${delayedOrderCount > 0 ? ` · 延迟 ${delayedOrderCount}` : ''}${sessionStopEnabled ? ` · 止损 ${sessionStopActive ? '已触发' : '已布防'}` : ''}${gameMarketActiveExitEnabled ? ' · 单局主动退出已开' : ''}`;
   document.getElementById('sys-experiments').textContent = config.dry_run
     ? `repeat-entry ${repeatText}；空簿延迟复查 ${noBookText}`
     : '模拟盘 / shadow / experiment 已归档，不再进入当前实盘视图';
@@ -1865,7 +1870,7 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('sidebar-footnote').textContent =
     config.dry_run
       ? `当前只看 ${scopeText}。Repeat-entry ${repeatText}，空簿延迟复查 ${noBookText}。指标口径保持 executed / shadow / experiment 分层。`
-      : `当前是真实资金 ${canaryText}：账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，只看 ${scopeText}。模拟盘、shadow 和 experiment 已归档；若订单低于市场最小单量，会直接跳过而不是强行放大仓位。${sessionStopEnabled ? ` 会话级止损阈值 ${fmtMoney(sessionStopLimit)}，当前总盈亏 ${fmtSignedMoney(liveTotalPnl)}${sessionStopActive ? '，已暂停新开仓。' : '。'}` : ''}`;
+      : `当前是真实资金 ${canaryText}：账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，只看 ${scopeText}。模拟盘、shadow 和 experiment 已归档；若订单低于市场最小单量，会直接跳过而不是强行放大仓位。${sessionStopEnabled ? ` 会话级止损阈值 ${fmtMoney(sessionStopLimit)}，当前总盈亏 ${fmtSignedMoney(liveTotalPnl)}，当前估值 ${fmtMoney(sessionStopMarkedValue)}${sessionStopActive ? '，已暂停新开仓。' : '。'}` : ''}${gameMarketActiveExitEnabled ? ` 单局市场主动退出已开启；当盘口太薄时，会先用 Gamma 价格做风险估值。` : ''}`;
 }
 
 function highlightSections() {

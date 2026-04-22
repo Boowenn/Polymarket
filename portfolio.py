@@ -1,10 +1,16 @@
+import json
+import re
 import time
+from datetime import datetime
+
+import requests
 
 import config
 import liquidity
 import models
 
 _drawdown_cache = {"ts": 0.0, "data": None}
+_market_state_cache = {}
 
 
 def _active_live_row(row):
@@ -35,6 +41,155 @@ def _exit_side(entry_side):
     return "SELL" if str(entry_side or "BUY").upper() == "BUY" else "BUY"
 
 
+def _cache_get(bucket, key):
+    cached = bucket.get(key)
+    if cached and cached["expires_at"] > time.time():
+        return cached["value"]
+    return None
+
+
+def _cache_set(bucket, key, value, ttl_sec):
+    bucket[key] = {
+        "value": value,
+        "expires_at": time.time() + max(float(ttl_sec or 0), 5.0),
+    }
+
+
+def _parse_json_list(value):
+    if isinstance(value, list):
+        return value
+    if value in (None, ""):
+        return []
+    try:
+        return json.loads(value)
+    except Exception:
+        return []
+
+
+def _parse_iso_ts(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return None
+
+
+def fetch_market_state(condition_id=None, slug=None, token_id=None):
+    cache_key = condition_id or slug or token_id or ""
+    if not cache_key:
+        return None
+
+    cached = _cache_get(_market_state_cache, cache_key)
+    if cached is not None:
+        return cached
+
+    params = {}
+    if condition_id:
+        params["condition_ids"] = condition_id
+    elif token_id:
+        params["clob_token_ids"] = token_id
+    else:
+        params["slug"] = slug
+
+    try:
+        resp = requests.get(f"{config.GAMMA_API_BASE}/markets", params=params, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        _cache_set(_market_state_cache, cache_key, None, config.SETTLEMENT_CACHE_SEC)
+        return None
+
+    market = data[0] if isinstance(data, list) and data else None
+    _cache_set(_market_state_cache, cache_key, market, config.SETTLEMENT_CACHE_SEC)
+    return market
+
+
+def _market_token_price_map(market):
+    outcomes = _parse_json_list((market or {}).get("outcomes"))
+    prices = _parse_json_list((market or {}).get("outcomePrices"))
+    tokens = _parse_json_list((market or {}).get("clobTokenIds"))
+    token_prices = {}
+    for idx, token in enumerate(tokens):
+        if idx >= len(prices):
+            continue
+        try:
+            token_prices[str(token)] = float(prices[idx])
+        except Exception:
+            continue
+    outcome_prices = {}
+    for idx, outcome in enumerate(outcomes):
+        if idx >= len(prices):
+            continue
+        try:
+            outcome_prices[str(outcome).strip().casefold()] = float(prices[idx])
+        except Exception:
+            continue
+    return token_prices, outcome_prices
+
+
+def _is_single_game_market(market, market_slug):
+    slug = str(market_slug or "").strip().lower()
+    if re.search(r"-game\d+\b", slug):
+        return True
+
+    title = str((market or {}).get("groupItemTitle") or "").strip().lower()
+    question = str((market or {}).get("question") or "").strip().lower()
+    if title.startswith("game ") and "winner" in title:
+        return True
+    if "game " in question and "winner" in question:
+        return True
+    return False
+
+
+def _position_mark_from_market(position, market, estimate):
+    entry_size = float(position.get("entry_size", 0) or 0)
+    avg_entry_price = float(position.get("avg_entry_price", 0) or 0)
+    token_prices, outcome_prices = _market_token_price_map(market)
+    token_id = str(position.get("token_id") or "")
+    outcome_key = str(position.get("outcome") or "").strip().casefold()
+    gamma_price = token_prices.get(token_id)
+    if gamma_price is None:
+        gamma_price = outcome_prices.get(outcome_key)
+
+    orderbook_mark_available = bool(estimate.get("mark_available"))
+    orderbook_fill_ratio = float(estimate.get("fill_ratio", 0) or 0) if orderbook_mark_available else 0.0
+    orderbook_best_price = float(estimate.get("best_price", 0) or 0) if orderbook_mark_available else 0.0
+    orderbook_mark_price = float(estimate.get("avg_price", 0) or 0) if orderbook_mark_available else 0.0
+    orderbook_value = float(estimate.get("filled_value", 0) or 0) if orderbook_mark_available else 0.0
+    exit_available = bool(orderbook_mark_available and orderbook_fill_ratio >= 0.999 and orderbook_best_price > 0)
+
+    if exit_available:
+        mark_price = orderbook_mark_price
+        marked_value = orderbook_value
+        mark_source = "orderbook"
+    elif gamma_price is not None:
+        mark_price = float(gamma_price or 0)
+        marked_value = entry_size * mark_price
+        mark_source = "gamma_outcome"
+    elif orderbook_mark_available:
+        mark_price = orderbook_mark_price
+        marked_value = orderbook_value
+        mark_source = "orderbook_partial"
+    else:
+        mark_price = avg_entry_price
+        marked_value = float(position.get("entry_value", 0) or 0)
+        mark_source = "entry_basis"
+
+    return {
+        "gamma_price": None if gamma_price is None else round(float(gamma_price), 4),
+        "mark_price": round(float(mark_price or 0), 4),
+        "marked_value": round(float(marked_value or 0), 4),
+        "mark_source": mark_source,
+        "mark_available": mark_source != "entry_basis",
+        "exit_available": exit_available,
+        "market_end_ts": _parse_iso_ts((market or {}).get("endDate")),
+        "market_question": str((market or {}).get("question") or ""),
+        "group_item_title": str((market or {}).get("groupItemTitle") or ""),
+        "is_single_game_market": _is_single_game_market(market, position.get("market_slug", "")),
+    }
+
+
 def get_live_open_position_marks(limit=500):
     rows = models.get_open_trade_journal(limit=limit)
     grouped = {}
@@ -52,6 +207,8 @@ def get_live_open_position_marks(limit=500):
         bucket = grouped.setdefault(
             key,
             {
+                "trader_wallet": row.get("trader_wallet", ""),
+                "trader_username": row.get("trader_username", ""),
                 "token_id": token_id,
                 "condition_id": row.get("condition_id", ""),
                 "market_slug": row.get("market_slug", ""),
@@ -82,14 +239,33 @@ def get_live_open_position_marks(limit=500):
             "price": avg_entry_price,
         }
         estimate = liquidity.estimate_execution(signal, entry_size)
-        mark_available = bool(estimate.get("mark_available"))
-        executable_value = float(estimate.get("filled_value", 0) or 0) if mark_available else entry_value
-        avg_exit_price = float(estimate.get("avg_price", 0) or 0) if mark_available else avg_entry_price
+        market = fetch_market_state(
+            condition_id=bucket.get("condition_id", ""),
+            slug=bucket.get("market_slug", ""),
+            token_id=bucket.get("token_id", ""),
+        )
+        mark_info = _position_mark_from_market(
+            {
+                **bucket,
+                "entry_size": entry_size,
+                "entry_value": entry_value,
+                "avg_entry_price": avg_entry_price,
+            },
+            market,
+            estimate,
+        )
+        mark_price = float(mark_info.get("mark_price", avg_entry_price) or avg_entry_price)
+        marked_value = float(mark_info.get("marked_value", entry_value) or entry_value)
+        executable_value = (
+            float(estimate.get("filled_value", 0) or 0)
+            if mark_info.get("exit_available")
+            else 0.0
+        )
 
         if bucket["entry_side"] == "BUY":
-            unrealized_pnl = executable_value - entry_value
+            unrealized_pnl = marked_value - entry_value
         else:
-            unrealized_pnl = entry_value - executable_value
+            unrealized_pnl = entry_value - marked_value
 
         marks.append(
             {
@@ -97,18 +273,27 @@ def get_live_open_position_marks(limit=500):
                 "entry_size": entry_size,
                 "entry_value": entry_value,
                 "avg_entry_price": avg_entry_price,
-                "mark_available": mark_available,
+                "mark_available": bool(mark_info.get("mark_available")),
                 "mark_reason": estimate.get("reason", ""),
-                "fill_ratio": float(estimate.get("fill_ratio", 0) or 0) if mark_available else 0.0,
-                "best_bid": float(estimate.get("best_bid", 0) or 0) if mark_available else 0.0,
-                "best_ask": float(estimate.get("best_ask", 0) or 0) if mark_available else 0.0,
-                "best_price": float(estimate.get("best_price", 0) or 0) if mark_available else avg_entry_price,
-                "avg_exit_price": avg_exit_price,
-                "limit_price": float(estimate.get("limit_price", 0) or 0) if mark_available else 0.0,
-                "min_order_size": float(estimate.get("min_order_size", 0) or 0) if mark_available else 0.0,
-                "book_age_sec": float(estimate.get("book_age_sec", 0) or 0) if mark_available else 0.0,
+                "mark_source": mark_info.get("mark_source", "entry_basis"),
+                "mark_price": mark_price,
+                "gamma_price": mark_info.get("gamma_price"),
+                "exit_available": bool(mark_info.get("exit_available")),
+                "fill_ratio": float(estimate.get("fill_ratio", 0) or 0) if estimate.get("mark_available") else 0.0,
+                "best_bid": float(estimate.get("best_bid", 0) or 0) if estimate.get("mark_available") else 0.0,
+                "best_ask": float(estimate.get("best_ask", 0) or 0) if estimate.get("mark_available") else 0.0,
+                "best_price": float(estimate.get("best_price", 0) or 0) if estimate.get("mark_available") else 0.0,
+                "avg_exit_price": float(estimate.get("avg_price", 0) or 0) if estimate.get("mark_available") else 0.0,
+                "limit_price": float(estimate.get("limit_price", 0) or 0) if estimate.get("mark_available") else 0.0,
+                "min_order_size": float(estimate.get("min_order_size", 0) or 0) if estimate.get("mark_available") else 0.0,
+                "book_age_sec": float(estimate.get("book_age_sec", 0) or 0) if estimate.get("mark_available") else 0.0,
+                "marked_value": round(marked_value, 4),
                 "executable_value": round(executable_value, 4),
                 "unrealized_pnl": round(unrealized_pnl, 4),
+                "market_end_ts": mark_info.get("market_end_ts"),
+                "market_question": mark_info.get("market_question", ""),
+                "group_item_title": mark_info.get("group_item_title", ""),
+                "is_single_game_market": bool(mark_info.get("is_single_game_market")),
             }
         )
 
@@ -123,6 +308,7 @@ def get_live_drawdown_snapshot(limit=500, force=False):
         "open_position_count": 0,
         "mark_failures": 0,
         "entry_value": 0.0,
+        "marked_value": 0.0,
         "executable_value": 0.0,
         "realized_pnl": 0.0,
         "unrealized_pnl": 0.0,
@@ -146,6 +332,7 @@ def get_live_drawdown_snapshot(limit=500, force=False):
     positions = get_live_open_position_marks(limit=limit)
     realized_pnl = round(float(live_summary.get("realized_pnl", 0) or 0), 4)
     entry_value = round(sum(float(row.get("entry_value", 0) or 0) for row in positions), 4)
+    marked_value = round(sum(float(row.get("marked_value", 0) or 0) for row in positions), 4)
     executable_value = round(sum(float(row.get("executable_value", 0) or 0) for row in positions), 4)
     unrealized_pnl = round(sum(float(row.get("unrealized_pnl", 0) or 0) for row in positions), 4)
     total_pnl = round(realized_pnl + unrealized_pnl, 4)
@@ -162,6 +349,7 @@ def get_live_drawdown_snapshot(limit=500, force=False):
         "open_position_count": len(positions),
         "mark_failures": sum(1 for row in positions if not row.get("mark_available")),
         "entry_value": entry_value,
+        "marked_value": marked_value,
         "executable_value": executable_value,
         "realized_pnl": realized_pnl,
         "unrealized_pnl": unrealized_pnl,

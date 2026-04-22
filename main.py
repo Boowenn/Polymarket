@@ -76,6 +76,10 @@ def first_run_setup():
         f.write(f"DAILY_LOSS_LIMIT=50\n")
         f.write(f"ENABLE_SESSION_STOP_LOSS=true\n")
         f.write(f"SESSION_STOP_LOSS_USDC=50\n")
+        f.write(f"ENABLE_GAME_MARKET_ACTIVE_EXIT=true\n")
+        f.write(f"GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO=0.70\n")
+        f.write(f"GAME_MARKET_ACTIVE_EXIT_ABS_DROP=0.15\n")
+        f.write(f"GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC=60\n")
         f.write(f"MAX_POSITIONS=10\n")
         f.write(f"DAILY_RISK_BUDGET=50\n")
         f.write(f"PAPER_BANKROLL=250\n")
@@ -129,6 +133,7 @@ import models
 import leaderboard
 import monitor
 import executor
+import active_exit
 import dashboard
 import portfolio
 import strategy
@@ -249,6 +254,14 @@ def run_cycle(cycle_count):
     except Exception as e:
         logger.error(f"Settlement error: {e}")
         models.log_risk_event("SETTLEMENT_ERROR", str(e), "skipped")
+
+    try:
+        exit_summary = active_exit.run_active_exit_cycle(force=True)
+        if exit_summary.get("attempted", 0) or exit_summary.get("pending", 0):
+            logger.warning("Active exit cycle: %s", exit_summary)
+    except Exception as e:
+        logger.error(f"Active exit error: {e}")
+        models.log_risk_event("ACTIVE_EXIT_ERROR", str(e), "skipped")
 
     # 6. Update PnL snapshot
     performance = models.get_performance_snapshot()
