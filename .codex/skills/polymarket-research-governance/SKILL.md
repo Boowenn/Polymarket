@@ -25,12 +25,14 @@ Use this skill as the repo's governance entrypoint for research and execution ch
    For Polymarket proxy wallets, require the correct `POLY_SIGNATURE_TYPE` and `POLY_FUNDER` from the account settings page before any live canary.
 7. For tiny live bankrolls, prefer a smoke-test mindset over a sizing mindset.
    Surface real guardrails in the dashboard, keep `.env` local-only, block sub-minimum market sizes instead of auto-inflating order size, explicitly alert on live orders that stay `delayed` beyond the configured threshold, and auto-reconcile those delayed orders back to their final CLOB status before drawing conclusions.
-8. In live mode, keep actual wallet state separate from historical dry-run research state.
+8. For the first real-money stop, prefer a session-level drawdown cap over a position `%` stop.
+   In live mode, use realized + executable unrealized PnL to pause new entries once the drawdown limit is breached. Do not auto-flatten on a naive price-percent trigger unless the exit path has already been separately validated.
+9. In live mode, keep actual wallet state separate from historical dry-run research state.
    Show real account cash separately from strategy bankroll, and make sure old `dry_run` positions do not consume live deployed-risk, exposure, or max-position views.
-9. Only close `opposite_signal` journal entries after the bot books its own opposite-side fill.
+10. Only close `opposite_signal` journal entries after the bot books its own opposite-side fill.
    A copied trader's raw reversal should not flatten live executed exposure unless the mirrored exit order also filled.
-10. When you intentionally cut over from research to live-only operation, archive the old DB snapshot locally and purge active `dry_run` / `shadow` / `experiment` rows from the runtime DB.
-11. When governance changes land, update this skill and the repo README in the same change.
+11. When you intentionally cut over from research to live-only operation, archive the old DB snapshot locally and purge active `dry_run` / `shadow` / `experiment` rows from the runtime DB.
+12. When governance changes land, update this skill and the repo README in the same change.
 
 ## Guardrails
 
@@ -41,6 +43,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never force a tiny live bankroll to trade by silently overriding the market `min_order_size`.
 - Never let historical `dry_run` executed positions contaminate live capital gates or live dashboard totals.
 - Never leave archived dry-run / shadow / experiment rows in the active live DB after an explicit live cutover.
+- Never treat a display-only `DAILY_LOSS_LIMIT` label as real protection; if live stop-loss is claimed, it must actually block new entries.
 - Never update governance text without checking whether the baseline date and numbers are still current.
 
 ## References

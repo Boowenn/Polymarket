@@ -36,6 +36,7 @@ if not os.path.exists(env_path):
         f.write("DELAYED_ORDER_RECHECK_SEC=15\n")
         f.write("DELAYED_ORDER_RECHECK_LIMIT=10\n")
         f.write("MAX_TRADE_PCT=0.05\nDAILY_LOSS_LIMIT=50\nMAX_POSITIONS=10\n")
+        f.write("ENABLE_SESSION_STOP_LOSS=true\nSESSION_STOP_LOSS_USDC=50\n")
         f.write("DAILY_RISK_BUDGET=50\nPAPER_BANKROLL=250\nPAPER_DAILY_RISK_BUDGET=250\n")
         f.write("PAPER_IGNORE_CAPITAL_GATES=true\nMAX_TRADER_EXPOSURE_PCT=0.12\n")
         f.write("MAX_MARKET_EXPOSURE_PCT=0.15\nMIN_SIGNAL_CONFIRM_SEC=20\nMAX_SIGNAL_AGE_SEC=90\n")
@@ -58,6 +59,7 @@ import models
 import leaderboard
 import monitor
 import executor
+import portfolio
 import strategy
 import settlement
 
@@ -222,6 +224,18 @@ def get_dashboard_data():
     pnl = models.get_latest_pnl()
     performance = models.get_performance_snapshot()
     live_execution = models.get_live_execution_summary()
+    drawdown = portfolio.get_live_drawdown_snapshot() if not config.DRY_RUN else {
+        "unrealized_pnl": pnl.get("unrealized_pnl", 0),
+        "realized_pnl": performance.get("realized_pnl", 0),
+        "total_pnl": float(performance.get("realized_pnl", 0) or 0) + float(pnl.get("unrealized_pnl", 0) or 0),
+        "loss_limit_usdc": float(config.SESSION_STOP_LOSS_USDC or 0),
+        "stop_enabled": False,
+        "stop_active": False,
+        "stop_reason": "",
+        "entry_value": 0.0,
+        "executable_value": 0.0,
+        "mark_failures": 0,
+    }
     if config.DRY_RUN:
         blocked_reasons = models.get_block_reason_analysis(sample_types=("shadow",), limit=6)
         repeat_entry_experiment = models.get_experiment_analysis(config.REPEAT_ENTRY_EXPERIMENT_KEY)
@@ -263,9 +277,14 @@ def get_dashboard_data():
                 else "N/A"
             ),
             "close_rate_label": f"{float(performance.get('close_rate', 0) or 0):.1f}%",
-            "unrealized_pnl": pnl.get("unrealized_pnl", 0),
+            "unrealized_pnl": drawdown.get("unrealized_pnl", pnl.get("unrealized_pnl", 0)),
+            "total_pnl": drawdown.get("total_pnl", float(performance.get("realized_pnl", 0) or 0)),
         },
-        "live_execution": live_execution,
+        "live_execution": {
+            **live_execution,
+            "unrealized_pnl": drawdown.get("unrealized_pnl", 0),
+            "total_pnl": drawdown.get("total_pnl", float(live_execution.get("realized_pnl", 0) or 0)),
+        },
         "blocked_reasons": blocked_reasons,
         "repeat_entry_experiment": repeat_entry_experiment,
         "no_book_recheck_experiment": no_book_recheck_experiment,
@@ -295,6 +314,16 @@ def get_dashboard_data():
             "daily_loss_limit": config.DAILY_LOSS_LIMIT,
             "deployed_value": deployed_value,
             "remaining_daily_risk_budget": max(daily_risk_budget - deployed_value, 0),
+            "session_stop_loss_enabled": drawdown.get("stop_enabled", False),
+            "session_stop_loss_limit": drawdown.get("loss_limit_usdc", float(config.SESSION_STOP_LOSS_USDC or 0)),
+            "session_stop_active": drawdown.get("stop_active", False),
+            "session_stop_reason": drawdown.get("stop_reason", ""),
+            "session_stop_realized_pnl": drawdown.get("realized_pnl", 0),
+            "session_stop_unrealized_pnl": drawdown.get("unrealized_pnl", 0),
+            "session_stop_total_pnl": drawdown.get("total_pnl", 0),
+            "session_stop_entry_value": drawdown.get("entry_value", 0),
+            "session_stop_executable_value": drawdown.get("executable_value", 0),
+            "session_stop_mark_failures": drawdown.get("mark_failures", 0),
             "max_trade_pct": config.MAX_TRADE_PCT * 100,
             "max_trade_value": effective_bankroll * config.MAX_TRADE_PCT,
             "max_positions": config.MAX_POSITIONS,
@@ -450,9 +479,10 @@ def bot_loop():
 
         # PnL snapshot
         performance = models.get_performance_snapshot()
+        drawdown = portfolio.get_live_drawdown_snapshot(force=True)
         models.log_pnl(
             performance["realized_pnl"],
-            0,
+            drawdown.get("unrealized_pnl", 0),
             performance["closed_entries"],
             performance["wins"],
             performance["losses"],

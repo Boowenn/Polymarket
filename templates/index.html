@@ -1656,7 +1656,16 @@ function renderSystem(config, stats, performance, liveExecution) {
   const liveWinRate = liveExecution ? liveExecution.win_rate : null;
   const liveWinRateLabel = liveWinRate === null || liveWinRate === undefined ? 'N/A' : `${Number(liveWinRate).toFixed(1)}%`;
   const liveRealizedPnl = Number((liveExecution && liveExecution.realized_pnl) || 0);
+  const liveUnrealizedPnl = Number((liveExecution && liveExecution.unrealized_pnl) || 0);
+  const liveTotalPnl = Number((liveExecution && liveExecution.total_pnl) || (liveRealizedPnl + liveUnrealizedPnl));
   const liveDrift = Number((liveExecution && liveExecution.avg_entry_drift) || 0).toFixed(3);
+  const sessionStopEnabled = Boolean(config.session_stop_loss_enabled);
+  const sessionStopActive = Boolean(config.session_stop_active);
+  const sessionStopLimit = Number(config.session_stop_loss_limit || dailyLossLimit || 0);
+  const sessionStopReason = String(config.session_stop_reason || '');
+  const sessionStopMarkFailures = Number(config.session_stop_mark_failures || 0);
+  const sessionStopEntryValue = Number(config.session_stop_entry_value || 0);
+  const sessionStopExecutableValue = Number(config.session_stop_executable_value || 0);
   const liveAlert = document.getElementById('live-alert');
   const delayedAlert = document.getElementById('delayed-alert');
   const navExperiments = document.getElementById('nav-experiments');
@@ -1752,7 +1761,7 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('sys-guards-label').textContent = config.dry_run ? '研究护栏' : '实盘护栏';
   document.getElementById('sys-guards').textContent = config.dry_run
     ? `单笔上限 ${fmtMoney(maxTradeValue)} · 确认 ${config.min_signal_confirm_sec || 0}s`
-    : `单笔 ${fmtMoney(maxTradeValue)} · 已部署 ${fmtMoney(deployedValue)} · 挂单 ${openOrderCount} · 持仓 ${openPositionCount}/${maxPositions}${delayedOrderCount > 0 ? ` · 延迟 ${delayedOrderCount}` : ''}`;
+    : `单笔 ${fmtMoney(maxTradeValue)} · 已部署 ${fmtMoney(deployedValue)} · 挂单 ${openOrderCount} · 持仓 ${openPositionCount}/${maxPositions}${delayedOrderCount > 0 ? ` · 延迟 ${delayedOrderCount}` : ''}${sessionStopEnabled ? ` · 止损 ${sessionStopActive ? '已触发' : '已布防'}` : ''}`;
   document.getElementById('sys-experiments').textContent = config.dry_run
     ? `repeat-entry ${repeatText}；空簿延迟复查 ${noBookText}`
     : '模拟盘 / shadow / experiment 已归档，不再进入当前实盘视图';
@@ -1818,7 +1827,9 @@ function renderSystem(config, stats, performance, liveExecution) {
 
     document.getElementById('s-max-trade').textContent = fmtMoney(remainingBudget);
     document.getElementById('s-max-trade').className = 'stat-value';
-    document.getElementById('s-max-trade-note').textContent = `日预算 ${fmtMoney(dailyRiskBudget)} · 日损止损 ${fmtMoney(dailyLossLimit)}`;
+    document.getElementById('s-max-trade-note').textContent = sessionStopEnabled
+      ? `日预算 ${fmtMoney(dailyRiskBudget)} · 会话止损 ${fmtMoney(sessionStopLimit)}${sessionStopActive ? ' · 当前已暂停新开仓' : ''}`
+      : `日预算 ${fmtMoney(dailyRiskBudget)} · 日损止损 ${fmtMoney(dailyLossLimit)}`;
 
     document.getElementById('s-simulated').textContent = fmtMoney(maxTradeValue);
     document.getElementById('s-simulated').className = 'stat-value';
@@ -1837,7 +1848,7 @@ function renderSystem(config, stats, performance, liveExecution) {
 
     document.getElementById('s-realized').textContent = fmtSignedMoney(liveRealizedPnl);
     document.getElementById('s-realized').className = `stat-value ${liveRealizedPnl >= 0 ? 'green' : 'red'}`;
-    document.getElementById('s-realized-note').innerHTML = `真实 executed 已实现收益 · 平均入场偏移 <span id="s-drift">${liveDrift}</span>`;
+    document.getElementById('s-realized-note').innerHTML = `真实 executed 已实现 ${fmtSignedMoney(liveRealizedPnl)} · 浮动 ${fmtSignedMoney(liveUnrealizedPnl)} · 总盈亏 ${fmtSignedMoney(liveTotalPnl)} · 平均入场偏移 <span id="s-drift">${liveDrift}</span>`;
 
     document.getElementById('s-signals').textContent = stats.signal_count;
     document.getElementById('s-signals').className = 'stat-value';
@@ -1854,7 +1865,7 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('sidebar-footnote').textContent =
     config.dry_run
       ? `当前只看 ${scopeText}。Repeat-entry ${repeatText}，空簿延迟复查 ${noBookText}。指标口径保持 executed / shadow / experiment 分层。`
-      : `当前是真实资金 ${canaryText}：账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，只看 ${scopeText}。模拟盘、shadow 和 experiment 已归档；若订单低于市场最小单量，会直接跳过而不是强行放大仓位。`;
+      : `当前是真实资金 ${canaryText}：账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，只看 ${scopeText}。模拟盘、shadow 和 experiment 已归档；若订单低于市场最小单量，会直接跳过而不是强行放大仓位。${sessionStopEnabled ? ` 会话级止损阈值 ${fmtMoney(sessionStopLimit)}，当前总盈亏 ${fmtSignedMoney(liveTotalPnl)}${sessionStopActive ? '，已暂停新开仓。' : '。'}` : ''}`;
 }
 
 function highlightSections() {

@@ -51,22 +51,37 @@ def _round_limit_price(price, tick_size, side):
     return round(max(min(rounded, 0.9999), tick_size), 4)
 
 
-def assess_execution(signal, order_size):
-    token_id = signal.get("token_id", "")
-    if not token_id:
-        return {"ok": False, "reason": "missing token_id"}
-    if order_size <= 0:
-        return {"ok": False, "reason": "order size is 0"}
+def _empty_execution_estimate(reason="", reference_price=0.0):
+    return {
+        "ok": False,
+        "reason": reason,
+        "mark_available": False,
+        "best_bid": 0.0,
+        "best_ask": 0.0,
+        "spread": 0.0,
+        "reference_price": round(float(reference_price or 0), 4),
+        "best_price": 0.0,
+        "avg_price": 0.0,
+        "worst_price": 0.0,
+        "limit_price": 0.0,
+        "fill_ratio": 0.0,
+        "filled_size": 0.0,
+        "filled_value": 0.0,
+        "top_level_value": 0.0,
+        "depth_value": 0.0,
+        "levels_used": 0,
+        "tick_size": 0.0,
+        "min_order_size": 0.0,
+        "min_order_value": 0.0,
+        "book_age_sec": 0.0,
+    }
 
-    try:
-        book = get_order_book(token_id)
-    except Exception as exc:
-        logger.warning("Orderbook fetch failed for %s: %s", token_id[:18], exc)
-        return {"ok": False, "reason": f"orderbook unavailable: {exc}"}
 
-    levels = _levels_for_side(book, signal.get("side", "BUY").upper())
+def _estimate_execution_from_book(book, side, order_size, reference_price):
+    side = str(side or "BUY").upper()
+    levels = _levels_for_side(book, side)
     if not levels:
-        return {"ok": False, "reason": "no executable book levels"}
+        return _empty_execution_estimate("no executable book levels", reference_price)
 
     best_bid = max((float(level.price) for level in (book.bids or [])), default=0.0)
     best_ask = min((float(level.price) for level in (book.asks or [])), default=1.0)
@@ -104,22 +119,22 @@ def assess_execution(signal, order_size):
             break
 
     if filled_size <= 0:
-        return {"ok": False, "reason": "no fillable depth in book"}
+        return _empty_execution_estimate("no fillable depth in book", reference_price)
 
     avg_price = total_value / filled_size
     fill_ratio = min(filled_size / float(order_size), 1.0)
-    reference_price = float(signal.get("price", 0) or 0)
     best_price = float(levels[0].price)
     book_ts = float(book.timestamp or 0) / 1000.0 if str(book.timestamp or "").isdigit() else 0.0
     book_age_sec = max(time.time() - book_ts, 0.0) if book_ts else 0.0
     tick_size = float(book.tick_size or 0.01)
     min_order_size = float(getattr(book, "min_order_size", 0) or 0)
     min_order_value = min_order_size * best_price if min_order_size > 0 else 0.0
-    limit_price = _round_limit_price(worst_price, tick_size, signal.get("side", "BUY").upper())
+    limit_price = _round_limit_price(worst_price, tick_size, side)
 
     assessment = {
         "ok": True,
         "reason": "",
+        "mark_available": True,
         "best_bid": round(best_bid, 4),
         "best_ask": round(best_ask, 4),
         "spread": round(spread, 4),
@@ -139,6 +154,44 @@ def assess_execution(signal, order_size):
         "min_order_value": round(min_order_value, 4),
         "book_age_sec": round(book_age_sec, 3),
     }
+    return assessment
+
+
+def estimate_execution(signal, order_size):
+    token_id = signal.get("token_id", "")
+    if not token_id:
+        return _empty_execution_estimate("missing token_id")
+    if order_size <= 0:
+        return _empty_execution_estimate("order size is 0")
+
+    reference_price = float(signal.get("price", 0) or 0)
+    try:
+        book = get_order_book(token_id)
+    except Exception as exc:
+        logger.warning("Orderbook fetch failed for %s: %s", token_id[:18], exc)
+        return _empty_execution_estimate(f"orderbook unavailable: {exc}", reference_price)
+
+    return _estimate_execution_from_book(
+        book,
+        str(signal.get("side", "BUY") or "BUY").upper(),
+        order_size,
+        reference_price,
+    )
+
+
+def assess_execution(signal, order_size):
+    assessment = estimate_execution(signal, order_size)
+    if not assessment.get("mark_available"):
+        return assessment
+
+    min_order_size = float(assessment.get("min_order_size", 0) or 0)
+    spread = float(assessment.get("spread", 0) or 0)
+    top_level_value = float(assessment.get("top_level_value", 0) or 0)
+    fill_ratio = float(assessment.get("fill_ratio", 0) or 0)
+    book_age_sec = float(assessment.get("book_age_sec", 0) or 0)
+    reference_price = float(assessment.get("reference_price", 0) or 0)
+    best_price = float(assessment.get("best_price", 0) or 0)
+    worst_price = float(assessment.get("worst_price", 0) or 0)
 
     if min_order_size > 0 and float(order_size) + 1e-9 < min_order_size:
         assessment["ok"] = False

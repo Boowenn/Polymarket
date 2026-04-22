@@ -91,6 +91,10 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
 - show real account cash separately from the strategy bankroll cap; the wallet balance is not the same thing as the bot budget
 - when live mode is enabled, exclude historical `dry_run` executed positions from live deployed-risk, exposure, and max-position views
 - block orders that fall below the market `min_order_size` instead of automatically increasing size to force a fill
+- prefer the first live stop to be a session-level drawdown cap:
+  use `realized_pnl + executable_unrealized_pnl` to pause new entries once the configured threshold is breached
+- do not rely on a naive position `%` stop as the first live guard:
+  Polymarket has no native stop order, and sports/esports books can gap or thin out enough to false-trigger a brittle price-based exit
 
 This avoids disguising a sizing problem as successful live execution.
 

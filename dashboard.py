@@ -8,6 +8,7 @@ from rich import box
 
 import config
 import models
+import portfolio
 
 
 console = Console()
@@ -106,8 +107,9 @@ def render_dashboard(traders=None, cycle_count=0):
     sample_metrics = performance.get("sample_metrics", {})
     executed = sample_metrics.get("executed", {})
     live_execution = models.get_live_execution_summary()
+    drawdown = portfolio.get_live_drawdown_snapshot()
     realized = performance.get("realized_pnl", 0)
-    unrealized = pnl.get("unrealized_pnl", 0)
+    unrealized = drawdown.get("unrealized_pnl", pnl.get("unrealized_pnl", 0))
     stats_lines = [
         f"  Bankroll     [cyan]${config.effective_bankroll():,.0f}[/cyan]",
         f"  Stake        [cyan]{config.STAKE_PCT*100:.0f}%[/cyan] of whale",
@@ -183,6 +185,16 @@ def render_dashboard(traders=None, cycle_count=0):
                 f"  Entry Drift  {float(live_execution.get('avg_entry_drift', 0) or 0):.3f}",
                 f"  Basis        live-only: archived dry-run / shadow / experiment rows are excluded",
                 f"  Unrealized   {'[green]' if unrealized >= 0 else '[red]'}${unrealized:,.2f}[/]",
+                (
+                    f"  Stop Loss    [red]ACTIVE[/red] at -${drawdown.get('loss_limit_usdc', 0):,.2f} "
+                    f"(total ${drawdown.get('total_pnl', 0):,.2f})"
+                    if drawdown.get("stop_active")
+                    else (
+                        f"  Stop Loss    armed at -${drawdown.get('loss_limit_usdc', 0):,.2f}"
+                        if drawdown.get("stop_enabled")
+                        else "  Stop Loss    off"
+                    )
+                ),
             ]
         )
     stats_panel = Panel("\n".join(stats_lines), title="Stats", border_style="magenta", expand=True)

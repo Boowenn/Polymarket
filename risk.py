@@ -3,6 +3,7 @@ import time
 import config
 import liquidity
 import models
+import portfolio
 
 
 class RiskCheck:
@@ -11,6 +12,7 @@ class RiskCheck:
     def _ordered_checks(self):
         return [
             self._check_duplicate,
+            self._check_session_stop_loss,
             self._check_trader_quality,
             self._check_signal_age,
             self._check_whipsaw_trap,
@@ -90,6 +92,19 @@ class RiskCheck:
         if row:
             return False, "already mirrored"
         return True, ""
+
+    def _check_session_stop_loss(self, signal):
+        if not config.session_stop_loss_enabled():
+            return True, ""
+
+        snapshot = portfolio.get_live_drawdown_snapshot()
+        if not snapshot.get("stop_active"):
+            return True, ""
+
+        return False, (
+            f"session stop active ({snapshot.get('total_pnl', 0):.2f} <= "
+            f"-{snapshot.get('loss_limit_usdc', 0):.2f})"
+        )
 
     def _check_trader_quality(self, signal):
         source = signal.get("signal_source", "copy")

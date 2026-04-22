@@ -74,6 +74,8 @@ def first_run_setup():
         f.write(f"NO_BOOK_DELAYED_RECHECK_MAX_EXTRA_ENTRIES=1\n")
         f.write(f"MAX_TRADE_PCT=0.05\n")
         f.write(f"DAILY_LOSS_LIMIT=50\n")
+        f.write(f"ENABLE_SESSION_STOP_LOSS=true\n")
+        f.write(f"SESSION_STOP_LOSS_USDC=50\n")
         f.write(f"MAX_POSITIONS=10\n")
         f.write(f"DAILY_RISK_BUDGET=50\n")
         f.write(f"PAPER_BANKROLL=250\n")
@@ -128,6 +130,7 @@ import leaderboard
 import monitor
 import executor
 import dashboard
+import portfolio
 import strategy
 import settlement
 from dashboard import console
@@ -249,9 +252,10 @@ def run_cycle(cycle_count):
 
     # 6. Update PnL snapshot
     performance = models.get_performance_snapshot()
+    drawdown = portfolio.get_live_drawdown_snapshot(force=True)
     models.log_pnl(
         performance["realized_pnl"],
-        0,
+        drawdown.get("unrealized_pnl", 0),
         performance["closed_entries"],
         performance["wins"],
         performance["losses"],

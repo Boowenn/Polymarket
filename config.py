@@ -80,10 +80,12 @@ DELAYED_ORDER_RECHECK_LIMIT = max(
     1,
     int(os.getenv("DELAYED_ORDER_RECHECK_LIMIT", "10")),
 )
+ENABLE_SESSION_STOP_LOSS = os.getenv("ENABLE_SESSION_STOP_LOSS", "true").lower() == "true"
 
 # Risk controls
 MAX_TRADE_PCT = float(os.getenv("MAX_TRADE_PCT", "0.05"))
 DAILY_LOSS_LIMIT = float(os.getenv("DAILY_LOSS_LIMIT", "50"))
+SESSION_STOP_LOSS_USDC = float(os.getenv("SESSION_STOP_LOSS_USDC", str(DAILY_LOSS_LIMIT)))
 MAX_POSITIONS = int(os.getenv("MAX_POSITIONS", "10"))
 DAILY_RISK_BUDGET = float(os.getenv("DAILY_RISK_BUDGET", str(DAILY_LOSS_LIMIT)))
 PAPER_BANKROLL = float(os.getenv("PAPER_BANKROLL", str(BANKROLL)))
@@ -143,6 +145,10 @@ def effective_daily_risk_budget():
 
 def capital_gates_enabled():
     return not (DRY_RUN and PAPER_IGNORE_CAPITAL_GATES)
+
+
+def session_stop_loss_enabled():
+    return (not DRY_RUN) and ENABLE_SESSION_STOP_LOSS and SESSION_STOP_LOSS_USDC > 0
 
 
 def stage2_repeat_entry_experiment_enabled():
