@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Analyze recent copy-trading results and highlight what to improve next."""
+"""Analyze recent sports and esports trading results and highlight what to improve next."""
 
 import argparse
 import sys
@@ -645,7 +645,7 @@ def main():
     mirrored_signals = sum(1 for row in trades if int(row.get("mirrored", 0) or 0) == 1)
 
     print()
-    report_title = "Polymarket Copybot Observation Report" if config.DRY_RUN else "Polymarket Copybot Live Execution Report"
+    report_title = "Polymarket Trading Observation Report" if config.DRY_RUN else "Polymarket Live Execution Report"
     print(report_title)
     print(f"Window: {_fmt_ts(since_ts)} -> {_fmt_ts(now)}  ({max(args.days, 1)} day(s))")
     mode_label = "DRY_RUN" if config.DRY_RUN else "LIVE"

@@ -113,6 +113,11 @@ class RiskCheck:
             if score < config.MIN_CONSENSUS_SCORE:
                 return False, f"consensus too weak ({score:.1f} < {config.MIN_CONSENSUS_SCORE:.1f})"
             return True, ""
+        if source == "autonomous":
+            score = float(signal.get("signal_score", 0) or 0)
+            if score < config.MIN_AUTONOMOUS_SCORE:
+                return False, f"autonomous score too low ({score:.1f} < {config.MIN_AUTONOMOUS_SCORE:.1f})"
+            return True, ""
 
         profile = models.get_trader_profile(signal.get("trader_wallet", ""))
         if not profile:

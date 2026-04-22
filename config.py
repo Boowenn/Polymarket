@@ -47,6 +47,8 @@ MARKET_SCOPE_CACHE_SEC = max(60, int(os.getenv("MARKET_SCOPE_CACHE_SEC", "3600")
 
 # Mode
 DRY_RUN = os.getenv("DRY_RUN", "true").lower() == "true"
+ENABLE_COPY_STRATEGY = os.getenv("ENABLE_COPY_STRATEGY", "false").lower() == "true"
+ENABLE_AUTONOMOUS_STRATEGY = os.getenv("ENABLE_AUTONOMOUS_STRATEGY", "true").lower() == "true"
 DRY_RUN_RECORD_BLOCKED_SAMPLES = os.getenv("DRY_RUN_RECORD_BLOCKED_SAMPLES", "true").lower() == "true"
 ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT = (
     os.getenv("ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT", "false").lower() == "true"
@@ -82,12 +84,32 @@ DELAYED_ORDER_RECHECK_LIMIT = max(
 )
 ENABLE_SESSION_STOP_LOSS = os.getenv("ENABLE_SESSION_STOP_LOSS", "true").lower() == "true"
 ENABLE_GAME_MARKET_ACTIVE_EXIT = os.getenv("ENABLE_GAME_MARKET_ACTIVE_EXIT", "true").lower() == "true"
+AUTONOMOUS_SPORT_CODES = tuple(
+    _csv_list(
+        os.getenv(
+            "AUTONOMOUS_SPORT_CODES",
+            "dota2,cs2,lol,val,nfl,nba,mlb,nhl,epl,cfb,ncaab",
+        )
+    )
+)
+AUTONOMOUS_MIN_TRADE_VALUE_USDC = float(os.getenv("AUTONOMOUS_MIN_TRADE_VALUE_USDC", "0.60"))
+AUTONOMOUS_MAX_TRADE_VALUE_USDC = float(os.getenv("AUTONOMOUS_MAX_TRADE_VALUE_USDC", "1.50"))
+AUTONOMOUS_MIN_PRICE = float(os.getenv("AUTONOMOUS_MIN_PRICE", "0.12"))
+AUTONOMOUS_MAX_PRICE = float(os.getenv("AUTONOMOUS_MAX_PRICE", "0.30"))
+AUTONOMOUS_MIN_MARKET_LIQUIDITY = float(os.getenv("AUTONOMOUS_MIN_MARKET_LIQUIDITY", "750"))
+AUTONOMOUS_MIN_EVENT_LEAD_SEC = int(os.getenv("AUTONOMOUS_MIN_EVENT_LEAD_SEC", "900"))
+AUTONOMOUS_MAX_EVENT_LEAD_SEC = int(os.getenv("AUTONOMOUS_MAX_EVENT_LEAD_SEC", "21600"))
+AUTONOMOUS_MAX_CANDIDATES_PER_TAG = max(10, int(os.getenv("AUTONOMOUS_MAX_CANDIDATES_PER_TAG", "80")))
+AUTONOMOUS_MAX_SIGNALS_PER_CYCLE = max(1, int(os.getenv("AUTONOMOUS_MAX_SIGNALS_PER_CYCLE", "3")))
+AUTONOMOUS_REQUIRE_ESPORTS_SERIES = os.getenv("AUTONOMOUS_REQUIRE_ESPORTS_SERIES", "true").lower() == "true"
+MIN_AUTONOMOUS_SCORE = float(os.getenv("MIN_AUTONOMOUS_SCORE", "68"))
 
 # Risk controls
 MAX_TRADE_PCT = float(os.getenv("MAX_TRADE_PCT", "0.05"))
 MAX_TRADE_VALUE_USDC = float(os.getenv("MAX_TRADE_VALUE_USDC", "0"))
 DAILY_LOSS_LIMIT = float(os.getenv("DAILY_LOSS_LIMIT", "50"))
 SESSION_STOP_LOSS_USDC = float(os.getenv("SESSION_STOP_LOSS_USDC", str(DAILY_LOSS_LIMIT)))
+SESSION_STOP_LOOKBACK_SEC = int(os.getenv("SESSION_STOP_LOOKBACK_SEC", "86400"))
 GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO = float(os.getenv("GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO", "0.70"))
 GAME_MARKET_ACTIVE_EXIT_ABS_DROP = float(os.getenv("GAME_MARKET_ACTIVE_EXIT_ABS_DROP", "0.15"))
 GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC = int(os.getenv("GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC", "60"))
@@ -114,6 +136,7 @@ MAX_BOOK_PRICE_IMPACT = float(os.getenv("MAX_BOOK_PRICE_IMPACT", "0.02"))
 SETTLEMENT_POLL_SEC = int(os.getenv("SETTLEMENT_POLL_SEC", "120"))
 SETTLEMENT_CACHE_SEC = float(os.getenv("SETTLEMENT_CACHE_SEC", "30"))
 SETTLEMENT_CANONICAL_EPS = float(os.getenv("SETTLEMENT_CANONICAL_EPS", "0.02"))
+SETTLEMENT_PROPOSED_EARLY_BUFFER_SEC = int(os.getenv("SETTLEMENT_PROPOSED_EARLY_BUFFER_SEC", "3600"))
 
 # Trader quality filters
 PROFILE_REFRESH_SEC = int(os.getenv("PROFILE_REFRESH_SEC", "900"))
@@ -127,7 +150,7 @@ MAX_BURST_TRADES_PER_60S = int(os.getenv("MAX_BURST_TRADES_PER_60S", "12"))
 MAX_SAME_SECOND_TRADES = int(os.getenv("MAX_SAME_SECOND_TRADES", "4"))
 
 # Conservative consensus strategy
-ENABLE_CONSENSUS_STRATEGY = os.getenv("ENABLE_CONSENSUS_STRATEGY", "true").lower() == "true"
+ENABLE_CONSENSUS_STRATEGY = os.getenv("ENABLE_CONSENSUS_STRATEGY", "false").lower() == "true"
 CONSENSUS_WINDOW_SEC = int(os.getenv("CONSENSUS_WINDOW_SEC", "600"))
 MIN_CONSENSUS_TRADERS = int(os.getenv("MIN_CONSENSUS_TRADERS", "2"))
 MIN_CONSENSUS_SCORE = float(os.getenv("MIN_CONSENSUS_SCORE", "72"))
@@ -155,8 +178,42 @@ def effective_max_trade_value():
     return pct_cap
 
 
+def effective_autonomous_trade_floor():
+    return max(0.0, AUTONOMOUS_MIN_TRADE_VALUE_USDC)
+
+
+def effective_autonomous_trade_ceiling():
+    ceiling = effective_max_trade_value()
+    if AUTONOMOUS_MAX_TRADE_VALUE_USDC > 0:
+        ceiling = min(ceiling, AUTONOMOUS_MAX_TRADE_VALUE_USDC)
+    return max(0.0, ceiling)
+
+
 def capital_gates_enabled():
     return not (DRY_RUN and PAPER_IGNORE_CAPITAL_GATES)
+
+
+def copy_strategy_enabled():
+    return ENABLE_COPY_STRATEGY
+
+
+def autonomous_strategy_enabled():
+    return ENABLE_AUTONOMOUS_STRATEGY
+
+
+def trader_discovery_enabled():
+    return copy_strategy_enabled()
+
+
+def entry_engine_label():
+    engines = []
+    if copy_strategy_enabled():
+        engines.append("copy")
+    if copy_strategy_enabled() and ENABLE_CONSENSUS_STRATEGY:
+        engines.append("consensus")
+    if autonomous_strategy_enabled():
+        engines.append("autonomous")
+    return "+".join(engines) if engines else "idle"
 
 
 def session_stop_loss_enabled():

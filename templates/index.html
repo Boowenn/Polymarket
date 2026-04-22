@@ -807,6 +807,208 @@
     line-height: 1.7;
   }
 
+  .hidden {
+    display: none !important;
+  }
+
+  .chart-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+  .account-chart-card {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .account-chart-head h3 {
+    margin: 0;
+    color: var(--navy);
+    font-size: 16px;
+    font-weight: 800;
+  }
+
+  .account-chart-head p {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.65;
+  }
+
+  .chart-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .chart-meta-card {
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: rgba(22, 53, 76, 0.04);
+    border: 1px solid rgba(22, 53, 76, 0.08);
+  }
+
+  .chart-meta-card span {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .chart-meta-card strong {
+    display: block;
+    margin-top: 8px;
+    color: var(--navy);
+    font-size: 18px;
+    font-weight: 800;
+  }
+
+  .equity-chart-frame {
+    display: grid;
+    gap: 10px;
+  }
+
+  .equity-chart-surface {
+    position: relative;
+    border-radius: 18px;
+    overflow: hidden;
+    background:
+      linear-gradient(rgba(22, 53, 76, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(22, 53, 76, 0.04) 1px, transparent 1px),
+      linear-gradient(180deg, rgba(45, 115, 185, 0.04), rgba(45, 115, 185, 0.01));
+    background-size: 100% 25%, 25% 100%, auto;
+    border: 1px solid rgba(22, 53, 76, 0.08);
+    padding: 12px;
+  }
+
+  .equity-chart-meta-row,
+  .equity-chart-axis {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--muted);
+    font-size: 12px;
+    font-family: var(--mono);
+  }
+
+  .equity-chart-svg {
+    width: 100%;
+    height: 220px;
+    display: block;
+    overflow: visible;
+  }
+
+  .equity-chart-empty {
+    display: grid;
+    place-items: center;
+    min-height: 220px;
+    color: var(--muted);
+    text-align: center;
+    font-size: 13px;
+  }
+
+  .equity-chart-empty strong {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--navy);
+    font-size: 15px;
+  }
+
+  .chart-guide-line {
+    stroke: rgba(22, 53, 76, 0.09);
+    stroke-width: 1;
+  }
+
+  .chart-guide-label,
+  .chart-axis-label {
+    fill: var(--muted);
+    font-size: 10px;
+  }
+
+  .chart-axis-label {
+    text-transform: uppercase;
+  }
+
+  .chart-area-fill {
+    fill: rgba(211, 138, 31, 0.14);
+  }
+
+  .chart-line {
+    fill: none;
+    stroke: var(--amber);
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .chart-point {
+    fill: var(--amber);
+    stroke: rgba(255, 255, 255, 0.9);
+    stroke-width: 2;
+  }
+
+  .symbol-pnl-chart {
+    display: grid;
+    gap: 12px;
+  }
+
+  .symbol-pnl-row {
+    display: grid;
+    grid-template-columns: 160px minmax(0, 1fr) 112px;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .symbol-pnl-label,
+  .symbol-pnl-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+  }
+
+  .symbol-pnl-label {
+    color: var(--text);
+    font-weight: 700;
+  }
+
+  .symbol-pnl-value {
+    text-align: right;
+    font-family: var(--mono);
+  }
+
+  .symbol-pnl-track {
+    position: relative;
+    height: 14px;
+    overflow: hidden;
+    border-radius: 999px;
+    border: 1px solid rgba(22, 53, 76, 0.08);
+    background: rgba(22, 53, 76, 0.06);
+  }
+
+  .symbol-pnl-fill {
+    height: 100%;
+    min-width: 2px;
+    border-radius: 999px;
+  }
+
+  .symbol-pnl-fill.up {
+    background: linear-gradient(90deg, rgba(15, 138, 108, 0.35), var(--green));
+  }
+
+  .symbol-pnl-fill.down {
+    background: linear-gradient(90deg, rgba(207, 76, 86, 0.35), var(--red));
+  }
+
+  .chart-note {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.7;
+  }
+
   .health-grid {
     display: grid;
     gap: 10px;
@@ -1008,11 +1210,13 @@
     .hero-strip,
     .stats-grid,
     .overview-grid,
-    .signal-grid {
+    .signal-grid,
+    .chart-grid {
       grid-template-columns: 1fr;
     }
 
-    .metric-grid {
+    .metric-grid,
+    .chart-meta-grid {
       grid-template-columns: 1fr;
     }
   }
@@ -1048,6 +1252,15 @@
 
     .workspace-title {
       font-size: 18px;
+    }
+
+    .symbol-pnl-row {
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+
+    .symbol-pnl-value {
+      text-align: left;
     }
 
     .workspace-chip,
@@ -1100,9 +1313,9 @@
           <div class="nav-title">总览</div>
           <div class="nav-note">资金、胜率、平仓率、当前研究状态</div>
         </a>
-        <a class="nav-link" href="#section-traders" data-target="section-traders">
-          <div class="nav-title">交易员</div>
-          <div class="nav-note">当前跟踪对象、状态和质量评分</div>
+        <a class="nav-link" href="#section-traders" data-target="section-traders" id="nav-traders">
+          <div class="nav-title" id="nav-traders-title">交易员</div>
+          <div class="nav-note" id="nav-traders-note">当前跟踪对象、状态和质量评分</div>
         </a>
         {% if dry_run %}
         <a class="nav-link" href="#section-experiments" data-target="section-experiments" id="nav-experiments">
@@ -1123,8 +1336,8 @@
         <div class="side-row"><span>连接</span><strong id="sidebar-connection">已连接</strong></div>
         <div class="side-row"><span>模式</span><strong id="sidebar-mode">观察 / 模拟</strong></div>
         <div class="side-row"><span>市场范围</span><strong id="sidebar-scope">体育 + 电竞</strong></div>
-        <div class="side-row"><span>榜单来源</span><strong id="sidebar-discovery">体育榜单</strong></div>
-        <div class="side-row"><span>监控池</span><strong id="sidebar-monitor">0 名交易员</strong></div>
+        <div class="side-row"><span id="sidebar-discovery-label">榜单来源</span><strong id="sidebar-discovery">体育榜单</strong></div>
+        <div class="side-row"><span id="sidebar-monitor-label">监控池</span><strong id="sidebar-monitor">0 名交易员</strong></div>
         <div class="side-row"><span>倒计时</span><strong id="sidebar-countdown">--:--</strong></div>
       </div>
       <div class="side-footnote" id="sidebar-footnote">
@@ -1369,20 +1582,88 @@
           </div>
         </article>
       </div>
+
+      <div class="chart-grid">
+        <article class="panel">
+          <div class="panel-header">
+            <div class="panel-title">账户曲线</div>
+            <div class="panel-badge">AITD 风格曲线</div>
+          </div>
+          <div class="panel-body">
+            <div class="account-chart-card">
+              <div class="account-chart-head">
+                <h3>总盈亏轨迹</h3>
+                <p id="curve-note">按 `pnl_log` 的真实快照绘制 realized / unrealized 合成曲线，用来判断这轮 live 是否只是短暂波动还是结构性走弱。</p>
+              </div>
+              <div class="chart-meta-grid">
+                <div class="chart-meta-card">
+                  <span>当前总盈亏</span>
+                  <strong id="curve-total">$0.00</strong>
+                </div>
+                <div class="chart-meta-card">
+                  <span>已实现</span>
+                  <strong id="curve-realized">$0.00</strong>
+                </div>
+                <div class="chart-meta-card">
+                  <span>未实现</span>
+                  <strong id="curve-unrealized">$0.00</strong>
+                </div>
+              </div>
+              <div class="equity-chart-frame">
+                <div class="equity-chart-surface" id="equity-chart-wrap">
+                  <svg class="equity-chart-svg" id="equity-chart-svg" viewBox="0 0 640 220" preserveAspectRatio="none"></svg>
+                  <div class="equity-chart-empty hidden" id="equity-chart-empty">
+                    <div>
+                      <strong>暂无曲线样本</strong>
+                      <div>等下一轮 `pnl_log` 快照写入后，这里会开始累计真实轨迹。</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="equity-chart-meta-row">
+                  <span id="curve-start-label">起点 --</span>
+                  <span id="curve-end-label">终点 --</span>
+                </div>
+                <div class="equity-chart-axis">
+                  <span id="curve-axis-min">-$0.00</span>
+                  <span id="curve-axis-mid">$0.00</span>
+                  <span id="curve-axis-max">+$0.00</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div class="panel-title">持仓盈亏分布</div>
+            <div class="panel-badge">当前风险热区</div>
+          </div>
+          <div class="panel-body">
+            <div class="account-chart-card">
+              <div class="account-chart-head">
+                <h3>仓位条形图</h3>
+                <p id="position-bars-note">把当前 open live position 的浮盈浮亏拆开看，避免只看到总数却不知道是哪一笔在拖累资金曲线。</p>
+              </div>
+              <div class="symbol-pnl-chart" id="position-bars"></div>
+              <div class="chart-note" id="position-bars-footnote">条越长，说明该仓位对当前浮动盈亏的影响越大；颜色代表方向，说明文字同时给出估值来源。</div>
+            </div>
+          </div>
+        </article>
+      </div>
     </section>
 
     <section class="section" id="section-traders">
       <div class="section-head">
         <div>
-          <div class="section-title">交易员池</div>
-          <div class="section-note">左表看当前跟踪对象，质量评分和状态一眼能看清，不再和实验信息挤在一起。</div>
+          <div class="section-title" id="trader-section-title">交易员池</div>
+          <div class="section-note" id="trader-section-note">左表看当前跟踪对象，质量评分和状态一眼能看清，不再和实验信息挤在一起。</div>
         </div>
         <div class="section-tag" id="trader-count">0</div>
       </div>
       <article class="panel">
         <div class="panel-header">
-          <div class="panel-title">当前跟踪交易员</div>
-          <div class="panel-badge">Top Pool</div>
+          <div class="panel-title" id="trader-panel-title">当前跟踪交易员</div>
+          <div class="panel-badge" id="trader-panel-badge">Top Pool</div>
         </div>
         <div class="table-wrap">
           <table>
@@ -1509,7 +1790,7 @@
     </section>
 
     <div class="footer">
-      日志文件：`copybot.log` · 配置文件：`.env` · 页面自动实时更新，默认只观察体育与电竞。
+      日志文件：`copybot.log`（沿用旧文件名） · 配置文件：`.env` · 页面自动实时更新，默认只观察体育与电竞。
     </div>
   </main>
 </div>
@@ -1587,6 +1868,7 @@ function translateCategory(label) {
 function translateSource(source) {
   const text = String(source || 'copy').toLowerCase();
   if (text === 'consensus') return '共识';
+  if (text === 'autonomous') return '自主';
   if (text === 'copy') return '跟单';
   if (text === 'bot_exit') return '主动退出';
   return text;
@@ -1857,6 +2139,138 @@ function renderPerformance(perf, config, liveExecution) {
       : `当前账户还没有真实 executed 成交。页面已经切成实盘口径，模拟盘、shadow 和 experiment 样本已归档，不再参与当前统计。`;
 }
 
+function fmtCurveTime(ts) {
+  const date = new Date(Number(ts || 0) * 1000);
+  if (Number.isNaN(date.getTime())) return '--';
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+}
+
+function buildCurveGeometry(points, width, height, padding) {
+  const values = points.map(point => Number(point.total_pnl || 0));
+  let minVal = Math.min(...values);
+  let maxVal = Math.max(...values);
+  if (minVal === maxVal) {
+    minVal -= 1;
+    maxVal += 1;
+  }
+
+  const xStep = points.length > 1 ? (width - padding * 2) / (points.length - 1) : 0;
+  const usableHeight = height - padding * 2;
+  const range = maxVal - minVal;
+  const coords = points.map((point, index) => {
+    const x = padding + index * xStep;
+    const y = padding + (maxVal - Number(point.total_pnl || 0)) / range * usableHeight;
+    return { x, y, value: Number(point.total_pnl || 0), timestamp: point.timestamp };
+  });
+
+  const linePath = coords.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ');
+  const endX = padding + (points.length - 1) * xStep;
+  const areaPath = `${linePath} L ${endX.toFixed(2)} ${(height - padding).toFixed(2)} L ${padding.toFixed(2)} ${(height - padding).toFixed(2)} Z`;
+  return { coords, minVal, maxVal, linePath, areaPath };
+}
+
+function renderCharts(charts, performance, liveExecution, config) {
+  const curve = (charts && charts.pnl_curve) || [];
+  const positionBars = (charts && charts.position_bars) || [];
+  const totalPnl = Number(config.dry_run ? (performance.total_pnl || 0) : (liveExecution.total_pnl || 0));
+  const realizedPnl = Number(config.dry_run ? (performance.realized_pnl || 0) : (liveExecution.realized_pnl || 0));
+  const unrealizedPnl = Number(config.dry_run ? (performance.unrealized_pnl || 0) : (liveExecution.unrealized_pnl || 0));
+
+  const totalEl = document.getElementById('curve-total');
+  const realizedEl = document.getElementById('curve-realized');
+  const unrealizedEl = document.getElementById('curve-unrealized');
+  totalEl.textContent = fmtSignedMoney(totalPnl);
+  realizedEl.textContent = fmtSignedMoney(realizedPnl);
+  unrealizedEl.textContent = fmtSignedMoney(unrealizedPnl);
+  totalEl.className = totalPnl >= 0 ? 'green' : 'red';
+  realizedEl.className = realizedPnl >= 0 ? 'green' : 'red';
+  unrealizedEl.className = unrealizedPnl >= 0 ? 'green' : 'red';
+
+  const curveNote = document.getElementById('curve-note');
+  curveNote.textContent = config.dry_run
+    ? '这条曲线来自研究模式 pnl_log，用于看 executed 样本是否持续改善，而不是只看某一轮报表。'
+    : '这条曲线来自 live pnl_log，把已实现和未实现一起叠加，便于快速识别回撤是否正在扩大。';
+
+  const svg = document.getElementById('equity-chart-svg');
+  const empty = document.getElementById('equity-chart-empty');
+  if (!curve.length) {
+    svg.innerHTML = '';
+    empty.classList.remove('hidden');
+    document.getElementById('curve-start-label').textContent = '起点 --';
+    document.getElementById('curve-end-label').textContent = '终点 --';
+    document.getElementById('curve-axis-min').textContent = fmtSignedMoney(0);
+    document.getElementById('curve-axis-mid').textContent = fmtSignedMoney(0);
+    document.getElementById('curve-axis-max').textContent = fmtSignedMoney(0);
+  } else {
+    empty.classList.add('hidden');
+    const width = 640;
+    const height = 220;
+    const padding = 24;
+    const geometry = buildCurveGeometry(curve, width, height, padding);
+    const midVal = (geometry.minVal + geometry.maxVal) / 2;
+    const guideY = (value) => {
+      const range = geometry.maxVal - geometry.minVal;
+      return padding + (geometry.maxVal - value) / range * (height - padding * 2);
+    };
+    const lastPoint = geometry.coords[geometry.coords.length - 1];
+    svg.innerHTML = `
+      <line class="chart-guide-line" x1="${padding}" y1="${guideY(geometry.maxVal)}" x2="${width - padding}" y2="${guideY(geometry.maxVal)}"></line>
+      <line class="chart-guide-line" x1="${padding}" y1="${guideY(midVal)}" x2="${width - padding}" y2="${guideY(midVal)}"></line>
+      <line class="chart-guide-line" x1="${padding}" y1="${guideY(geometry.minVal)}" x2="${width - padding}" y2="${guideY(geometry.minVal)}"></line>
+      <path class="chart-area-fill" d="${geometry.areaPath}"></path>
+      <path class="chart-line" d="${geometry.linePath}"></path>
+      ${geometry.coords.map((point) => `<circle class="chart-point" cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="${point === lastPoint ? 4.6 : 3.2}"></circle>`).join('')}
+    `;
+    document.getElementById('curve-start-label').textContent = `起点 ${fmtCurveTime(curve[0].timestamp)}`;
+    document.getElementById('curve-end-label').textContent = `终点 ${fmtCurveTime(curve[curve.length - 1].timestamp)}`;
+    document.getElementById('curve-axis-min').textContent = fmtSignedMoney(geometry.minVal);
+    document.getElementById('curve-axis-mid').textContent = fmtSignedMoney(midVal);
+    document.getElementById('curve-axis-max').textContent = fmtSignedMoney(geometry.maxVal);
+  }
+
+  const barsEl = document.getElementById('position-bars');
+  const footnoteEl = document.getElementById('position-bars-footnote');
+  if (!positionBars.length) {
+    barsEl.innerHTML = `
+      <div class="equity-chart-empty">
+        <div>
+          <strong>暂无持仓热区</strong>
+          <div>当前没有 open live position，或者仓位已经全部平掉。</div>
+        </div>
+      </div>
+    `;
+    footnoteEl.textContent = '没有持仓时，这里会保持空面板；一旦有仓位，就按浮盈浮亏绝对值排序展示。';
+    return;
+  }
+
+  const maxAbs = Math.max(...positionBars.map((row) => Math.abs(Number(row.unrealized_pnl || 0))), 0.01);
+  barsEl.innerHTML = positionBars.map((row) => {
+    const pnl = Number(row.unrealized_pnl || 0);
+    const widthPct = Math.max(4, Math.round(Math.abs(pnl) / maxAbs * 100));
+    const noteBits = [];
+    noteBits.push(row.mark_source === 'gamma_outcome' ? 'Gamma 估值' : row.mark_source === 'orderbook' ? '盘口估值' : row.mark_source || '混合估值');
+    if (row.is_single_game_market) {
+      noteBits.push('单局市场');
+    }
+    return `
+      <div class="symbol-pnl-row">
+        <div class="symbol-pnl-label" title="${row.market_slug} / ${row.outcome}">${row.label}</div>
+        <div class="symbol-pnl-track" title="${noteBits.join(' · ')}">
+          <div class="symbol-pnl-fill ${pnl >= 0 ? 'up' : 'down'}" style="width:${widthPct}%"></div>
+        </div>
+        <div class="symbol-pnl-value ${pnl >= 0 ? 'green' : 'red'}">${fmtSignedMoney(pnl)}</div>
+      </div>
+    `;
+  }).join('');
+  footnoteEl.textContent = '条越长，说明该仓位对当前浮动盈亏的影响越大；说明文字同时给出估值来源，单局市场会被特别标识。';
+}
+
 function renderBlockedReasons(rows) {
   const blockedRows = rows || [];
   const tbody = document.getElementById('blocked-body');
@@ -1938,15 +2352,18 @@ function renderExperimentWatch(rows) {
   }).join('');
 }
 
-function renderTraders(rows) {
+function renderTraders(rows, config = {}) {
   const traderRows = rows || [];
   document.getElementById('trader-count').textContent = `${traderRows.length} 名`;
   const tbody = document.getElementById('traders-body');
 
   if (!traderRows.length) {
+    const emptyText = (!config.dry_run && !config.copy_strategy_enabled && config.autonomous_strategy_enabled)
+      ? '当前默认引擎已经切到自主策略，这里不再展示跟单交易员池。'
+      : '当前没有交易员数据。';
     tbody.innerHTML = `
       <tr>
-        <td colspan="6" class="muted">当前没有交易员数据。</td>
+        <td colspan="6" class="muted">${emptyText}</td>
       </tr>
     `;
     return;
@@ -2023,7 +2440,13 @@ function renderRiskLogs(rows) {
 
 function renderSystem(config, stats, performance, liveExecution) {
   const scopeText = translateMarketScope(config.market_scope_label);
-  const discoveryText = `${translateCategory(config.leaderboard_category)} · ${String(config.leaderboard_discovery_label || '').toLowerCase()}`;
+  const copyEnabled = Boolean(config.copy_strategy_enabled);
+  const autonomousEnabled = Boolean(config.autonomous_strategy_enabled);
+  const discoveryText = copyEnabled
+    ? `${translateCategory(config.leaderboard_category)} · ${String(config.leaderboard_discovery_label || '').toLowerCase()}`
+    : autonomousEnabled
+      ? `自主扫描 · Match Winner · ${Number(config.autonomous_max_signals_per_cycle || 0)} 条/轮`
+      : '待机';
   const modeText = config.dry_run ? '观察 / 模拟' : '实盘';
   const repeatText = config.stage2_repeat_entry_experiment_enabled ? '开启' : '已暂停';
   const noBookText = config.stage2_no_book_recheck_experiment_enabled
@@ -2080,6 +2503,8 @@ function renderSystem(config, stats, performance, liveExecution) {
   const navExperiments = document.getElementById('nav-experiments');
   const experimentsSection = document.getElementById('section-experiments');
   const sideResearchCard = document.getElementById('side-research-card');
+  const tradersNav = document.getElementById('nav-traders');
+  const tradersSection = document.getElementById('section-traders');
   const delayedOrderCount = Number(config.delayed_order_count || 0);
   const delayedOrderAlertCount = Number(config.delayed_order_alert_count || 0);
   const delayedOrderAlertSec = Number(config.delayed_order_alert_sec || 0);
@@ -2096,11 +2521,15 @@ function renderSystem(config, stats, performance, liveExecution) {
     : '上排只显示真钱账户与当前 live 风控，下排只显示真实 executed 成交；模拟盘、shadow 和实验样本已经归档。';
   document.getElementById('hero-subtitle').textContent = config.dry_run
     ? '先看研究预算、实验和样本分层，再看 executed 研究基线、交易员、实验与信号。'
-    : '先看账户现金、策略预算和实盘护栏，再看真实 executed 表现、交易员、信号与风险。模拟盘和实验样本已经归档，不再混进当前页面。';
+    : (autonomousEnabled && !copyEnabled)
+      ? '先看账户现金、策略预算和实盘护栏，再看真实 executed 表现、资金曲线、当前信号与风险。默认引擎已经切到自主策略，不再把命运交给跟单对象。'
+      : '先看账户现金、策略预算和实盘护栏，再看真实 executed 表现、交易员、信号与风险。模拟盘和实验样本已经归档，不再混进当前页面。';
   document.getElementById('brand-title').innerHTML = config.dry_run ? '体育 / 电竞<br>研究看板' : '体育 / 电竞<br>实盘看板';
   document.getElementById('brand-subtitle').textContent = config.dry_run
     ? '当前页面按 executed / shadow / experiment 分层观察研究样本。'
-    : '当前页面只保留真钱账户、真实 executed 成交和实盘风控；模拟盘、shadow 和实验样本已经归档。';
+    : (autonomousEnabled && !copyEnabled)
+      ? '当前页面只保留真钱账户、自主策略信号、真实 executed 成交和实盘风控；跟单池默认隐藏。'
+      : '当前页面只保留真钱账户、真实 executed 成交和实盘风控；模拟盘、shadow 和实验样本已经归档。';
 
   if (navExperiments) {
     navExperiments.style.display = config.dry_run ? '' : 'none';
@@ -2110,6 +2539,34 @@ function renderSystem(config, stats, performance, liveExecution) {
   }
   if (sideResearchCard) {
     sideResearchCard.style.display = config.dry_run ? '' : 'none';
+  }
+  if (tradersNav) {
+    tradersNav.style.display = (!config.dry_run && !copyEnabled && autonomousEnabled) ? 'none' : '';
+  }
+  if (tradersSection) {
+    tradersSection.style.display = (!config.dry_run && !copyEnabled && autonomousEnabled) ? 'none' : '';
+  }
+  if (document.getElementById('nav-traders-title')) {
+    document.getElementById('nav-traders-title').textContent = copyEnabled ? '交易员' : '自主策略';
+  }
+  if (document.getElementById('nav-traders-note')) {
+    document.getElementById('nav-traders-note').textContent = copyEnabled
+      ? '当前跟踪对象、状态和质量评分'
+      : '当前默认已隐藏，由自主扫描接管';
+  }
+  if (document.getElementById('trader-section-title')) {
+    document.getElementById('trader-section-title').textContent = copyEnabled ? '交易员池' : '自主策略说明';
+  }
+  if (document.getElementById('trader-section-note')) {
+    document.getElementById('trader-section-note').textContent = copyEnabled
+      ? '左表看当前跟踪对象，质量评分和状态一眼能看清，不再和实验信息挤在一起。'
+      : '当前 live 默认不再依赖跟单池，而是扫描体育 / 电竞的 Match Winner 候选。';
+  }
+  if (document.getElementById('trader-panel-title')) {
+    document.getElementById('trader-panel-title').textContent = copyEnabled ? '当前跟踪交易员' : '自主引擎已接管';
+  }
+  if (document.getElementById('trader-panel-badge')) {
+    document.getElementById('trader-panel-badge').textContent = copyEnabled ? 'Top Pool' : 'Autonomy';
   }
 
   document.getElementById('topbar-mode').textContent = modeText;
@@ -2164,12 +2621,12 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('hero-scope').textContent = scopeText;
   document.getElementById('hero-experiment').textContent = config.dry_run
     ? `${repeatText} · 空簿复查${config.stage2_no_book_recheck_experiment_enabled ? '开启' : '关闭'}`
-    : 'live-only';
+    : `${config.entry_engine_label || 'live-only'} 引擎`;
   document.getElementById('hero-experiment-note').textContent = config.dry_run
     ? '空簿延迟复查会继续收样本，先验证是否值得放宽。'
     : liveEntries > 0
-      ? `只做体育 / 电竞；当前已有 ${liveEntries} 笔真实成交，${gameMarketActiveExitEnabled ? '单局市场主动退出已开启，' : ''}继续积累纯实盘样本。`
-      : `只做体育 / 电竞；当前还没有真实成交，先验证账户读取、挂单和最小单量拦截是否正常${gameMarketActiveExitEnabled ? '，并让单局市场主动退出护栏保持开启' : ''}。`;
+      ? `当前引擎 ${config.entry_engine_label || 'live-only'}；已有 ${liveEntries} 笔真实成交，${config.autonomous_strategy_enabled ? `自主策略价格带 ${Number(config.autonomous_price_min || 0).toFixed(2)}-${Number(config.autonomous_price_max || 0).toFixed(2)}，` : ''}${gameMarketActiveExitEnabled ? '单局市场主动退出已开启，' : ''}继续积累纯实盘样本。`
+      : `当前引擎 ${config.entry_engine_label || 'live-only'}；先验证账户读取、挂单和最小单量拦截是否正常${config.autonomous_strategy_enabled ? `，自主策略会只看价格带 ${Number(config.autonomous_price_min || 0).toFixed(2)}-${Number(config.autonomous_price_max || 0).toFixed(2)} 的 Match Winner 候选` : ''}${gameMarketActiveExitEnabled ? '，并让单局市场主动退出护栏保持开启' : ''}。`;
   document.getElementById('hero-guardrail').textContent = `${fmtMoney(maxTradeValue)} / ${maxPositions || 0} 仓`;
   document.getElementById('hero-guardrail-note').textContent = config.dry_run
     ? `纸面日预算 ${fmtMoney(dailyRiskBudget)} · 资本门控 ${config.paper_ignore_capital_gates ? '关闭' : '开启'}`
@@ -2181,8 +2638,16 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('mode-badge').className = config.dry_run ? 'amber' : 'red';
   document.getElementById('sidebar-mode').textContent = modeText;
   document.getElementById('sidebar-scope').textContent = scopeText;
+  if (document.getElementById('sidebar-discovery-label')) {
+    document.getElementById('sidebar-discovery-label').textContent = copyEnabled ? '榜单来源' : '策略引擎';
+  }
   document.getElementById('sidebar-discovery').textContent = discoveryText;
-  document.getElementById('sidebar-monitor').textContent = `${config.monitored_trader_limit || 0} 名交易员`;
+  if (document.getElementById('sidebar-monitor-label')) {
+    document.getElementById('sidebar-monitor-label').textContent = copyEnabled ? '监控池' : '轮次上限';
+  }
+  document.getElementById('sidebar-monitor').textContent = copyEnabled
+    ? `${config.monitored_trader_limit || 0} 名交易员`
+    : `${Number(config.autonomous_max_signals_per_cycle || 0)} 条信号`;
   if (document.getElementById('sidebar-repeat')) document.getElementById('sidebar-repeat').textContent = repeatText;
   if (document.getElementById('sidebar-no-book')) document.getElementById('sidebar-no-book').textContent = noBookText;
 
@@ -2224,7 +2689,7 @@ function renderSystem(config, stats, performance, liveExecution) {
     : `单笔 ${fmtMoney(maxTradeValue)} · 已部署 ${fmtMoney(deployedValue)} · 挂单 ${openOrderCount} · 持仓 ${openPositionCount}/${maxPositions}${delayedOrderCount > 0 ? ` · 延迟 ${delayedOrderCount}` : ''}${sessionStopEnabled ? ` · 止损 ${sessionStopActive ? '已触发' : '已布防'}` : ''}${gameMarketActiveExitEnabled ? ' · 单局主动退出已开' : ''}`;
   document.getElementById('sys-experiments').textContent = config.dry_run
     ? `repeat-entry ${repeatText}；空簿延迟复查 ${noBookText}`
-    : '模拟盘 / shadow / experiment 已归档，不再进入当前实盘视图';
+    : `${config.entry_engine_label || 'live-only'}；模拟盘 / shadow / experiment 已归档${config.autonomous_strategy_enabled ? `；自主策略只看 ${Number(config.autonomous_price_min || 0).toFixed(2)}-${Number(config.autonomous_price_max || 0).toFixed(2)} 的 Match Winner` : ''}`;
 
   if (config.dry_run) {
     document.getElementById('label-bankroll').textContent = '研究资金';
@@ -2293,7 +2758,9 @@ function renderSystem(config, stats, performance, liveExecution) {
 
     document.getElementById('s-simulated').textContent = fmtMoney(maxTradeValue);
     document.getElementById('s-simulated').className = 'stat-value';
-    document.getElementById('s-simulated-note').textContent = `${maxTradeCapNote} · trader 上限 ${fmtMoney(config.max_trader_exposure_value || 0)}`;
+    document.getElementById('s-simulated-note').textContent = copyEnabled
+      ? `${maxTradeCapNote} · trader 上限 ${fmtMoney(config.max_trader_exposure_value || 0)}`
+      : `${maxTradeCapNote} · 市场上限 ${fmtMoney(config.max_market_exposure_value || 0)} · 自主信号按盘口最小单量再过滤`;
 
     document.getElementById('s-closed').textContent = openOrderCount;
     document.getElementById('s-closed').className = 'stat-value';
@@ -2325,7 +2792,7 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('sidebar-footnote').textContent =
     config.dry_run
       ? `当前只看 ${scopeText}。Repeat-entry ${repeatText}，空簿延迟复查 ${noBookText}。指标口径保持 executed / shadow / experiment 分层。`
-      : `当前是真实资金 ${canaryText}：账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，只看 ${scopeText}。模拟盘、shadow 和 experiment 已归档；若订单低于市场最小单量，会直接跳过而不是强行放大仓位。${sessionStopEnabled ? ` 会话级止损阈值 ${fmtMoney(sessionStopLimit)}，当前总盈亏 ${fmtSignedMoney(liveTotalPnl)}，当前估值 ${fmtMoney(sessionStopMarkedValue)}${sessionStopActive ? '，已暂停新开仓。' : '。'}` : ''}${gameMarketActiveExitEnabled ? ` 单局市场主动退出已开启；当盘口太薄时，会先用 Gamma 价格做风险估值。` : ''}`;
+      : `当前是真实资金 ${canaryText}：账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，只看 ${scopeText}。${autonomousEnabled && !copyEnabled ? '默认引擎已经切到自主扫描，不再依赖外部交易员。' : '模拟盘、shadow 和 experiment 已归档。'} 若订单低于市场最小单量，会直接跳过而不是强行放大仓位。${sessionStopEnabled ? ` 会话级止损阈值 ${fmtMoney(sessionStopLimit)}，当前总盈亏 ${fmtSignedMoney(liveTotalPnl)}，当前估值 ${fmtMoney(sessionStopMarkedValue)}${sessionStopActive ? '，已暂停新开仓。' : '。'}` : ''}${gameMarketActiveExitEnabled ? ` 单局市场主动退出已开启；当盘口太薄时，会先用 Gamma 价格做风险估值。` : ''}`;
 }
 
 function highlightSections() {
@@ -2360,6 +2827,7 @@ function render(data) {
   const stats = data.stats || {};
   const performance = data.performance || {};
   const liveExecution = data.live_execution || {};
+  const charts = data.charts || {};
 
   pollInterval = config.poll_interval || 15;
   document.getElementById('cycle-num').textContent = data.cycle || 0;
@@ -2369,7 +2837,8 @@ function render(data) {
 
   renderSystem(config, stats, performance, liveExecution);
   renderPerformance(performance, config, liveExecution);
-  renderTraders(data.traders || []);
+  renderCharts(charts, performance, liveExecution, config);
+  renderTraders(data.traders || [], config);
   if (config.show_research_panels) {
     renderBlockedReasons(data.blocked_reasons || []);
     renderExperimentWatch([

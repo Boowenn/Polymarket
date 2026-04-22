@@ -1,18 +1,21 @@
-# Polymarket Copy Trading Bot
+# Polymarket Sports / Esports Trading Bot
 
-A defensive Polymarket copy-trading bot focused on real-money execution, trader screening, order book protection, and post-trade analysis across sports and esports markets.
+A defensive Polymarket sports and esports trading bot focused on real-money execution, order book protection, small-bankroll risk control, and post-trade analysis. The repository still contains copy-trading research components, but the default live path is now an autonomous market-first strategy for sports and esports.
 
 ## What it does
 
-- Tracks top Polymarket traders and scores whether they are safe to mirror.
-- Lets you explicitly scope mirrored markets to `sports`, `esports`, or `sports,esports` instead of blindly following every market a trader touches.
-- Blocks suspicious flow such as micro-order spam, burst trading, same-second bursts, and fast flip scalping.
-- Uses order book checks before mirroring to avoid wide spread, drift, and impact traps.
+- Scans Polymarket sports and esports markets directly through the public Gamma and CLOB APIs.
+- Builds autonomous entry candidates from `Match Winner` / `moneyline` markets inside your allowed scope.
+- Keeps the default autonomous engine inside a conservative moderate-underdog band instead of chasing near-0 / near-1 contracts.
+- Requires esports entries to be series-style matches such as `BO3` or `BO5`, and excludes `game1/game2/game3` child markets from new autonomous entries.
+- Blocks suspicious flow such as micro-order spam, burst trading, same-second bursts, and fast flip scalping when copy research is enabled.
+- Uses order book checks before entry to avoid wide spread, drift, and impact traps.
+- Supports copy-driven research as an optional engine, but it is disabled by default.
 - Supports `DRY_RUN=true` for optional offline research, but the active live dashboard/report path is now live-only after cutover.
 - Can archive pre-live dry-run / shadow / experiment data out of the active DB so real-money stats stay clean.
 - Keeps isolated stage-2 experiments available only for explicit research use; they are not part of the live-only runtime view.
 - Records signal price, tradable price, protected execution price, and final exit or settlement price in a trade journal.
-- Backfills journal exits from closed-market settlement data.
+- Backfills journal exits from settlement data, including ended markets that already have a proposed canonical resolution before Gamma flips `closed=true`.
 - Captures trader profile history over time and generates observation reports with improvement suggestions.
 
 ## Project files
@@ -21,8 +24,9 @@ A defensive Polymarket copy-trading bot focused on real-money execution, trader 
 - `web.py`: web dashboard
 - `report.py`: multi-day observation and improvement report
 - `strategy.py`: trader scoring and consensus logic
-- `risk.py`: copy-trading risk gates
-- `settlement.py`: closed-market settlement backfill
+- `autonomous_strategy.py`: autonomous sports/esports entry engine
+- `risk.py`: runtime risk gates
+- `settlement.py`: market settlement backfill
 - `models.py`: SQLite storage
 
 ## Quick start
@@ -66,11 +70,15 @@ Keep real secrets in local `.env` only. You do not need to commit `.env` to GitH
 For a very small live bankroll such as `$20`, treat the bot as an order-lifecycle smoke test first, not as a production sizing template:
 
 - keep the market scope limited to `sports,esports`
+- keep the default engine autonomous and keep copy mode disabled unless you are explicitly researching traders
+- keep new autonomous entries inside `Match Winner` / `moneyline` markets
+- keep esports entries restricted to `BO3` / `BO5` style series markets
 - keep `repeat-entry` paused
 - prefer `MAX_POSITIONS=1` or `2`
 - use a tight daily loss limit and daily risk budget
-- prefer an absolute single-trade cap such as `MAX_TRADE_VALUE_USDC=1.0` to `1.5` instead of relying only on `MAX_TRADE_PCT`; with Polymarket's `min_order_size=5`, cent-level caps are usually non-executable
+- prefer an absolute single-trade cap such as `MAX_TRADE_VALUE_USDC=0.6` to `1.5` instead of relying only on `MAX_TRADE_PCT`; with Polymarket's `min_order_size=5`, cent-level caps like `$0.02-$0.08` are usually non-executable
 - enable the live session stop so realized + marked unrealized drawdown can pause new entries before a tiny bankroll spirals
+- keep that session stop on a rolling window such as `SESSION_STOP_LOOKBACK_SEC=86400`, so one bad day pauses the bot without freezing it forever
 - keep the real `.env` local-only; do not commit private keys or live wallet settings
 - read the dashboard as a live-only view: real account cash, current guardrails, and true executed fills
 - if a live order stays in local `delayed` state beyond the alert threshold, surface it clearly in the dashboard before changing sizing or execution rules
@@ -83,6 +91,22 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - remember that many Polymarket markets require a `min_order_size` of `5` shares, so tiny bankrolls will naturally skip many higher-priced contracts rather than force larger size
 
 This repository intentionally blocks orders below the market minimum instead of auto-inflating them beyond the copy-sizing plan.
+
+### Default autonomous strategy
+
+The default autonomous live path is intentionally narrow:
+
+- scope only `sports`, `esports`, or `sports,esports`
+- fetch sport-specific tags from `GET /sports`
+- scan active Gamma `markets`
+- require `sportsMarketType == moneyline`
+- require `groupItemTitle` to be `Match Winner`
+- skip `game1/game2/game3` child markets
+- for esports, require `BO3` or `BO5` in the match question
+- probe only a moderate underdog band, not pure longshots
+- size inside a small executable band rather than a pure percentage of bankroll
+
+This setup was chosen because Polymarket exposes enough public sports metadata and market data to build a market-first strategy without relying on trader activity, while official order book endpoints expose `min_order_size`, making sub-dollar sizing infeasible for many contracts on tiny bankrolls.
 
 ### Live cutover
 
@@ -119,7 +143,7 @@ See `.env.example` for all configuration values.
 
 ## Research Governance Skill
 
-Long-term maintenance, metric definitions, live cutover rules, and rollout governance now live in the repo skill:
+Long-term maintenance, metric definitions, live cutover rules, autonomous rollout policy, and experiment governance now live in the repo skill:
 
 - `.codex/skills/polymarket-research-governance/SKILL.md`
 - `.codex/skills/polymarket-research-governance/references/governance.md`
@@ -137,6 +161,11 @@ Relevant scope controls:
 - `MARKET_SCOPE=sports,esports` to allow both traditional sports and esports.
 - `MARKET_SCOPE=sports` to exclude esports.
 - `MARKET_SCOPE=esports` to focus only on esports.
+- `ENABLE_COPY_STRATEGY=false` and `ENABLE_AUTONOMOUS_STRATEGY=true` to keep the live path market-first instead of trader-first.
+- `AUTONOMOUS_SPORT_CODES=...` to control which sports and esports tags are scanned.
+- `AUTONOMOUS_MIN_PRICE` / `AUTONOMOUS_MAX_PRICE` to keep entries inside the moderate-underdog band.
+- `AUTONOMOUS_MIN_TRADE_VALUE_USDC` / `AUTONOMOUS_MAX_TRADE_VALUE_USDC` to keep autonomous sizing executable but small.
+- `AUTONOMOUS_REQUIRE_ESPORTS_SERIES=true` to avoid single-map or child-game entry markets.
 - `LEADERBOARD_CANDIDATE_MULTIPLIER` to widen the sports leaderboard candidate pool before trader-quality filtering.
 - `LEADERBOARD_DISCOVERY_PERIODS=day,week,month` and `LEADERBOARD_DISCOVERY_ORDER_BY=pnl,vol` to merge multiple sports leaderboard slices into one larger monitored pool.
 - `MONITOR_FETCH_WORKERS=12` to fetch trader activity in parallel so the bot can scan a larger pool without aging signals out.

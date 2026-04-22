@@ -26,6 +26,8 @@ if not os.path.exists(env_path):
         f.write("MARKET_SCOPE=sports,esports\n")
         f.write("ESPORT_SPORT_CODES=codmw,cs2,dota2,hok,lcs,lol,lpl,mlbb,ow,pubg,r6siege,rl,sc2,val,wildrift\n")
         f.write("MARKET_SCOPE_CACHE_SEC=3600\n")
+        f.write("ENABLE_COPY_STRATEGY=false\n")
+        f.write("ENABLE_AUTONOMOUS_STRATEGY=true\n")
         f.write("DRY_RUN_RECORD_BLOCKED_SAMPLES=true\n")
         f.write("ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT=false\n")
         f.write("REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES=1\n")
@@ -54,8 +56,15 @@ if not os.path.exists(env_path):
         f.write("MIN_TRADER_SCORE=60\nMIN_RECENT_TRADES=8\nMIN_COPYABLE_TRADE_USDC=10\n")
         f.write("MAX_MICRO_TRADE_RATIO=0.35\nMAX_FLIP_RATE=0.25\n")
         f.write("MAX_BURST_TRADES_PER_60S=12\nMAX_SAME_SECOND_TRADES=4\n")
-        f.write("ENABLE_CONSENSUS_STRATEGY=true\nCONSENSUS_WINDOW_SEC=600\n")
+        f.write("ENABLE_CONSENSUS_STRATEGY=false\nCONSENSUS_WINDOW_SEC=600\n")
         f.write("MIN_CONSENSUS_TRADERS=2\nMIN_CONSENSUS_SCORE=72\nCONSENSUS_TRADE_PCT=0.015\n")
+        f.write("AUTONOMOUS_SPORT_CODES=dota2,cs2,lol,val,nfl,nba,mlb,nhl,epl,cfb,ncaab\n")
+        f.write("AUTONOMOUS_MIN_TRADE_VALUE_USDC=0.60\nAUTONOMOUS_MAX_TRADE_VALUE_USDC=1.50\n")
+        f.write("AUTONOMOUS_MIN_PRICE=0.12\nAUTONOMOUS_MAX_PRICE=0.30\n")
+        f.write("AUTONOMOUS_MIN_MARKET_LIQUIDITY=750\n")
+        f.write("AUTONOMOUS_MIN_EVENT_LEAD_SEC=900\nAUTONOMOUS_MAX_EVENT_LEAD_SEC=21600\n")
+        f.write("AUTONOMOUS_MAX_CANDIDATES_PER_TAG=80\nAUTONOMOUS_MAX_SIGNALS_PER_CYCLE=3\n")
+        f.write("AUTONOMOUS_REQUIRE_ESPORTS_SERIES=true\nMIN_AUTONOMOUS_SCORE=68\n")
         f.write("REPORT_DEFAULT_DAYS=3\n")
 
 import config
@@ -66,6 +75,7 @@ import executor
 import active_exit
 import portfolio
 import strategy
+import autonomous_strategy
 import settlement
 
 logging.basicConfig(
@@ -98,6 +108,15 @@ def mask_address(address):
     if len(raw) < 12:
         return raw or "未设置"
     return f"{raw[:6]}...{raw[-4:]}"
+
+
+def compact_market_label(slug, outcome="", max_len=30):
+    base = str(slug or "").strip() or "market"
+    if outcome:
+        base = f"{base} / {outcome}"
+    if len(base) <= max_len:
+        return base
+    return f"{base[: max_len - 1]}…"
 
 
 def fmt_age_label(age_sec):
@@ -221,7 +240,7 @@ def get_live_account_snapshot(force=False):
 
 
 def get_dashboard_data():
-    traders = models.get_tracked_traders(limit=config.monitored_trader_limit())
+    traders = models.get_tracked_traders(limit=config.monitored_trader_limit()) if config.trader_discovery_enabled() else []
     recent = models.get_recent_trades(80)
     delayed_trades = models.get_recent_delayed_trades(8) if not config.DRY_RUN else []
     delayed_summary = summarize_delayed_trades(delayed_trades)
@@ -251,6 +270,7 @@ def get_dashboard_data():
         no_book_recheck_experiment = {}
     risk = models.get_recent_risk_logs(20)
     mirrored = models.get_mirrored_trades()
+    pnl_curve = models.get_recent_pnl_log(limit=120)
     effective_bankroll = config.effective_bankroll()
     daily_risk_budget = config.effective_daily_risk_budget()
     deployed_value = float(models.get_daily_deployed_value() or 0)
@@ -259,6 +279,23 @@ def get_dashboard_data():
 
     buy_count = sum(1 for t in recent if t["side"] == "BUY")
     sell_count = len(recent) - buy_count
+    position_bars = [
+        {
+            "label": compact_market_label(row.get("market_slug", ""), row.get("outcome", "")),
+            "market_slug": row.get("market_slug", ""),
+            "outcome": row.get("outcome", ""),
+            "entry_value": float(row.get("entry_value", 0) or 0),
+            "marked_value": float(row.get("marked_value", 0) or 0),
+            "unrealized_pnl": float(row.get("unrealized_pnl", 0) or 0),
+            "mark_source": row.get("mark_source", ""),
+            "is_single_game_market": bool(row.get("is_single_game_market")),
+        }
+        for row in sorted(
+            drawdown.get("positions", []),
+            key=lambda item: abs(float(item.get("unrealized_pnl", 0) or 0)),
+            reverse=True,
+        )[:8]
+    ]
 
     return {
         "traders": traders,
@@ -312,7 +349,16 @@ def get_dashboard_data():
             "profile_history_interval_sec": config.PROFILE_HISTORY_INTERVAL_SEC,
             "min_signal_confirm_sec": config.MIN_SIGNAL_CONFIRM_SEC,
             "settlement_poll_sec": config.SETTLEMENT_POLL_SEC,
-            "consensus_enabled": config.ENABLE_CONSENSUS_STRATEGY,
+            "consensus_enabled": config.copy_strategy_enabled() and config.ENABLE_CONSENSUS_STRATEGY,
+            "copy_strategy_enabled": config.copy_strategy_enabled(),
+            "autonomous_strategy_enabled": config.autonomous_strategy_enabled(),
+            "entry_engine_label": config.entry_engine_label(),
+            "autonomous_price_min": config.AUTONOMOUS_MIN_PRICE,
+            "autonomous_price_max": config.AUTONOMOUS_MAX_PRICE,
+            "autonomous_trade_floor": config.effective_autonomous_trade_floor(),
+            "autonomous_trade_ceiling": config.effective_autonomous_trade_ceiling(),
+            "autonomous_max_signals_per_cycle": config.AUTONOMOUS_MAX_SIGNALS_PER_CYCLE,
+            "autonomous_require_esports_series": config.AUTONOMOUS_REQUIRE_ESPORTS_SERIES,
             "paper_daily_risk_budget": config.PAPER_DAILY_RISK_BUDGET,
             "paper_ignore_capital_gates": config.PAPER_IGNORE_CAPITAL_GATES,
             "daily_risk_budget": daily_risk_budget,
@@ -382,6 +428,10 @@ def get_dashboard_data():
             "deployed_value": deployed_value,
             "open_position_count": open_position_count,
         },
+        "charts": {
+            "pnl_curve": pnl_curve,
+            "position_bars": position_bars,
+        },
         "cycle": _cycle,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
@@ -422,12 +472,13 @@ def bot_loop():
         logger.warning("Live auth is incomplete — Watch Mode")
 
     # Initial leaderboard fetch
-    try:
-        leaderboard.refresh_leaderboard()
-        _last_leaderboard_ts = time.time()
-        logger.info("Initial leaderboard loaded")
-    except Exception as e:
-        logger.error(f"Initial leaderboard failed: {e}")
+    if config.trader_discovery_enabled():
+        try:
+            leaderboard.refresh_leaderboard()
+            _last_leaderboard_ts = time.time()
+            logger.info("Initial leaderboard loaded")
+        except Exception as e:
+            logger.error(f"Initial leaderboard failed: {e}")
 
     push_update()
 
@@ -436,23 +487,24 @@ def bot_loop():
         logger.info(f"--- Cycle #{_cycle} ---")
 
         # Refresh leaderboard every LEADERBOARD_INTERVAL
-        if time.time() - _last_leaderboard_ts > LEADERBOARD_INTERVAL:
+        if config.trader_discovery_enabled() and time.time() - _last_leaderboard_ts > LEADERBOARD_INTERVAL:
             try:
                 leaderboard.refresh_leaderboard()
                 _last_leaderboard_ts = time.time()
             except Exception as e:
                 logger.error(f"Leaderboard: {e}")
 
-        # Fast trade scan every POLL_INTERVAL
+        # Fast copy scan every POLL_INTERVAL
         signals = []
-        try:
-            signals = monitor.scan_all_traders()
-            if signals:
-                logger.info(f"{len(signals)} new signal(s)")
-        except Exception as e:
-            logger.error(f"Scan: {e}")
+        if config.copy_strategy_enabled():
+            try:
+                signals = monitor.scan_all_traders()
+                if signals:
+                    logger.info(f"{len(signals)} new signal(s)")
+            except Exception as e:
+                logger.error(f"Scan: {e}")
 
-        if not signals:
+        if config.copy_strategy_enabled() and config.ENABLE_CONSENSUS_STRATEGY and not signals:
             try:
                 signals = strategy.build_consensus_signals()
                 if signals:
@@ -461,8 +513,18 @@ def bot_loop():
                 logger.error(f"Strategy: {e}")
                 models.log_risk_event("STRATEGY_ERROR", str(e), "skipped")
 
+        autonomous_signals = []
+        if config.autonomous_strategy_enabled():
+            try:
+                autonomous_signals = autonomous_strategy.build_autonomous_signals()
+                if autonomous_signals:
+                    logger.info(f"{len(autonomous_signals)} autonomous signal(s)")
+            except Exception as e:
+                logger.error(f"Autonomous: {e}")
+                models.log_risk_event("AUTONOMOUS_ERROR", str(e), "skipped")
+
         # Execute
-        for sig in signals:
+        for sig in signals + autonomous_signals:
             try:
                 executor.execute_trade(sig)
             except Exception as e:
@@ -521,7 +583,7 @@ def main():
     port = int(os.environ.get("PORT", 5000))
     print()
     print("  =============================================")
-    print(f"   Polymarket {config.market_scope_label()} Copy Trading Bot")
+    print(f"   Polymarket {config.market_scope_label()} Trading Bot")
     print(f"   Dashboard: http://localhost:{port}")
     print(f"   Scan interval: {config.POLL_INTERVAL}s")
     print("  =============================================")

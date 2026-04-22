@@ -60,16 +60,42 @@ def _canonical_price(value):
     return None
 
 
-def fetch_closed_market(condition_id=None, slug=None, token_id=None):
+def _resolution_ready(market):
+    if not market:
+        return False
+    if market.get("closed"):
+        return True
+
+    statuses = {
+        str(status or "").strip().lower()
+        for status in _parse_json_list(market.get("umaResolutionStatuses"))
+        if str(status or "").strip()
+    }
+    if not statuses:
+        return False
+
+    if not statuses.intersection({"proposed", "resolved", "settled", "confirmed"}):
+        return False
+
+    end_ts = _parse_iso_ts(market.get("endDate"))
+    if end_ts and end_ts > _now() + max(int(config.SETTLEMENT_PROPOSED_EARLY_BUFFER_SEC or 0), 60):
+        return False
+    return True
+
+
+def fetch_closed_market(condition_id=None, slug=None, token_id=None, force=False):
     cache_key = condition_id or slug or token_id or ""
     if not cache_key:
         return None
 
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        return cached
+    if force:
+        _market_cache.pop(cache_key, None)
+    else:
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
 
-    params = {"closed": "true"}
+    params = {}
     if condition_id:
         params["condition_ids"] = condition_id
     elif token_id:
@@ -87,12 +113,23 @@ def fetch_closed_market(condition_id=None, slug=None, token_id=None):
         return None
 
     market = data[0] if isinstance(data, list) and data else None
+    if market is None:
+        fallback_params = dict(params)
+        fallback_params["closed"] = "true"
+        try:
+            resp = requests.get(f"{config.GAMMA_API_BASE}/markets", params=fallback_params, timeout=20)
+            resp.raise_for_status()
+            data = resp.json()
+            market = data[0] if isinstance(data, list) and data else None
+        except Exception as exc:
+            logger.warning("Closed market fallback lookup failed for %s: %s", cache_key[:18], exc)
+
     _cache_set(cache_key, market)
     return market
 
 
 def _build_settlement_snapshot(market, journal_row):
-    if not market or not market.get("closed"):
+    if not _resolution_ready(market):
         return None
 
     outcomes = _parse_json_list(market.get("outcomes"))
@@ -161,6 +198,7 @@ def refresh_journal_settlements(force=False):
             condition_id=condition_id,
             slug=row.get("market_slug", ""),
             token_id=row.get("token_id", ""),
+            force=force,
         )
         snapshot = _build_settlement_snapshot(market, row)
         if not snapshot:

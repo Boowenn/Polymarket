@@ -28,7 +28,7 @@ def render_dashboard(traders=None, cycle_count=0):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     mode_tag = "[yellow] WATCH [/yellow]" if config.DRY_RUN else "[red bold] LIVE [/red bold]"
     console.print(
-        f"[bold white on blue]  POLYMARKET {config.market_scope_label().upper()} COPY TRADING BOT  [/]  "
+        f"[bold white on blue]  POLYMARKET {config.market_scope_label().upper()} TRADING BOT  [/]  "
         f"{mode_tag}  "
         f"[dim]Cycle #{cycle_count}  {now}[/dim]"
     )
@@ -39,7 +39,7 @@ def render_dashboard(traders=None, cycle_count=0):
     if t_list:
         tt = Table(
             box=box.ROUNDED,
-            title=f"Top {config.market_scope_label()} Traders",
+            title=f"{config.market_scope_label()} Traders",
             title_style="bold cyan",
             expand=True,
         )

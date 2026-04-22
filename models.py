@@ -782,6 +782,7 @@ def get_recent_trades(limit=20):
                 tr.*,
                 CASE
                     WHEN COALESCE(tr.signal_source, 'copy') = 'consensus' THEN 'Consensus'
+                    WHEN COALESCE(tr.signal_source, 'copy') = 'autonomous' THEN 'Autonomy'
                     ELSE COALESCE(t.username, tr.trader_wallet)
                 END AS trader_username,
                 COALESCE(p.status, 'observe') AS trader_status,
@@ -805,6 +806,7 @@ def get_recent_delayed_trades(limit=10):
                 tr.*,
                 CASE
                     WHEN COALESCE(tr.signal_source, 'copy') = 'consensus' THEN 'Consensus'
+                    WHEN COALESCE(tr.signal_source, 'copy') = 'autonomous' THEN 'Autonomy'
                     ELSE COALESCE(t.username, tr.trader_wallet)
                 END AS trader_username,
                 COALESCE(p.status, 'observe') AS trader_status,
@@ -1746,6 +1748,43 @@ def get_latest_pnl():
             "loss_count": 0,
         }
     return dict(row)
+
+
+def get_recent_pnl_log(limit=120):
+    limit = max(int(limit or 0), 1)
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                timestamp,
+                realized_pnl,
+                unrealized_pnl,
+                total_trades,
+                win_count,
+                loss_count
+            FROM pnl_log
+            ORDER BY timestamp DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+
+    points = []
+    for row in reversed(rows):
+        realized = float(row["realized_pnl"] or 0)
+        unrealized = float(row["unrealized_pnl"] or 0)
+        points.append(
+            {
+                "timestamp": float(row["timestamp"] or 0),
+                "realized_pnl": realized,
+                "unrealized_pnl": unrealized,
+                "total_pnl": round(realized + unrealized, 4),
+                "total_trades": int(row["total_trades"] or 0),
+                "win_count": int(row["win_count"] or 0),
+                "loss_count": int(row["loss_count"] or 0),
+            }
+        )
+    return points
 
 
 def get_daily_deployed_value():
