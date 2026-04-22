@@ -47,6 +47,18 @@ or
 python web.py
 ```
 
+## Live wallet setup
+
+For `DRY_RUN=false`, the bot needs your signing private key plus the correct Polymarket wallet type:
+
+- `PRIVATE_KEY`: the signer private key used to create API credentials and sign orders
+- `POLY_FUNDER`: the wallet that actually holds funds on Polymarket
+- `POLY_SIGNATURE_TYPE=0`: standalone EOA wallet
+- `POLY_SIGNATURE_TYPE=1`: Polymarket `POLY_PROXY` account, typically Magic Link email/Google login
+- `POLY_SIGNATURE_TYPE=2`: `GNOSIS_SAFE` / browser-wallet-backed Polymarket account
+
+If you are using a normal Polymarket.com account, the displayed address in `Settings` is usually the proxy wallet and should be used as `POLY_FUNDER`, not the signer address. Proxy wallet users should verify authentication with a read-only API call before enabling live trading.
+
 ## Multi-day dry-run workflow
 
 If you want to observe traders for several days without depositing funds:

@@ -247,6 +247,15 @@ def _get_clob_client():
     if not config.PRIVATE_KEY:
         return None
 
+    signature_type = config.poly_signature_type()
+    funder = config.POLY_FUNDER or None
+    if signature_type in {1, 2} and not funder:
+        logger.error(
+            "Proxy wallet live trading requires POLY_FUNDER when POLY_SIGNATURE_TYPE is %s",
+            signature_type,
+        )
+        return None
+
     try:
         from py_clob_client.client import ClobClient
 
@@ -254,10 +263,15 @@ def _get_clob_client():
             config.CLOB_BASE,
             key=config.PRIVATE_KEY,
             chain_id=137,
-            funder=config.POLY_FUNDER or None,
+            signature_type=signature_type,
+            funder=funder,
         )
         _clob_client.set_api_creds(_clob_client.create_or_derive_api_creds())
-        logger.info("CLOB client initialized for live trading")
+        logger.info(
+            "CLOB client initialized for live trading (%s, funder=%s)",
+            config.poly_signature_type_label(),
+            funder or "signer",
+        )
         return _clob_client
     except Exception as exc:
         logger.error(f"Failed to init CLOB client: {exc}")
@@ -336,7 +350,11 @@ def execute_trade(signal):
 
     client = _get_clob_client()
     if client is None:
-        models.log_risk_event("NO_CLIENT", "CLOB client unavailable - missing PRIVATE_KEY?", "skipped")
+        models.log_risk_event(
+            "NO_CLIENT",
+            "CLOB client unavailable - check PRIVATE_KEY/POLY_SIGNATURE_TYPE/POLY_FUNDER",
+            "skipped",
+        )
         return {"status": "error", "reason": "CLOB client not available"}
 
     try:

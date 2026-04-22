@@ -6,17 +6,17 @@ Verified local baseline:
 
 - Date: `2026-04-22` JST
 - Command: `python report.py --days 3 --top 5`
-- `executed_entries = 128`
-- `executed_closed = 83`
-- `executed_decision_count = 81`
-- `executed_win_rate = 46.9%`
-- `executed_realized_pnl = -36.15`
-- `shadow_entries = 1902`
-- `shadow_closed = 1568`
-- `shadow_decision_count = 1524`
-- `shadow_win_rate = 65.2%`
-- `shadow_realized_pnl = +142.88`
-- `stage2_repeat_entry_experiment = 23 entries / 9 closed / 9 decided / -30.98 pnl`
+- `executed_entries = 200`
+- `executed_closed = 185`
+- `executed_decision_count = 182`
+- `executed_win_rate = 50.0%`
+- `executed_realized_pnl = +60.05`
+- `shadow_entries = 3481`
+- `shadow_closed = 3129`
+- `shadow_decision_count = 2742`
+- `shadow_win_rate = 67.3%`
+- `shadow_realized_pnl = +361.49`
+- `stage2_repeat_entry_experiment = 60 entries / 58 closed / 58 decided / -87.62 pnl`
 
 Use this snapshot as the current reference point until a newer report is intentionally recorded.
 
@@ -74,3 +74,5 @@ Do not claim stable live-readiness until all of the following are true:
 - exposure and position guards are based on open executed journal state
 - dashboards and reports keep sample types separated
 - experiments stay isolated from default policy until reviewed
+- wallet auth is verified with a read-only authenticated CLOB call, not just local client initialization
+- proxy wallet users set the correct `POLY_SIGNATURE_TYPE` and `POLY_FUNDER` from Polymarket account settings before any live canary

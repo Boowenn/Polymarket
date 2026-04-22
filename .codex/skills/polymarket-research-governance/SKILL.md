@@ -21,13 +21,16 @@ Use this skill as the repo's governance entrypoint for research and execution ch
    `shadow` and `experiment` can justify a hypothesis, not a default rollout.
 5. Keep experiments capped until the metric plumbing is trustworthy.
    Keep repeat-entry paused by default, and use only narrow experiments such as `No Executable Book -> delayed recheck` while report and risk views are being validated.
-6. When governance changes land, update this skill and the repo README in the same change.
+6. Before claiming live-readiness, verify wallet auth with a read-only CLOB call.
+   For Polymarket proxy wallets, require the correct `POLY_SIGNATURE_TYPE` and `POLY_FUNDER` from the account settings page before any live canary.
+7. When governance changes land, update this skill and the repo README in the same change.
 
 ## Guardrails
 
 - Never compare trader quality or strategy quality using mixed `executed + shadow + experiment` PnL.
 - Never treat 24-hour mirrored trade history as the source of truth for current exposure.
 - Never widen live or paper experiments just because blocked-shadow PnL looks positive.
+- Never treat a locally initialized client as proof of live readiness unless a read-only authenticated CLOB call also succeeds.
 - Never update governance text without checking whether the baseline date and numbers are still current.
 
 ## References
