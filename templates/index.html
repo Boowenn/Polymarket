@@ -24,6 +24,11 @@
     --cream: #fffaf2;
     --shadow: 0 18px 42px rgba(18, 38, 56, 0.1);
     --shadow-soft: 0 12px 28px rgba(18, 38, 56, 0.08);
+    --chip-bg: rgba(255, 255, 255, 0.72);
+    --control-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(250, 245, 237, 0.92));
+    --topbar-bg: rgba(255, 252, 246, 0.88);
+    --grid-line: rgba(22, 53, 76, 0.06);
+    --mono: "IBM Plex Mono", "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
   }
 
   * {
@@ -43,6 +48,73 @@
       radial-gradient(circle at top left, rgba(15, 138, 108, 0.12), transparent 24%),
       radial-gradient(circle at top right, rgba(45, 115, 185, 0.12), transparent 30%),
       linear-gradient(180deg, #f6f2ea 0%, #efe8dc 100%);
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 28px 28px;
+    opacity: 0;
+    transition: opacity 0.18s ease;
+  }
+
+  body[data-theme="console"] {
+    --bg: #07121a;
+    --bg-deep: #dff2ff;
+    --bg-ink: #d8e6f2;
+    --bg-panel: rgba(9, 24, 34, 0.86);
+    --bg-panel-strong: rgba(8, 20, 29, 0.94);
+    --border: rgba(111, 182, 255, 0.16);
+    --border-strong: rgba(111, 182, 255, 0.24);
+    --text: #e6f1fa;
+    --muted: #8da3b6;
+    --green: #2ed39b;
+    --red: #ff7387;
+    --amber: #ffc66d;
+    --blue: #76bfff;
+    --navy: #f1f8ff;
+    --cream: #07121a;
+    --shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+    --shadow-soft: 0 12px 28px rgba(0, 0, 0, 0.28);
+    --chip-bg: rgba(10, 31, 45, 0.84);
+    --control-bg: linear-gradient(180deg, rgba(10, 28, 40, 0.98), rgba(7, 18, 26, 0.96));
+    --topbar-bg: rgba(7, 18, 26, 0.86);
+    --grid-line: rgba(111, 182, 255, 0.08);
+    background:
+      radial-gradient(circle at top left, rgba(46, 211, 155, 0.12), transparent 22%),
+      radial-gradient(circle at top right, rgba(118, 191, 255, 0.12), transparent 28%),
+      linear-gradient(180deg, #08131b 0%, #040b11 100%);
+  }
+
+  body[data-theme="console"]::before {
+    opacity: 0.38;
+  }
+
+  body[data-theme="console"] .brand-card {
+    background:
+      linear-gradient(150deg, rgba(8, 29, 42, 0.98), rgba(4, 15, 22, 0.96)),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0));
+  }
+
+  body[data-theme="console"] .hero,
+  body[data-theme="console"] .panel,
+  body[data-theme="console"] .side-card,
+  body[data-theme="console"] .stat-card,
+  body[data-theme="console"] .workspace-bar,
+  body[data-theme="console"] .control-card {
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+  }
+
+  body[data-theme="console"] .theme-toggle,
+  body[data-theme="console"] .status-banner,
+  body[data-theme="console"] .hero-pill,
+  body[data-theme="console"] .hero-strip-card {
+    background: rgba(9, 26, 38, 0.82);
   }
 
   a {
@@ -207,6 +279,208 @@
     gap: 18px;
   }
 
+  .workspace-bar {
+    position: sticky;
+    top: 18px;
+    z-index: 18;
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 14px 18px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--topbar-bg);
+    box-shadow: var(--shadow-soft);
+    backdrop-filter: blur(18px);
+  }
+
+  .workspace-main {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .workspace-brand {
+    display: grid;
+    gap: 4px;
+  }
+
+  .workspace-kicker {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  .workspace-title {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--navy);
+  }
+
+  .workspace-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--chip-bg);
+    color: var(--muted);
+    font-size: 12px;
+    font-family: var(--mono);
+  }
+
+  .workspace-state strong {
+    color: var(--text);
+  }
+
+  .workspace-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 0 6px rgba(15, 138, 108, 0.14);
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .workspace-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .workspace-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--chip-bg);
+    color: var(--muted);
+    font-size: 12px;
+    font-family: var(--mono);
+  }
+
+  .workspace-chip strong {
+    color: var(--text);
+    font-family: inherit;
+  }
+
+  .theme-toggle {
+    border: 1px solid var(--border);
+    background: var(--bg-panel-strong);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+  }
+
+  .theme-toggle:hover {
+    transform: translateY(-1px);
+    border-color: var(--border-strong);
+    background: var(--chip-bg);
+  }
+
+  .control-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .control-card {
+    padding: 16px 18px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--control-bg);
+    box-shadow: var(--shadow-soft);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .control-card::after {
+    content: "";
+    position: absolute;
+    inset: auto -42px -48px auto;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(45, 115, 185, 0.14), transparent 68%);
+    pointer-events: none;
+  }
+
+  .control-label {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  .control-value {
+    margin-top: 12px;
+    font-size: 30px;
+    line-height: 1;
+    font-weight: 900;
+    color: var(--navy);
+  }
+
+  .control-note {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .status-banner {
+    margin-top: 16px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.58);
+    display: grid;
+    gap: 8px;
+  }
+
+  .status-banner-label {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  .status-banner-text {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text);
+  }
+
+  .status-banner.status-ok {
+    border-color: rgba(15, 138, 108, 0.18);
+    background: linear-gradient(180deg, rgba(15, 138, 108, 0.10), rgba(255, 255, 255, 0.64));
+  }
+
+  .status-banner.status-warning {
+    border-color: rgba(211, 138, 31, 0.24);
+    background: linear-gradient(180deg, rgba(211, 138, 31, 0.14), rgba(255, 255, 255, 0.64));
+  }
+
+  .status-banner.status-danger {
+    border-color: rgba(207, 76, 86, 0.22);
+    background: linear-gradient(180deg, rgba(207, 76, 86, 0.12), rgba(255, 255, 255, 0.64));
+  }
+
   .hero {
     padding: 26px 28px;
     background:
@@ -282,7 +556,7 @@
     gap: 8px;
     padding: 10px 14px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.72);
+    background: var(--chip-bg);
     border: 1px solid rgba(22, 53, 76, 0.1);
     color: var(--muted);
     font-size: 12px;
@@ -312,7 +586,7 @@
   .hero-strip-card {
     padding: 16px 16px 14px;
     border-radius: 18px;
-    background: rgba(255, 255, 255, 0.66);
+    background: var(--chip-bg);
     border: 1px solid rgba(22, 53, 76, 0.08);
   }
 
@@ -698,11 +972,29 @@
     .brand-card {
       grid-column: 1 / -1;
     }
+
+    .control-strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
   @media (max-width: 980px) {
     .sidebar {
       grid-template-columns: 1fr;
+    }
+
+    .workspace-bar {
+      top: 12px;
+      padding: 14px 16px;
+    }
+
+    .workspace-main,
+    .workspace-actions {
+      width: 100%;
+    }
+
+    .workspace-actions {
+      justify-content: flex-start;
     }
 
     .hero-top {
@@ -752,6 +1044,25 @@
 
     .hero-title {
       font-size: 28px;
+    }
+
+    .workspace-title {
+      font-size: 18px;
+    }
+
+    .workspace-chip,
+    .workspace-state,
+    .theme-toggle {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .control-strip {
+      grid-template-columns: 1fr;
+    }
+
+    .control-card {
+      padding: 15px 16px;
     }
 
     th,
@@ -838,6 +1149,49 @@
   </aside>
 
   <main class="content">
+    <section class="workspace-bar">
+      <div class="workspace-main">
+        <div class="workspace-brand">
+          <div class="workspace-kicker">Live Trading Deck</div>
+          <div class="workspace-title">体育 / 电竞实盘操作台</div>
+        </div>
+        <div class="workspace-state">
+          <span class="workspace-dot" id="top-conn-dot"></span>
+          <span>系统状态</span>
+          <strong id="topbar-connection">已连接</strong>
+        </div>
+      </div>
+      <div class="workspace-actions">
+        <div class="workspace-chip">模式 <strong id="topbar-mode">观察 / 模拟</strong></div>
+        <div class="workspace-chip">范围 <strong id="topbar-scope">体育 + 电竞</strong></div>
+        <div class="workspace-chip">刷新 <strong id="topbar-updated">--:--:--</strong></div>
+        <button class="theme-toggle" id="theme-toggle" type="button">切换到控制台主题</button>
+      </div>
+    </section>
+
+    <section class="control-strip" aria-label="关键状态概览">
+      <article class="control-card">
+        <div class="control-label">账户现金</div>
+        <div class="control-value blue" id="top-account-cash">$0.00</div>
+        <div class="control-note" id="top-account-note">等待账户余额与策略预算对齐。</div>
+      </article>
+      <article class="control-card">
+        <div class="control-label">策略预算</div>
+        <div class="control-value" id="top-strategy-bankroll">$0.00</div>
+        <div class="control-note" id="top-strategy-note">单笔上限、当日余量和实盘预算会在这里汇总。</div>
+      </article>
+      <article class="control-card">
+        <div class="control-label">实盘总盈亏</div>
+        <div class="control-value" id="top-live-pnl">$0.00</div>
+        <div class="control-note" id="top-live-pnl-note">等待真实 executed 样本更新。</div>
+      </article>
+      <article class="control-card">
+        <div class="control-label">执行状态</div>
+        <div class="control-value" id="top-execution-state">待机</div>
+        <div class="control-note" id="top-execution-note">等待读取挂单、持仓与延迟复核结果。</div>
+      </article>
+    </section>
+
     <header class="hero" id="section-overview">
       <div class="hero-top">
         <div>
@@ -859,6 +1213,12 @@
       </div>
       <div class="live-alert live-alert-warning hidden" id="delayed-alert">
         订单延迟提醒会显示在这里。
+      </div>
+      <div class="status-banner status-ok" id="status-banner">
+        <div class="status-banner-label">运行状态横幅</div>
+        <div class="status-banner-text" id="status-banner-body">
+          等待连接状态、预算、止损和执行复核结果同步后展示。
+        </div>
       </div>
       <div class="hero-strip">
         <div class="hero-strip-card">
@@ -1165,6 +1525,32 @@ let pollInterval = 15;
 let countdownVal = 0;
 let countdownTimer = null;
 let fallbackTimer = null;
+const THEME_STORAGE_KEY = 'polymarket-dashboard-theme';
+
+function applyTheme(theme) {
+  const nextTheme = theme === 'console' ? 'console' : 'paper';
+  document.body.dataset.theme = nextTheme;
+  const button = document.getElementById('theme-toggle');
+  if (button) {
+    button.textContent = nextTheme === 'console' ? '切换到纸面主题' : '切换到控制台主题';
+  }
+}
+
+function initTheme() {
+  const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'paper';
+  applyTheme(savedTheme);
+  const button = document.getElementById('theme-toggle');
+  if (!button || button.dataset.bound === '1') {
+    return;
+  }
+  button.dataset.bound = '1';
+  button.addEventListener('click', () => {
+    const currentTheme = document.body.dataset.theme === 'console' ? 'console' : 'paper';
+    const nextTheme = currentTheme === 'console' ? 'paper' : 'console';
+    localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+    applyTheme(nextTheme);
+  });
+}
 
 function fmtMoney(value) {
   const number = Number(value || 0);
@@ -1308,16 +1694,28 @@ function setConnectionState(connected) {
   const dot = document.getElementById('conn-dot');
   const text = document.getElementById('conn-text');
   const sidebar = document.getElementById('sidebar-connection');
+  const topbarDot = document.getElementById('top-conn-dot');
+  const topbarText = document.getElementById('topbar-connection');
   if (connected) {
     dot.style.background = 'var(--green)';
     dot.style.boxShadow = '0 0 0 6px rgba(15, 138, 108, 0.18)';
+    if (topbarDot) {
+      topbarDot.style.background = 'var(--green)';
+      topbarDot.style.boxShadow = '0 0 0 6px rgba(15, 138, 108, 0.14)';
+    }
     text.textContent = '已连接';
     sidebar.textContent = '在线';
+    if (topbarText) topbarText.textContent = '在线';
   } else {
     dot.style.background = 'var(--red)';
     dot.style.boxShadow = '0 0 0 6px rgba(207, 76, 86, 0.18)';
+    if (topbarDot) {
+      topbarDot.style.background = 'var(--red)';
+      topbarDot.style.boxShadow = '0 0 0 6px rgba(207, 76, 86, 0.14)';
+    }
     text.textContent = '连接断开';
     sidebar.textContent = '离线';
+    if (topbarText) topbarText.textContent = '离线';
   }
 }
 
@@ -1690,6 +2088,8 @@ function renderSystem(config, stats, performance, liveExecution) {
   const delayedOrderFocusOutcome = String(config.delayed_order_focus_outcome || '');
   const delayedOrderFocusTime = String(config.delayed_order_focus_time || '');
   const delayedOrderFocusAgeLabel = String(config.delayed_order_focus_age_label || delayedOrderOldestAgeLabel || '--');
+  const statusBanner = document.getElementById('status-banner');
+  const statusBannerBody = document.getElementById('status-banner-body');
 
   document.getElementById('overview-note').textContent = config.dry_run
     ? '上排先看研究预算与执行护栏，下排再看 executed 研究基线；不要把 shadow 或 experiment 当成默认策略。'
@@ -1710,6 +2110,55 @@ function renderSystem(config, stats, performance, liveExecution) {
   }
   if (sideResearchCard) {
     sideResearchCard.style.display = config.dry_run ? '' : 'none';
+  }
+
+  document.getElementById('topbar-mode').textContent = modeText;
+  document.getElementById('topbar-scope').textContent = scopeText;
+  document.getElementById('top-account-cash').textContent = config.dry_run ? fmtMoney(strategyBankroll) : accountCashText;
+  document.getElementById('top-account-cash').className = `control-value ${config.dry_run || hasAccountCash ? 'blue' : 'red'}`;
+  document.getElementById('top-account-note').textContent = config.dry_run
+    ? `研究资金 ${fmtMoney(strategyBankroll)} · 样本范围 ${scopeText}`
+    : `账户差额 ${accountCashDeltaText} · funder ${config.funder_short || '未设置'} · 鉴权 ${authText}`;
+  document.getElementById('top-strategy-bankroll').textContent = fmtMoney(strategyBankroll);
+  document.getElementById('top-strategy-note').textContent = config.dry_run
+    ? `单笔上限 ${fmtMoney(maxTradeValue)} · 剩余日预算 ${fmtMoney(remainingBudget)}`
+    : `单笔上限 ${fmtMoney(maxTradeValue)} · 剩余日预算 ${fmtMoney(remainingBudget)} · 已部署 ${fmtMoney(deployedValue)}`;
+  document.getElementById('top-live-pnl').textContent = config.dry_run ? fmtSignedMoney(Number((performance && performance.realized_pnl) || 0)) : fmtSignedMoney(liveTotalPnl);
+  document.getElementById('top-live-pnl').className = `control-value ${config.dry_run ? (Number((performance && performance.realized_pnl) || 0) >= 0 ? 'green' : 'red') : (liveTotalPnl >= 0 ? 'green' : 'red')}`;
+  document.getElementById('top-live-pnl-note').textContent = config.dry_run
+    ? '研究模式下这里显示 executed 基线 realized PnL。'
+    : `已实现 ${fmtSignedMoney(liveRealizedPnl)} · 浮动 ${fmtSignedMoney(liveUnrealizedPnl)} · 胜率 ${liveWinRateLabel}`;
+  document.getElementById('top-execution-state').textContent = config.dry_run
+    ? `样本 ${Number((performance && performance.total_entries) || 0)}`
+    : liveEntries > 0 ? `${liveEntries} 笔成交` : '等待成交';
+  document.getElementById('top-execution-state').className = `control-value ${config.dry_run ? 'amber' : (delayedOrderAlertCount > 0 ? 'amber' : (sessionStopActive ? 'red' : 'blue'))}`;
+  document.getElementById('top-execution-note').textContent = config.dry_run
+    ? `repeat-entry ${repeatText} · 空簿复查 ${noBookText}`
+    : `持仓 ${openPositionCount}/${maxPositions} · 挂单 ${openOrderCount} · 延迟 ${delayedOrderCount} · 单局主动退出 ${gameMarketActiveExitEnabled ? '开启' : '关闭'}`;
+
+  let bannerClass = 'status-ok';
+  let bannerText = '';
+  if (config.dry_run) {
+    bannerClass = 'status-warning';
+    bannerText = `当前是研究模式：样本继续按 executed / shadow / experiment 分层展示，页面借鉴 AITD 的顶部控制条和状态横幅，但不会把研究样本伪装成实盘结果。`;
+  } else if (sessionStopActive) {
+    bannerClass = 'status-danger';
+    bannerText = `会话止损已触发：总盈亏 ${fmtSignedMoney(liveTotalPnl)} 已触及阈值 ${fmtMoney(sessionStopLimit)}。当前会暂停新开仓${sessionStopReason ? `，原因：${sessionStopReason}` : ''}。`;
+  } else if (delayedOrderAlertCount > 0) {
+    bannerClass = 'status-warning';
+    bannerText = `${delayedOrderAlertCount} 笔订单延迟超过 ${delayedOrderAlertSec} 秒，最老 ${delayedOrderOldestAgeLabel}，焦点订单 ${delayedOrderFocusSlug}${delayedOrderFocusOutcome ? ` · ${delayedOrderFocusOutcome}` : ''}。`;
+  } else if (liveEntries > 0) {
+    bannerClass = liveTotalPnl >= 0 ? 'status-ok' : 'status-warning';
+    bannerText = `当前已有 ${liveEntries} 笔真实成交，已平仓 ${liveClosedEntries} 笔，决策样本 ${liveDecisionCount} 笔，总盈亏 ${fmtSignedMoney(liveTotalPnl)}。账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}。`;
+  } else {
+    bannerClass = 'status-ok';
+    bannerText = `当前还没有新的真实成交。先盯账户现金 ${accountCashText}、鉴权状态 ${authText}、单笔上限 ${fmtMoney(maxTradeValue)} 和最小单量拦截是否正常。`;
+  }
+  if (statusBanner) {
+    statusBanner.className = `status-banner ${bannerClass}`;
+  }
+  if (statusBannerBody) {
+    statusBannerBody.textContent = bannerText;
   }
 
   document.getElementById('hero-scope').textContent = scopeText;
@@ -1914,7 +2363,9 @@ function render(data) {
 
   pollInterval = config.poll_interval || 15;
   document.getElementById('cycle-num').textContent = data.cycle || 0;
-  document.getElementById('update-time').textContent = (data.timestamp || '').split(' ')[1] || '--:--:--';
+  const updateTime = (data.timestamp || '').split(' ')[1] || '--:--:--';
+  document.getElementById('update-time').textContent = updateTime;
+  document.getElementById('topbar-updated').textContent = updateTime;
 
   renderSystem(config, stats, performance, liveExecution);
   renderPerformance(performance, config, liveExecution);
@@ -1953,6 +2404,7 @@ socket.on('disconnect', () => {
 
 socket.on('update', render);
 
+initTheme();
 highlightSections();
 </script>
 </body>
