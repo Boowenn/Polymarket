@@ -17,6 +17,7 @@ env_path = os.path.join(os.path.dirname(__file__), ".env")
 if not os.path.exists(env_path):
     with open(env_path, "w") as f:
         f.write("DRY_RUN=true\nBANKROLL=1000\nSTAKE_PCT=0.01\n")
+        f.write("POLY_SIGNATURE_TYPE=0\n")
         f.write("POLL_INTERVAL=15\nMAX_TRADERS=5\n")
         f.write("MONITOR_FETCH_WORKERS=12\n")
         f.write("LEADERBOARD_CATEGORY=SPORTS\nLEADERBOARD_CANDIDATE_MULTIPLIER=6\n")
@@ -80,6 +81,13 @@ def ts_fmt(ts):
     return datetime.fromtimestamp(ts).strftime("%H:%M:%S")
 
 
+def mask_address(address):
+    raw = str(address or "").strip()
+    if len(raw) < 12:
+        return raw or "未设置"
+    return f"{raw[:6]}...{raw[-4:]}"
+
+
 def get_dashboard_data():
     traders = models.get_tracked_traders(limit=config.monitored_trader_limit())
     recent = models.get_recent_trades(80)
@@ -90,6 +98,10 @@ def get_dashboard_data():
     no_book_recheck_experiment = models.get_experiment_analysis(config.NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY)
     risk = models.get_recent_risk_logs(20)
     mirrored = models.get_mirrored_trades()
+    effective_bankroll = config.effective_bankroll()
+    daily_risk_budget = config.effective_daily_risk_budget()
+    deployed_value = float(performance.get("daily_deployed_value", 0) or 0)
+    open_position_count = int(performance.get("open_position_count", 0) or 0)
 
     buy_count = sum(1 for t in recent if t["side"] == "BUY")
     sell_count = len(recent) - buy_count
@@ -121,7 +133,7 @@ def get_dashboard_data():
         "risk_logs": [{**r, "time_str": ts_fmt(r["timestamp"])} for r in risk],
         "config": {
             "dry_run": config.DRY_RUN,
-            "bankroll": config.effective_bankroll(),
+            "bankroll": effective_bankroll,
             "live_bankroll": config.BANKROLL,
             "stake_pct": config.STAKE_PCT * 100,
             "poll_interval": config.POLL_INTERVAL,
@@ -137,8 +149,25 @@ def get_dashboard_data():
             "min_signal_confirm_sec": config.MIN_SIGNAL_CONFIRM_SEC,
             "settlement_poll_sec": config.SETTLEMENT_POLL_SEC,
             "consensus_enabled": config.ENABLE_CONSENSUS_STRATEGY,
-            "paper_daily_risk_budget": config.effective_daily_risk_budget(),
+            "paper_daily_risk_budget": config.PAPER_DAILY_RISK_BUDGET,
             "paper_ignore_capital_gates": config.PAPER_IGNORE_CAPITAL_GATES,
+            "daily_risk_budget": daily_risk_budget,
+            "daily_loss_limit": config.DAILY_LOSS_LIMIT,
+            "deployed_value": deployed_value,
+            "remaining_daily_risk_budget": max(daily_risk_budget - deployed_value, 0),
+            "max_trade_pct": config.MAX_TRADE_PCT * 100,
+            "max_trade_value": effective_bankroll * config.MAX_TRADE_PCT,
+            "max_positions": config.MAX_POSITIONS,
+            "open_position_count": open_position_count,
+            "max_trader_exposure_pct": config.MAX_TRADER_EXPOSURE_PCT * 100,
+            "max_trader_exposure_value": effective_bankroll * config.MAX_TRADER_EXPOSURE_PCT,
+            "max_market_exposure_pct": config.MAX_MARKET_EXPOSURE_PCT * 100,
+            "max_market_exposure_value": effective_bankroll * config.MAX_MARKET_EXPOSURE_PCT,
+            "capital_gates_enabled": config.capital_gates_enabled(),
+            "poly_signature_type_label": config.poly_signature_type_label(),
+            "funder_short": mask_address(config.POLY_FUNDER),
+            "live_auth_ready": config.live_auth_ready(),
+            "small_bankroll_canary": (not config.DRY_RUN) and config.BANKROLL <= 25,
             "dry_run_record_blocked_samples": config.DRY_RUN_RECORD_BLOCKED_SAMPLES,
             "stage2_repeat_entry_experiment_enabled": config.stage2_repeat_entry_experiment_enabled(),
             "repeat_entry_experiment_max_extra_entries": config.REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES,
@@ -151,6 +180,8 @@ def get_dashboard_data():
             "sell_count": sell_count,
             "mirrored_count": len(mirrored),
             "signal_count": len(recent),
+            "deployed_value": deployed_value,
+            "open_position_count": open_position_count,
         },
         "cycle": _cycle,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -187,9 +218,9 @@ def bot_loop():
 
     models.init_db()
 
-    if not config.DRY_RUN and not config.PRIVATE_KEY:
+    if not config.DRY_RUN and not config.live_auth_ready():
         config.DRY_RUN = True
-        logger.warning("No PRIVATE_KEY — Watch Mode")
+        logger.warning("Live auth is incomplete — Watch Mode")
 
     # Initial leaderboard fetch
     try:

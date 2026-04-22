@@ -247,6 +247,25 @@
     gap: 10px;
   }
 
+  .live-alert {
+    margin-top: 16px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(207, 76, 86, 0.16);
+    background: linear-gradient(180deg, rgba(207, 76, 86, 0.1), rgba(207, 76, 86, 0.05));
+    color: #7d2730;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .live-alert strong {
+    color: #5d1520;
+  }
+
+  .live-alert.hidden {
+    display: none;
+  }
+
   .hero-pill {
     display: inline-flex;
     align-items: center;
@@ -276,7 +295,7 @@
   .hero-strip {
     margin-top: 18px;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 12px;
   }
 
@@ -343,7 +362,7 @@
 
   .stats-grid {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: 14px;
   }
 
@@ -817,6 +836,9 @@
           <div class="hero-pill">更新时间 <strong id="update-time">--:--:--</strong></div>
         </div>
       </div>
+      <div class="live-alert hidden" id="live-alert">
+        真实资金模式已开启。
+      </div>
       <div class="hero-strip">
         <div class="hero-strip-card">
           <div class="hero-strip-label">市场范围</div>
@@ -824,14 +846,19 @@
           <div class="hero-strip-note">严格限制在你指定的两个 market，不扩到其他品类。</div>
         </div>
         <div class="hero-strip-card">
-          <div class="hero-strip-label">研究状态</div>
+          <div class="hero-strip-label">当前阶段</div>
           <div class="hero-strip-value" id="hero-experiment">repeat-entry 暂停</div>
-          <div class="hero-strip-note">空簿延迟复查会继续收样本，先验证是否值得放宽。</div>
+          <div class="hero-strip-note" id="hero-experiment-note">空簿延迟复查会继续收样本，先验证是否值得放宽。</div>
         </div>
         <div class="hero-strip-card">
           <div class="hero-strip-label">下次刷新</div>
           <div class="hero-strip-value" id="countdown">--:--</div>
-          <div class="hero-strip-note">Socket 实时推送，同时保留轮询兜底更新。</div>
+          <div class="hero-strip-note" id="hero-countdown-note">Socket 实时推送，同时保留轮询兜底更新。</div>
+        </div>
+        <div class="hero-strip-card">
+          <div class="hero-strip-label">实盘护栏</div>
+          <div class="hero-strip-value" id="hero-guardrail">$0.00</div>
+          <div class="hero-strip-note" id="hero-guardrail-note">单笔上限、日预算和持仓上限会在这里显示。</div>
         </div>
       </div>
     </header>
@@ -847,9 +874,24 @@
 
       <div class="stats-grid">
         <article class="stat-card">
-          <div class="stat-label">研究资金</div>
+          <div class="stat-label" id="label-bankroll">研究资金</div>
           <div class="stat-value blue" id="s-bankroll">$0.00</div>
           <div class="stat-sub" id="s-bankroll-note">当前资金与 stake 配置</div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-label">已部署风险</div>
+          <div class="stat-value amber" id="s-deployed">$0.00</div>
+          <div class="stat-sub" id="s-deployed-note">当前 open executed notional</div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-label">剩余日预算</div>
+          <div class="stat-value blue" id="s-budget-left">$0.00</div>
+          <div class="stat-sub" id="s-budget-left-note">按 open executed 风险实时扣减</div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-label">单笔上限</div>
+          <div class="stat-value" id="s-max-trade">$0.00</div>
+          <div class="stat-sub" id="s-max-trade-note">基于 bankroll × MAX_TRADE_PCT</div>
         </article>
         <article class="stat-card">
           <div class="stat-label">已执行样本</div>
@@ -875,6 +917,11 @@
           <div class="stat-label">最新信号</div>
           <div class="stat-value" id="s-signals">0</div>
           <div class="stat-sub">买入 <span class="green" id="s-buys">0</span> / 卖出 <span class="red" id="s-sells">0</span> / 开仓 <span id="s-open">0</span></div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-label">当前持仓</div>
+          <div class="stat-value" id="s-open-positions">0 / 0</div>
+          <div class="stat-sub" id="s-open-positions-note">当前 open positions 与上限</div>
         </article>
       </div>
 
@@ -929,8 +976,12 @@
             <div class="health-grid">
               <div class="health-row"><span>当前模式</span><strong id="sys-mode">观察 / 模拟</strong></div>
               <div class="health-row"><span>市场范围</span><strong id="sys-scope">体育 + 电竞</strong></div>
+              <div class="health-row"><span>钱包类型</span><strong id="sys-wallet">EOA</strong></div>
+              <div class="health-row"><span>Funder</span><strong id="sys-funder">未设置</strong></div>
+              <div class="health-row"><span>鉴权状态</span><strong id="sys-auth">等待数据</strong></div>
               <div class="health-row"><span>发现策略</span><strong id="sys-discovery">体育榜单，多周期合并</strong></div>
               <div class="health-row"><span>研究预算</span><strong id="sys-budget">等待数据</strong></div>
+              <div class="health-row"><span>实盘护栏</span><strong id="sys-guards">等待数据</strong></div>
               <div class="health-row"><span>实验状态</span><strong id="sys-experiments">repeat-entry 暂停；空簿延迟复查开启</strong></div>
               <div class="health-row"><span>样本口径</span><strong>executed、shadow、experiment 完全分层显示</strong></div>
             </div>
@@ -1482,9 +1533,34 @@ function renderSystem(config, stats, performance) {
   const noBookText = config.stage2_no_book_recheck_experiment_enabled
     ? `已开启（${config.no_book_recheck_delay_sec || 0}s 后复查）`
     : '已关闭';
+  const deployedValue = Number(config.deployed_value || stats.deployed_value || 0);
+  const remainingBudget = Number(config.remaining_daily_risk_budget || 0);
+  const maxTradeValue = Number(config.max_trade_value || 0);
+  const dailyRiskBudget = Number(config.daily_risk_budget || config.paper_daily_risk_budget || 0);
+  const dailyLossLimit = Number(config.daily_loss_limit || 0);
+  const openPositionCount = Number(config.open_position_count || stats.open_position_count || 0);
+  const maxPositions = Number(config.max_positions || 0);
+  const walletText = String(config.poly_signature_type_label || 'EOA');
+  const canaryText = config.small_bankroll_canary ? '超小额 live smoke test' : '实盘执行';
+  const authText = config.dry_run
+    ? '观察模式'
+    : (config.live_auth_ready ? '本地凭据已就绪' : '缺少 live 配置');
+  const liveAlert = document.getElementById('live-alert');
 
   document.getElementById('hero-scope').textContent = scopeText;
-  document.getElementById('hero-experiment').textContent = `${repeatText} · 空簿复查${config.stage2_no_book_recheck_experiment_enabled ? '开启' : '关闭'}`;
+  document.getElementById('hero-experiment').textContent = config.dry_run
+    ? `${repeatText} · 空簿复查${config.stage2_no_book_recheck_experiment_enabled ? '开启' : '关闭'}`
+    : canaryText;
+  document.getElementById('hero-experiment-note').textContent = config.dry_run
+    ? '空簿延迟复查会继续收样本，先验证是否值得放宽。'
+    : `只做体育 / 电竞，repeat-entry ${repeatText}，先验证真实下单与记账链路。`;
+  document.getElementById('hero-guardrail').textContent = `${fmtMoney(maxTradeValue)} / ${maxPositions || 0} 仓`;
+  document.getElementById('hero-guardrail-note').textContent = config.dry_run
+    ? `纸面日预算 ${fmtMoney(dailyRiskBudget)} · 资本门控 ${config.paper_ignore_capital_gates ? '关闭' : '开启'}`
+    : `日预算 ${fmtMoney(dailyRiskBudget)} · 日损止损 ${fmtMoney(dailyLossLimit)} · 已部署 ${fmtMoney(deployedValue)}`;
+  document.getElementById('hero-countdown-note').textContent = config.dry_run
+    ? 'Socket 实时推送，同时保留轮询兜底更新。'
+    : '真实资金模式下，先看风控护栏是否被触发，再看盈亏。';
   document.getElementById('mode-badge').textContent = modeText;
   document.getElementById('mode-badge').className = config.dry_run ? 'amber' : 'red';
   document.getElementById('sidebar-mode').textContent = modeText;
@@ -1494,14 +1570,30 @@ function renderSystem(config, stats, performance) {
   document.getElementById('sidebar-repeat').textContent = repeatText;
   document.getElementById('sidebar-no-book').textContent = noBookText;
 
+  if (config.dry_run) {
+    liveAlert.classList.add('hidden');
+  } else {
+    liveAlert.classList.remove('hidden');
+    liveAlert.innerHTML = `<strong>真实资金提醒：</strong>${canaryText}，钱包 ${walletText}，funder ${config.funder_short || '未设置'}，单笔上限 ${fmtMoney(maxTradeValue)}，日预算 ${fmtMoney(dailyRiskBudget)}，日损止损 ${fmtMoney(dailyLossLimit)}。`;
+  }
+
   document.getElementById('sys-mode').textContent = modeText;
   document.getElementById('sys-scope').textContent = scopeText;
+  document.getElementById('sys-wallet').textContent = walletText;
+  document.getElementById('sys-funder').textContent = config.dry_run
+    ? '未启用'
+    : (config.funder_short || '未设置');
+  document.getElementById('sys-auth').textContent = authText;
   document.getElementById('sys-discovery').textContent = discoveryText;
   document.getElementById('sys-budget').textContent = config.dry_run
     ? `纸面预算 ${fmtMoney(config.paper_daily_risk_budget)} · 资本门控 ${config.paper_ignore_capital_gates ? '关闭' : '开启'}`
-    : `实盘资金 ${fmtMoney(config.bankroll)}`;
+    : `实盘资金 ${fmtMoney(config.bankroll)} · 已部署 ${fmtMoney(deployedValue)} · 剩余 ${fmtMoney(remainingBudget)}`;
+  document.getElementById('sys-guards').textContent = config.dry_run
+    ? `单笔上限 ${fmtMoney(maxTradeValue)} · 确认 ${config.min_signal_confirm_sec || 0}s`
+    : `单笔 ${fmtMoney(maxTradeValue)} · 持仓 ${openPositionCount}/${maxPositions} · 资本门控 ${config.capital_gates_enabled ? '开启' : '关闭'}`;
   document.getElementById('sys-experiments').textContent = `repeat-entry ${repeatText}；空簿延迟复查 ${noBookText}`;
 
+  document.getElementById('label-bankroll').textContent = config.dry_run ? '研究资金' : '实盘资金';
   const bankrollNote = document.getElementById('s-bankroll-note');
   if (config.dry_run) {
     const bankrollText = config.live_bankroll !== config.bankroll
@@ -1509,15 +1601,36 @@ function renderSystem(config, stats, performance) {
       : `研究资金 ${fmtMoney(config.bankroll)}`;
     bankrollNote.textContent = `${bankrollText} · stake ${config.stake_pct}% · ${scopeText}`;
   } else {
-    bankrollNote.textContent = `实盘 stake ${config.stake_pct}% · ${scopeText}`;
+    bankrollNote.textContent = config.small_bankroll_canary
+      ? `超小额 canary：stake ${config.stake_pct}% · ${scopeText} · 5-share 最小单量会让高价 market 更容易被跳过`
+      : `实盘 stake ${config.stake_pct}% · ${scopeText}`;
   }
+  document.getElementById('s-deployed').textContent = fmtMoney(deployedValue);
+  document.getElementById('s-deployed').className = `stat-value ${deployedValue > 0 ? 'amber' : 'blue'}`;
+  document.getElementById('s-deployed-note').textContent = config.dry_run
+    ? '纸面口径下仍按 open executed 视图展示'
+    : `当前 open executed notional · 持仓 ${openPositionCount}/${maxPositions}`;
+  document.getElementById('s-budget-left').textContent = fmtMoney(remainingBudget);
+  document.getElementById('s-budget-left-note').textContent = config.dry_run
+    ? `纸面日预算 ${fmtMoney(dailyRiskBudget)}`
+    : `日预算 ${fmtMoney(dailyRiskBudget)} · 日损止损 ${fmtMoney(dailyLossLimit)}`;
+  document.getElementById('s-max-trade').textContent = fmtMoney(maxTradeValue);
+  document.getElementById('s-max-trade-note').textContent = config.dry_run
+    ? `max trade ${Number(config.max_trade_pct || 0).toFixed(1)}% of bankroll`
+    : `单笔 ${Number(config.max_trade_pct || 0).toFixed(1)}% · trader 上限 ${fmtMoney(config.max_trader_exposure_value || 0)}`;
+  document.getElementById('s-open-positions').textContent = `${openPositionCount} / ${maxPositions}`;
+  document.getElementById('s-open-positions-note').textContent = config.dry_run
+    ? 'open executed positions 与上限'
+    : `market 上限 ${fmtMoney(config.max_market_exposure_value || 0)} · ${walletText}`;
 
   document.getElementById('s-signals').textContent = stats.signal_count;
   document.getElementById('s-buys').textContent = stats.buy_count;
   document.getElementById('s-sells').textContent = stats.sell_count;
 
   document.getElementById('sidebar-footnote').textContent =
-    `当前只看 ${scopeText}。Repeat-entry ${repeatText}，空簿延迟复查 ${noBookText}。指标口径保持 executed / shadow / experiment 分层。`;
+    config.dry_run
+      ? `当前只看 ${scopeText}。Repeat-entry ${repeatText}，空簿延迟复查 ${noBookText}。指标口径保持 executed / shadow / experiment 分层。`
+      : `当前是真实资金 ${canaryText}：只看 ${scopeText}，repeat-entry ${repeatText}，空簿延迟复查 ${noBookText}。若订单低于市场最小单量，会直接跳过而不是强行放大仓位。`;
 }
 
 function highlightSections() {

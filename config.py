@@ -199,3 +199,11 @@ def poly_signature_type_label():
         2: "GNOSIS_SAFE",
     }
     return mapping.get(poly_signature_type(), "EOA")
+
+
+def live_auth_ready():
+    if not PRIVATE_KEY:
+        return False
+    if poly_signature_type() in {1, 2} and not POLY_FUNDER:
+        return False
+    return True

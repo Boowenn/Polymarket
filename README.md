@@ -59,6 +59,20 @@ For `DRY_RUN=false`, the bot needs your signing private key plus the correct Pol
 
 If you are using a normal Polymarket.com account, the displayed address in `Settings` is usually the proxy wallet and should be used as `POLY_FUNDER`, not the signer address. Proxy wallet users should verify authentication with a read-only API call before enabling live trading.
 
+Keep real secrets in local `.env` only. You do not need to commit `.env` to GitHub in order to trade.
+
+### Small live canary
+
+For a very small live bankroll such as `$20`, treat the bot as an order-lifecycle smoke test first, not as a production sizing template:
+
+- keep the market scope limited to `sports,esports`
+- keep `repeat-entry` paused
+- prefer `MAX_POSITIONS=1` or `2`
+- use a tight daily loss limit and daily risk budget
+- remember that many Polymarket markets require a `min_order_size` of `5` shares, so tiny bankrolls will naturally skip many higher-priced contracts rather than force larger size
+
+This repository intentionally blocks orders below the market minimum instead of auto-inflating them beyond the copy-sizing plan.
+
 ## Multi-day dry-run workflow
 
 If you want to observe traders for several days without depositing funds:

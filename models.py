@@ -17,6 +17,11 @@ BLOCK_REASON_META = {
         "default_action": "watch",
         "note": "Do not chase empty books. If you test this, re-check later instead of forcing an immediate fill.",
     },
+    "below_min_size": {
+        "label": "Below Market Minimum",
+        "default_action": "keep",
+        "note": "Do not auto-inflate tiny copy sizes just to force a live fill. Increase bankroll or accept sparse canary fills.",
+    },
     "market_drift": {
         "label": "Price Drift Guard",
         "default_action": "keep",
@@ -85,6 +90,8 @@ def normalize_block_reason(reason):
         return "repeat_harvest"
     if lowered.startswith("no executable book levels"):
         return "no_book_levels"
+    if lowered.startswith("order size below market minimum"):
+        return "below_min_size"
     if lowered.startswith("market drift too large"):
         return "market_drift"
     if lowered.startswith("top level too thin"):

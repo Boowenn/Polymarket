@@ -11,11 +11,11 @@ Verified local baseline:
 - `executed_decision_count = 182`
 - `executed_win_rate = 50.0%`
 - `executed_realized_pnl = +60.05`
-- `shadow_entries = 3481`
-- `shadow_closed = 3129`
-- `shadow_decision_count = 2742`
-- `shadow_win_rate = 67.3%`
-- `shadow_realized_pnl = +361.49`
+- `shadow_entries = 3582`
+- `shadow_closed = 3130`
+- `shadow_decision_count = 2699`
+- `shadow_win_rate = 67.7%`
+- `shadow_realized_pnl = +387.42`
 - `stage2_repeat_entry_experiment = 60 entries / 58 closed / 58 decided / -87.62 pnl`
 
 Use this snapshot as the current reference point until a newer report is intentionally recorded.
@@ -76,3 +76,15 @@ Do not claim stable live-readiness until all of the following are true:
 - experiments stay isolated from default policy until reviewed
 - wallet auth is verified with a read-only authenticated CLOB call, not just local client initialization
 - proxy wallet users set the correct `POLY_SIGNATURE_TYPE` and `POLY_FUNDER` from Polymarket account settings before any live canary
+
+### Small-Bankroll Canary Policy
+
+If live bankroll is extremely small (for example, around `$20`), treat the run as an execution smoke test first:
+
+- keep secrets in local `.env` only and never commit them
+- keep scope narrowed to the intended live segment, such as `sports,esports`
+- keep repeat-entry paused and avoid widening experiments
+- show live guardrails clearly in the dashboard: bankroll, deployed notional, remaining daily budget, max trade size, max positions, wallet type, and funder summary
+- block orders that fall below the market `min_order_size` instead of automatically increasing size to force a fill
+
+This avoids disguising a sizing problem as successful live execution.
