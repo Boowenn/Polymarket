@@ -113,6 +113,8 @@ def assess_execution(signal, order_size):
     book_ts = float(book.timestamp or 0) / 1000.0 if str(book.timestamp or "").isdigit() else 0.0
     book_age_sec = max(time.time() - book_ts, 0.0) if book_ts else 0.0
     tick_size = float(book.tick_size or 0.01)
+    min_order_size = float(getattr(book, "min_order_size", 0) or 0)
+    min_order_value = min_order_size * best_price if min_order_size > 0 else 0.0
     limit_price = _round_limit_price(worst_price, tick_size, signal.get("side", "BUY").upper())
 
     assessment = {
@@ -133,10 +135,17 @@ def assess_execution(signal, order_size):
         "depth_value": round(total_depth_value, 4),
         "levels_used": levels_used,
         "tick_size": tick_size,
+        "min_order_size": round(min_order_size, 4),
+        "min_order_value": round(min_order_value, 4),
         "book_age_sec": round(book_age_sec, 3),
     }
 
-    if spread > config.MAX_BOOK_SPREAD:
+    if min_order_size > 0 and float(order_size) + 1e-9 < min_order_size:
+        assessment["ok"] = False
+        assessment["reason"] = (
+            f"order size below market minimum ({float(order_size):.4f} < {min_order_size:.4f})"
+        )
+    elif spread > config.MAX_BOOK_SPREAD:
         assessment["ok"] = False
         assessment["reason"] = f"spread too wide ({spread:.3f} > {config.MAX_BOOK_SPREAD:.3f})"
     elif top_level_value < config.MIN_TOP_LEVEL_LIQUIDITY_USDC:

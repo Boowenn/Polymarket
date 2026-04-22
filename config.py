@@ -7,6 +7,13 @@ load_dotenv()
 def _csv_list(raw_value):
     return [item.strip().lower() for item in str(raw_value or "").split(",") if item.strip()]
 
+
+def _int_env(name, default):
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return int(default)
+
 # API endpoints
 DATA_API_BASE = "https://data-api.polymarket.com"
 CLOB_BASE = "https://clob.polymarket.com"
@@ -15,6 +22,7 @@ GAMMA_API_BASE = "https://gamma-api.polymarket.com"
 # Wallet / Auth (only needed for live trading)
 PRIVATE_KEY = os.getenv("PRIVATE_KEY", "")
 POLY_FUNDER = os.getenv("POLY_FUNDER", "")
+POLY_SIGNATURE_TYPE = _int_env("POLY_SIGNATURE_TYPE", 0)
 
 # Trading parameters
 BANKROLL = float(os.getenv("BANKROLL", "1000"))
@@ -60,6 +68,18 @@ NO_BOOK_DELAYED_RECHECK_MAX_EXTRA_ENTRIES = max(
     int(os.getenv("NO_BOOK_DELAYED_RECHECK_MAX_EXTRA_ENTRIES", "1")),
 )
 NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY = "no_book_delayed_recheck_stage2"
+DELAYED_ORDER_ALERT_SEC = max(
+    30,
+    int(os.getenv("DELAYED_ORDER_ALERT_SEC", "120")),
+)
+DELAYED_ORDER_RECHECK_SEC = max(
+    5,
+    int(os.getenv("DELAYED_ORDER_RECHECK_SEC", "15")),
+)
+DELAYED_ORDER_RECHECK_LIMIT = max(
+    1,
+    int(os.getenv("DELAYED_ORDER_RECHECK_LIMIT", "10")),
+)
 
 # Risk controls
 MAX_TRADE_PCT = float(os.getenv("MAX_TRADE_PCT", "0.05"))
@@ -176,3 +196,26 @@ def monitored_trader_limit():
 def discovery_label():
     slices = [f"{period}/{order}" for period, order in discovery_slice_pairs()]
     return ", ".join(slices)
+
+
+def poly_signature_type():
+    if POLY_SIGNATURE_TYPE in {0, 1, 2}:
+        return POLY_SIGNATURE_TYPE
+    return 0
+
+
+def poly_signature_type_label():
+    mapping = {
+        0: "EOA",
+        1: "POLY_PROXY",
+        2: "GNOSIS_SAFE",
+    }
+    return mapping.get(poly_signature_type(), "EOA")
+
+
+def live_auth_ready():
+    if not PRIVATE_KEY:
+        return False
+    if poly_signature_type() in {1, 2} and not POLY_FUNDER:
+        return False
+    return True

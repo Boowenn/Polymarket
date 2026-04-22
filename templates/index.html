@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Polymarket 体育与电竞研究看板</title>
+<title>Polymarket 体育与电竞实盘控制台</title>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <style>
   :root {
@@ -247,6 +247,35 @@
     gap: 10px;
   }
 
+  .live-alert {
+    margin-top: 16px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(207, 76, 86, 0.16);
+    background: linear-gradient(180deg, rgba(207, 76, 86, 0.1), rgba(207, 76, 86, 0.05));
+    color: #7d2730;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .live-alert strong {
+    color: #5d1520;
+  }
+
+  .live-alert.hidden {
+    display: none;
+  }
+
+  .live-alert.live-alert-warning {
+    border-color: rgba(211, 138, 31, 0.22);
+    background: linear-gradient(180deg, rgba(211, 138, 31, 0.18), rgba(211, 138, 31, 0.08));
+    color: #7a4b10;
+  }
+
+  .live-alert.live-alert-warning strong {
+    color: #603708;
+  }
+
   .hero-pill {
     display: inline-flex;
     align-items: center;
@@ -276,7 +305,7 @@
   .hero-strip {
     margin-top: 18px;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 12px;
   }
 
@@ -343,7 +372,7 @@
 
   .stats-grid {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
     gap: 14px;
   }
 
@@ -741,11 +770,15 @@
 <div class="app-shell">
   <aside class="sidebar">
     <section class="brand-card">
-      <div class="brand-kicker">Polymarket Research Console</div>
-      <div class="brand-title">体育 / 电竞<br>研究看板</div>
-      <div class="brand-subtitle">
-        只观察体育与电竞两个 market，把执行样本、shadow 样本和实验样本分开看，
-        避免把研究结论和可执行结论混在一起。
+      <div class="brand-kicker">Polymarket Live Console</div>
+      <div class="brand-title" id="brand-title">体育 / 电竞<br>实盘看板</div>
+      <div class="brand-subtitle" id="brand-subtitle">
+        {% if dry_run %}
+        当前页面按 executed / shadow / experiment 分层观察研究样本。
+        {% else %}
+        当前页面只保留真钱账户、真实 executed 成交和实盘风控。
+        模拟盘、shadow 和实验样本会在切实盘时归档，不再混进当前运行视图。
+        {% endif %}
       </div>
     </section>
 
@@ -760,10 +793,12 @@
           <div class="nav-title">交易员</div>
           <div class="nav-note">当前跟踪对象、状态和质量评分</div>
         </a>
-        <a class="nav-link" href="#section-experiments" data-target="section-experiments">
+        {% if dry_run %}
+        <a class="nav-link" href="#section-experiments" data-target="section-experiments" id="nav-experiments">
           <div class="nav-title">实验</div>
           <div class="nav-note">阻断理由、repeat-entry、空簿延迟复查</div>
         </a>
+        {% endif %}
         <a class="nav-link" href="#section-signals" data-target="section-signals">
           <div class="nav-title">信号与风险</div>
           <div class="nav-note">最新信号、风险日志和执行状态</div>
@@ -787,27 +822,29 @@
       </div>
     </section>
 
-    <section class="side-card">
-      <div class="side-card-title">研究提醒</div>
+    {% if dry_run %}
+    <section class="side-card" id="side-research-card">
+      <div class="side-card-title" id="side-research-title">研究提醒</div>
       <div class="side-stack">
-        <div class="side-row"><span>repeat-entry</span><strong id="sidebar-repeat">已暂停</strong></div>
-        <div class="side-row"><span>空簿复查</span><strong id="sidebar-no-book">待收样本</strong></div>
-        <div class="side-row"><span>样本分层</span><strong>executed / shadow / experiment</strong></div>
+        <div class="side-row"><span id="sidebar-row1-label">repeat-entry</span><strong id="sidebar-repeat">已暂停</strong></div>
+        <div class="side-row"><span id="sidebar-row2-label">空簿复查</span><strong id="sidebar-no-book">待收样本</strong></div>
+        <div class="side-row"><span id="sidebar-row3-label">样本分层</span><strong id="sidebar-row3-value">executed / shadow / experiment</strong></div>
       </div>
-      <div class="side-footnote">
+      <div class="side-footnote" id="side-research-note">
         当前页面只服务体育和电竞范围；即便改实验，也不放大到其他市场。
       </div>
     </section>
+    {% endif %}
   </aside>
 
   <main class="content">
     <header class="hero" id="section-overview">
       <div class="hero-top">
         <div>
-          <div class="hero-title">Polymarket 体育与电竞研究控制台</div>
-          <div class="hero-subtitle">
-            把所有信息压在一个长页面里很难看清重点，这版界面改成侧边导航 + 分区布局：
-            先看总览，再看交易员，再看实验和信号。页面默认只关注体育与电竞。
+          <div class="hero-title">Polymarket 体育与电竞实盘控制台</div>
+          <div class="hero-subtitle" id="hero-subtitle">
+            先看账户现金、策略预算和实盘护栏，再看真实 executed 表现、交易员、信号与风险。
+            模拟盘和实验样本在切到实盘后会归档，不再混进当前页面。
           </div>
         </div>
         <div class="hero-badges">
@@ -817,6 +854,12 @@
           <div class="hero-pill">更新时间 <strong id="update-time">--:--:--</strong></div>
         </div>
       </div>
+      <div class="live-alert hidden" id="live-alert">
+        真实资金模式已开启。
+      </div>
+      <div class="live-alert live-alert-warning hidden" id="delayed-alert">
+        订单延迟提醒会显示在这里。
+      </div>
       <div class="hero-strip">
         <div class="hero-strip-card">
           <div class="hero-strip-label">市场范围</div>
@@ -824,14 +867,19 @@
           <div class="hero-strip-note">严格限制在你指定的两个 market，不扩到其他品类。</div>
         </div>
         <div class="hero-strip-card">
-          <div class="hero-strip-label">研究状态</div>
+          <div class="hero-strip-label">当前阶段</div>
           <div class="hero-strip-value" id="hero-experiment">repeat-entry 暂停</div>
-          <div class="hero-strip-note">空簿延迟复查会继续收样本，先验证是否值得放宽。</div>
+          <div class="hero-strip-note" id="hero-experiment-note">空簿延迟复查会继续收样本，先验证是否值得放宽。</div>
         </div>
         <div class="hero-strip-card">
           <div class="hero-strip-label">下次刷新</div>
           <div class="hero-strip-value" id="countdown">--:--</div>
-          <div class="hero-strip-note">Socket 实时推送，同时保留轮询兜底更新。</div>
+          <div class="hero-strip-note" id="hero-countdown-note">Socket 实时推送，同时保留轮询兜底更新。</div>
+        </div>
+        <div class="hero-strip-card">
+          <div class="hero-strip-label">实盘护栏</div>
+          <div class="hero-strip-value" id="hero-guardrail">$0.00</div>
+          <div class="hero-strip-note" id="hero-guardrail-note">单笔上限、日预算和持仓上限会在这里显示。</div>
         </div>
       </div>
     </header>
@@ -839,50 +887,70 @@
     <section class="section">
       <div class="section-head">
         <div>
-          <div class="section-title">研究总览</div>
-          <div class="section-note">先看已执行样本，再看 shadow 和 experiment；不要被单一维度的好看数字带偏。</div>
+          <div class="section-title">账户与研究总览</div>
+          <div class="section-note" id="overview-note">上排先看账户与风控，下排再看真实 executed 成交；模拟和实验样本不会再进入当前视图。</div>
         </div>
         <div class="section-tag">只看体育 / 电竞</div>
       </div>
 
       <div class="stats-grid">
         <article class="stat-card">
-          <div class="stat-label">研究资金</div>
+          <div class="stat-label" id="label-bankroll">研究资金</div>
           <div class="stat-value blue" id="s-bankroll">$0.00</div>
           <div class="stat-sub" id="s-bankroll-note">当前资金与 stake 配置</div>
         </article>
         <article class="stat-card">
-          <div class="stat-label">已执行样本</div>
+          <div class="stat-label" id="label-deployed">已部署风险</div>
+          <div class="stat-value amber" id="s-deployed">$0.00</div>
+          <div class="stat-sub" id="s-deployed-note">当前 open executed notional</div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-label" id="label-budget-left">剩余日预算</div>
+          <div class="stat-value blue" id="s-budget-left">$0.00</div>
+          <div class="stat-sub" id="s-budget-left-note">按 open executed 风险实时扣减</div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-label" id="label-max-trade">单笔上限</div>
+          <div class="stat-value" id="s-max-trade">$0.00</div>
+          <div class="stat-sub" id="s-max-trade-note">基于 bankroll × MAX_TRADE_PCT</div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-label" id="label-samples">已执行样本</div>
           <div class="stat-value" id="s-simulated">0</div>
           <div class="stat-sub" id="s-simulated-note">执行 / shadow / experiment 分开统计</div>
         </article>
         <article class="stat-card">
-          <div class="stat-label">已平仓样本</div>
+          <div class="stat-label" id="label-closed">已平仓样本</div>
           <div class="stat-value" id="s-closed">0</div>
           <div class="stat-sub" id="s-closed-note">已平仓与未平仓占比</div>
         </article>
         <article class="stat-card">
-          <div class="stat-label">决策胜率</div>
+          <div class="stat-label" id="label-winrate">决策胜率</div>
           <div class="stat-value" id="s-winrate">N/A</div>
           <div class="stat-sub" id="s-winrate-note">只按已判定 executed 样本计算</div>
         </article>
         <article class="stat-card">
-          <div class="stat-label">已实现收益</div>
+          <div class="stat-label" id="label-realized">已实现收益</div>
           <div class="stat-value" id="s-realized">$0.00</div>
-          <div class="stat-sub">平均入场偏移 <span id="s-drift">0.000</span></div>
+          <div class="stat-sub" id="s-realized-note">平均入场偏移 <span id="s-drift">0.000</span></div>
         </article>
         <article class="stat-card">
-          <div class="stat-label">最新信号</div>
+          <div class="stat-label" id="label-signals">最新信号</div>
           <div class="stat-value" id="s-signals">0</div>
-          <div class="stat-sub">买入 <span class="green" id="s-buys">0</span> / 卖出 <span class="red" id="s-sells">0</span> / 开仓 <span id="s-open">0</span></div>
+          <div class="stat-sub" id="s-signals-note">买入 <span class="green" id="s-buys">0</span> / 卖出 <span class="red" id="s-sells">0</span> / 开仓 <span id="s-open">0</span></div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-label" id="label-open-positions">当前持仓</div>
+          <div class="stat-value" id="s-open-positions">0 / 0</div>
+          <div class="stat-sub" id="s-open-positions-note">当前 open positions 与上限</div>
         </article>
       </div>
 
       <div class="overview-grid">
         <article class="panel">
           <div class="panel-header">
-            <div class="panel-title">执行质量</div>
-            <div class="panel-badge">只看 executed</div>
+            <div class="panel-title">真实执行表现</div>
+            <div class="panel-badge">live executed</div>
           </div>
           <div class="panel-body">
             <div class="performance-layout">
@@ -922,15 +990,19 @@
 
         <article class="panel">
           <div class="panel-header">
-            <div class="panel-title">系统摘要</div>
+            <div class="panel-title">账户与策略摘要</div>
             <div class="panel-badge">研究口径</div>
           </div>
           <div class="panel-body">
             <div class="health-grid">
               <div class="health-row"><span>当前模式</span><strong id="sys-mode">观察 / 模拟</strong></div>
               <div class="health-row"><span>市场范围</span><strong id="sys-scope">体育 + 电竞</strong></div>
+              <div class="health-row"><span>钱包类型</span><strong id="sys-wallet">EOA</strong></div>
+              <div class="health-row"><span>Funder</span><strong id="sys-funder">未设置</strong></div>
+              <div class="health-row"><span>鉴权状态</span><strong id="sys-auth">等待数据</strong></div>
               <div class="health-row"><span>发现策略</span><strong id="sys-discovery">体育榜单，多周期合并</strong></div>
-              <div class="health-row"><span>研究预算</span><strong id="sys-budget">等待数据</strong></div>
+              <div class="health-row"><span id="sys-budget-label">研究预算</span><strong id="sys-budget">等待数据</strong></div>
+              <div class="health-row"><span id="sys-guards-label">实盘护栏</span><strong id="sys-guards">等待数据</strong></div>
               <div class="health-row"><span>实验状态</span><strong id="sys-experiments">repeat-entry 暂停；空簿延迟复查开启</strong></div>
               <div class="health-row"><span>样本口径</span><strong>executed、shadow、experiment 完全分层显示</strong></div>
             </div>
@@ -970,6 +1042,7 @@
       </article>
     </section>
 
+    {% if dry_run %}
     <section class="section" id="section-experiments">
       <div class="section-head">
         <div>
@@ -1028,6 +1101,7 @@
         </div>
       </article>
     </section>
+    {% endif %}
 
     <section class="section" id="section-signals">
       <div class="section-head">
@@ -1102,6 +1176,12 @@ function fmtSignedMoney(value) {
   return `${number >= 0 ? '+' : '-'}$${Math.abs(number).toFixed(2)}`;
 }
 
+function fmtMaybeMoney(value, fallback = '--') {
+  if (value === null || value === undefined || value === '') return fallback;
+  const number = Number(value);
+  return Number.isFinite(number) ? fmtMoney(number) : fallback;
+}
+
 function translateMarketScope(label) {
   const text = String(label || '');
   return text
@@ -1165,6 +1245,14 @@ function translateRiskEvent(event) {
   return mapping[text] || (event || '日志');
 }
 
+function liveAuthText(config) {
+  if (config.dry_run) return '观察模式';
+  if (config.account_auth_ok) return '只读 CLOB 鉴权正常';
+  if (config.account_auth_state === 'missing_credentials') return '缺少 live 凭据';
+  if (config.account_snapshot_error) return `读取失败：${String(config.account_snapshot_error).slice(0, 36)}`;
+  return '等待账户数据';
+}
+
 function statusClass(status) {
   const text = String(status || '').toLowerCase();
   if (text === 'approved') return 'status-chip status-approved';
@@ -1191,8 +1279,26 @@ function tradeStatusLabel(row) {
   if (status === 'live' || status === 'order_status_live') {
     return { cls: 'status-chip status-observe', text: '挂单中' };
   }
+  if (status === 'canceled' || status === 'cancelled' || status === 'order_status_canceled' || status === 'order_status_cancelled') {
+    return { cls: 'status-chip status-blocked', text: '已取消' };
+  }
+  if (status === 'expired' || status === 'order_status_expired') {
+    return { cls: 'status-chip status-blocked', text: '已过期' };
+  }
+  if (status === 'unmatched' || status === 'order_status_unmatched' || status === 'failed' || status === 'rejected') {
+    return { cls: 'status-chip status-blocked', text: '未成交结束' };
+  }
   if (status === 'delayed') {
-    return { cls: 'status-chip status-observe', text: '延迟确认' };
+    if (row.delayed_alert) {
+      return {
+        cls: 'status-chip status-blocked',
+        text: row.delayed_age_label ? `延迟 ${row.delayed_age_label}` : '延迟超时',
+      };
+    }
+    return {
+      cls: 'status-chip status-observe',
+      text: row.delayed_age_label ? `延迟 ${row.delayed_age_label}` : '延迟确认',
+    };
   }
   return { cls: 'status-chip status-observe', text: row.our_status || '待处理' };
 }
@@ -1234,7 +1340,7 @@ function resetFallback() {
   }, pollInterval * 2000);
 }
 
-function renderPerformance(perf) {
+function renderPerformance(perf, config, liveExecution) {
   const ring = document.getElementById('ring-circle');
   const ringLabel = document.getElementById('ring-label');
   const circleLength = 326.73;
@@ -1257,41 +1363,38 @@ function renderPerformance(perf) {
       : `${Number(executedWinRate).toFixed(1)}%`;
   const executedCloseRate = Number(executed.close_rate ?? perf.close_rate ?? 0);
 
-  const shadowEntries = Number(shadow.total_entries ?? perf.shadow_entries ?? 0);
-  const shadowClosedEntries = Number(shadow.closed_entries ?? perf.shadow_closed_entries ?? 0);
-  const shadowDecisionCount = Number(shadow.decision_count ?? perf.shadow_decision_count ?? 0);
-  const shadowWinRate = shadow.win_rate ?? perf.shadow_win_rate;
+  const liveEntries = Number((liveExecution && liveExecution.total_entries) || 0);
+  const liveClosedEntries = Number((liveExecution && liveExecution.closed_entries) || 0);
+  const liveOpenEntries = Number((liveExecution && liveExecution.open_entries) || 0);
+  const liveWins = Number((liveExecution && liveExecution.wins) || 0);
+  const liveLosses = Number((liveExecution && liveExecution.losses) || 0);
+  const liveFlats = Number((liveExecution && liveExecution.flat_count) || 0);
+  const liveDecisionCount = Number((liveExecution && liveExecution.decision_count) || 0);
+  const liveWinRate = liveExecution ? liveExecution.win_rate : null;
 
-  const experimentEntries = Number(experiment.total_entries ?? perf.experiment_entries ?? 0);
-  const experimentClosedEntries = Number(experiment.closed_entries ?? perf.experiment_closed_entries ?? 0);
-  const experimentDecisionCount = Number(experiment.decision_count ?? perf.experiment_decision_count ?? 0);
-  const experimentWinRate = experiment.win_rate ?? perf.experiment_win_rate;
+  if (config.dry_run) {
+    const shadowEntries = Number(shadow.total_entries ?? perf.shadow_entries ?? 0);
+    const experimentEntries = Number(experiment.total_entries ?? perf.experiment_entries ?? 0);
+    document.getElementById('s-simulated').textContent = executedEntries;
+    document.getElementById('s-closed').textContent = executedClosedEntries;
+    document.getElementById('s-simulated').className = 'stat-value';
+    document.getElementById('s-closed').className = 'stat-value';
+    document.getElementById('s-simulated-note').textContent =
+      `已执行 ${executedEntries} 笔 · shadow ${Number(shadow.total_entries ?? perf.shadow_entries ?? 0)} 笔 · experiment ${Number(experiment.total_entries ?? perf.experiment_entries ?? 0)} 笔`;
+    document.getElementById('s-closed-note').textContent =
+      `执行平仓率 ${executedCloseRate.toFixed(1)}% · shadow ${Number(shadow.closed_entries ?? perf.shadow_closed_entries ?? 0)}/${Number(shadow.total_entries ?? perf.shadow_entries ?? 0)} · experiment ${Number(experiment.closed_entries ?? perf.experiment_closed_entries ?? 0)}/${Number(experiment.total_entries ?? perf.experiment_entries ?? 0)}`;
+    document.getElementById('s-winrate').textContent = executedWinRateLabel;
+    document.getElementById('s-winrate').className = `stat-value ${executedWinRate === null || executedWinRate === undefined ? '' : (executedWinRate >= 50 ? 'green' : 'red')}`;
+    document.getElementById('s-winrate-note').textContent =
+      executedDecisionCount > 0
+        ? `按 ${executedDecisionCount} 笔已判定 executed 样本计算`
+        : `当前还没有已判定 executed 样本`;
 
-  const repeatEntries = Number(perf.repeat_entry_experiment_entries || 0);
-  const repeatClosedEntries = Number(perf.repeat_entry_experiment_closed_entries || 0);
-  const repeatStatus = perf.repeat_entry_experiment_status || 'idle';
-  const noBookEntries = Number(perf.no_book_recheck_experiment_entries || 0);
-  const noBookClosedEntries = Number(perf.no_book_recheck_experiment_closed_entries || 0);
-  const noBookStatus = perf.no_book_recheck_experiment_status || 'idle';
-
-  document.getElementById('s-simulated').textContent = executedEntries;
-  document.getElementById('s-closed').textContent = executedClosedEntries;
-  document.getElementById('s-open').textContent = executedOpenEntries;
-  document.getElementById('s-simulated-note').textContent =
-    `已执行 ${executedEntries} 笔 · shadow ${shadowEntries} 笔 · experiment ${experimentEntries} 笔`;
-  document.getElementById('s-closed-note').textContent =
-    `执行平仓率 ${executedCloseRate.toFixed(1)}% · shadow ${shadowClosedEntries}/${shadowEntries} · experiment ${experimentClosedEntries}/${experimentEntries}`;
-  document.getElementById('s-winrate').textContent = executedWinRateLabel;
-  document.getElementById('s-winrate').className = `stat-value ${executedWinRate === null || executedWinRate === undefined ? '' : (executedWinRate >= 50 ? 'green' : 'red')}`;
-  document.getElementById('s-winrate-note').textContent =
-    executedDecisionCount > 0
-      ? `按 ${executedDecisionCount} 笔已判定 executed 样本计算`
-      : `当前还没有已判定 executed 样本`;
-
-  const realized = document.getElementById('s-realized');
-  realized.textContent = fmtSignedMoney(executed.realized_pnl ?? perf.realized_pnl ?? 0);
-  realized.className = `stat-value ${Number(executed.realized_pnl ?? perf.realized_pnl ?? 0) >= 0 ? 'green' : 'red'}`;
-  document.getElementById('s-drift').textContent = Number(executed.avg_entry_drift ?? perf.avg_entry_drift ?? 0).toFixed(3);
+    const realized = document.getElementById('s-realized');
+    realized.textContent = fmtSignedMoney(executed.realized_pnl ?? perf.realized_pnl ?? 0);
+    realized.className = `stat-value ${Number(executed.realized_pnl ?? perf.realized_pnl ?? 0) >= 0 ? 'green' : 'red'}`;
+    document.getElementById('s-drift').textContent = Number(executed.avg_entry_drift ?? perf.avg_entry_drift ?? 0).toFixed(3);
+  }
 
   document.getElementById('ring-wins').textContent = executedWins;
   document.getElementById('ring-losses').textContent = executedLosses;
@@ -1310,18 +1413,59 @@ function renderPerformance(perf) {
     ringLabel.textContent = `${Number(executedWinRate).toFixed(0)}%`;
   }
 
-  const shadowWinRateLabel = shadowWinRate === null || shadowWinRate === undefined ? 'N/A' : `${Number(shadowWinRate).toFixed(1)}%`;
-  const experimentWinRateLabel = experimentWinRate === null || experimentWinRate === undefined ? 'N/A' : `${Number(experimentWinRate).toFixed(1)}%`;
+  if (config.dry_run) {
+    const shadowWinRate = shadow.win_rate ?? perf.shadow_win_rate;
+    const experimentWinRate = experiment.win_rate ?? perf.experiment_win_rate;
+    const shadowEntries = Number(shadow.total_entries ?? perf.shadow_entries ?? 0);
+    const experimentEntries = Number(experiment.total_entries ?? perf.experiment_entries ?? 0);
+    const repeatEntries = Number(perf.repeat_entry_experiment_entries || 0);
+    const repeatClosedEntries = Number(perf.repeat_entry_experiment_closed_entries || 0);
+    const repeatStatus = perf.repeat_entry_experiment_status || 'idle';
+    const noBookEntries = Number(perf.no_book_recheck_experiment_entries || 0);
+    const noBookClosedEntries = Number(perf.no_book_recheck_experiment_closed_entries || 0);
+    const noBookStatus = perf.no_book_recheck_experiment_status || 'idle';
+    const shadowDecisionCount = Number(shadow.decision_count ?? perf.shadow_decision_count ?? 0);
+    const shadowWinRateLabel = shadowWinRate === null || shadowWinRate === undefined ? 'N/A' : `${Number(shadowWinRate).toFixed(1)}%`;
+    const experimentDecisionCount = Number(experiment.decision_count ?? perf.experiment_decision_count ?? 0);
+    const experimentWinRateLabel = experimentWinRate === null || experimentWinRate === undefined ? 'N/A' : `${Number(experimentWinRate).toFixed(1)}%`;
+    document.getElementById('performance-note').textContent =
+      executedClosedEntries > 0
+        ? `Executed 已平仓 ${executedClosedEntries} 笔，其中 ${executedDecisionCount} 笔已经明确胜负，胜率 ${executedWinRateLabel}。Shadow 单独统计为 ${shadowEntries} 笔（已判定 ${shadowDecisionCount} 笔，胜率 ${shadowWinRateLabel}），Experiment 单独统计为 ${experimentEntries} 笔（已判定 ${experimentDecisionCount} 笔，胜率 ${experimentWinRateLabel}）。repeat-entry 当前 ${repeatEntries} 笔 / ${repeatClosedEntries} 笔已结算，状态 ${translateExperimentStatus(repeatStatus, true)}；空簿延迟复查当前 ${noBookEntries} 笔 / ${noBookClosedEntries} 笔已结算，状态 ${translateExperimentStatus(noBookStatus, true)}。`
+        : `当前还没有 executed 平仓样本。Shadow 和 experiment 只用于研究，不直接证明可执行 edge。`;
+    return;
+  }
+
+  const liveWinRateLabel = liveWinRate === null || liveWinRate === undefined ? 'N/A' : `${Number(liveWinRate).toFixed(1)}%`;
+  const ringWinRate = liveWinRate === null || liveWinRate === undefined ? null : Number(liveWinRate);
+  document.getElementById('ring-wins').textContent = liveWins;
+  document.getElementById('ring-losses').textContent = liveLosses;
+  document.getElementById('ring-flats').textContent = liveFlats;
+  document.getElementById('ring-closed').textContent = liveClosedEntries;
+  document.getElementById('ring-decided').textContent = liveDecisionCount;
+  document.getElementById('ring-open').textContent = liveOpenEntries;
+  if (ringWinRate === null) {
+    ring.setAttribute('stroke-dashoffset', circleLength);
+    ring.setAttribute('stroke', 'rgba(22, 53, 76, 0.18)');
+    ringLabel.textContent = 'N/A';
+  } else {
+    ring.setAttribute('stroke-dashoffset', circleLength * (1 - ringWinRate / 100));
+    ring.setAttribute('stroke', ringWinRate >= 50 ? 'var(--green)' : 'var(--red)');
+    ringLabel.textContent = `${ringWinRate.toFixed(0)}%`;
+  }
   document.getElementById('performance-note').textContent =
-    executedClosedEntries > 0
-      ? `Executed 已平仓 ${executedClosedEntries} 笔，其中 ${executedDecisionCount} 笔已经明确胜负，胜率 ${executedWinRateLabel}。Shadow 单独统计为 ${shadowEntries} 笔（已判定 ${shadowDecisionCount} 笔，胜率 ${shadowWinRateLabel}），Experiment 单独统计为 ${experimentEntries} 笔（已判定 ${experimentDecisionCount} 笔，胜率 ${experimentWinRateLabel}）。repeat-entry 当前 ${repeatEntries} 笔 / ${repeatClosedEntries} 笔已结算，状态 ${translateExperimentStatus(repeatStatus, true)}；空簿延迟复查当前 ${noBookEntries} 笔 / ${noBookClosedEntries} 笔已结算，状态 ${translateExperimentStatus(noBookStatus, true)}。`
-      : `当前还没有 executed 平仓样本。Shadow 和 experiment 只用于研究，不直接证明可执行 edge。`;
+    liveEntries > 0
+      ? `当前账户已有 ${liveEntries} 笔真实 executed 成交，其中 ${liveClosedEntries} 笔已平仓、${liveDecisionCount} 笔已判定，live 胜率 ${liveWinRateLabel}。模拟盘、shadow 和 experiment 样本已经归档，不再进入当前页面。`
+      : `当前账户还没有真实 executed 成交。页面已经切成实盘口径，模拟盘、shadow 和 experiment 样本已归档，不再参与当前统计。`;
 }
 
 function renderBlockedReasons(rows) {
   const blockedRows = rows || [];
-  document.getElementById('blocked-count').textContent = blockedRows.length;
   const tbody = document.getElementById('blocked-body');
+  const count = document.getElementById('blocked-count');
+  if (!tbody || !count) {
+    return;
+  }
+  count.textContent = blockedRows.length;
 
   if (!blockedRows.length) {
     tbody.innerHTML = `
@@ -1352,8 +1496,12 @@ function renderBlockedReasons(rows) {
 function renderExperimentWatch(rows) {
   const experimentRows = rows || [];
   const tbody = document.getElementById('stage2-body');
+  const count = document.getElementById('stage2-count');
+  if (!tbody || !count) {
+    return;
+  }
   const totalEntries = experimentRows.reduce((sum, item) => sum + Number((item.row && item.row.total_entries) || 0), 0);
-  document.getElementById('stage2-count').textContent = totalEntries;
+  count.textContent = totalEntries;
 
   if (!experimentRows.length) {
     tbody.innerHTML = `
@@ -1474,7 +1622,7 @@ function renderRiskLogs(rows) {
   `).join('');
 }
 
-function renderSystem(config, stats, performance) {
+function renderSystem(config, stats, performance, liveExecution) {
   const scopeText = translateMarketScope(config.market_scope_label);
   const discoveryText = `${translateCategory(config.leaderboard_category)} · ${String(config.leaderboard_discovery_label || '').toLowerCase()}`;
   const modeText = config.dry_run ? '观察 / 模拟' : '实盘';
@@ -1482,42 +1630,231 @@ function renderSystem(config, stats, performance) {
   const noBookText = config.stage2_no_book_recheck_experiment_enabled
     ? `已开启（${config.no_book_recheck_delay_sec || 0}s 后复查）`
     : '已关闭';
+  const strategyBankroll = Number(config.strategy_bankroll || config.bankroll || 0);
+  const accountCash = config.account_cash;
+  const hasAccountCash = accountCash !== null && accountCash !== undefined && accountCash !== '';
+  const accountCashText = fmtMaybeMoney(accountCash, '未读取');
+  const accountCashDelta = config.account_cash_delta;
+  const accountCashDeltaText =
+    accountCashDelta === null || accountCashDelta === undefined
+      ? '--'
+      : fmtSignedMoney(accountCashDelta);
+  const deployedValue = Number(config.deployed_value || stats.deployed_value || 0);
+  const remainingBudget = Number(config.remaining_daily_risk_budget || 0);
+  const maxTradeValue = Number(config.max_trade_value || 0);
+  const dailyRiskBudget = Number(config.daily_risk_budget || config.paper_daily_risk_budget || 0);
+  const dailyLossLimit = Number(config.daily_loss_limit || 0);
+  const openPositionCount = Number(config.open_position_count || stats.open_position_count || 0);
+  const maxPositions = Number(config.max_positions || 0);
+  const openOrderCount = Number(config.open_order_count || 0);
+  const walletText = String(config.poly_signature_type_label || 'EOA');
+  const canaryText = config.small_bankroll_canary ? '超小额 live smoke test' : '实盘执行';
+  const authText = liveAuthText(config);
+  const liveEntries = Number((liveExecution && liveExecution.total_entries) || 0);
+  const liveClosedEntries = Number((liveExecution && liveExecution.closed_entries) || 0);
+  const liveDecisionCount = Number((liveExecution && liveExecution.decision_count) || 0);
+  const liveWinRate = liveExecution ? liveExecution.win_rate : null;
+  const liveWinRateLabel = liveWinRate === null || liveWinRate === undefined ? 'N/A' : `${Number(liveWinRate).toFixed(1)}%`;
+  const liveRealizedPnl = Number((liveExecution && liveExecution.realized_pnl) || 0);
+  const liveDrift = Number((liveExecution && liveExecution.avg_entry_drift) || 0).toFixed(3);
+  const liveAlert = document.getElementById('live-alert');
+  const delayedAlert = document.getElementById('delayed-alert');
+  const navExperiments = document.getElementById('nav-experiments');
+  const experimentsSection = document.getElementById('section-experiments');
+  const sideResearchCard = document.getElementById('side-research-card');
+  const delayedOrderCount = Number(config.delayed_order_count || 0);
+  const delayedOrderAlertCount = Number(config.delayed_order_alert_count || 0);
+  const delayedOrderAlertSec = Number(config.delayed_order_alert_sec || 0);
+  const delayedOrderOldestAgeLabel = String(config.delayed_order_oldest_age_label || '--');
+  const delayedOrderFocusSlug = String(config.delayed_order_focus_slug || '最近订单');
+  const delayedOrderFocusOutcome = String(config.delayed_order_focus_outcome || '');
+  const delayedOrderFocusTime = String(config.delayed_order_focus_time || '');
+  const delayedOrderFocusAgeLabel = String(config.delayed_order_focus_age_label || delayedOrderOldestAgeLabel || '--');
+
+  document.getElementById('overview-note').textContent = config.dry_run
+    ? '上排先看研究预算与执行护栏，下排再看 executed 研究基线；不要把 shadow 或 experiment 当成默认策略。'
+    : '上排只显示真钱账户与当前 live 风控，下排只显示真实 executed 成交；模拟盘、shadow 和实验样本已经归档。';
+  document.getElementById('hero-subtitle').textContent = config.dry_run
+    ? '先看研究预算、实验和样本分层，再看 executed 研究基线、交易员、实验与信号。'
+    : '先看账户现金、策略预算和实盘护栏，再看真实 executed 表现、交易员、信号与风险。模拟盘和实验样本已经归档，不再混进当前页面。';
+  document.getElementById('brand-title').innerHTML = config.dry_run ? '体育 / 电竞<br>研究看板' : '体育 / 电竞<br>实盘看板';
+  document.getElementById('brand-subtitle').textContent = config.dry_run
+    ? '当前页面按 executed / shadow / experiment 分层观察研究样本。'
+    : '当前页面只保留真钱账户、真实 executed 成交和实盘风控；模拟盘、shadow 和实验样本已经归档。';
+
+  if (navExperiments) {
+    navExperiments.style.display = config.dry_run ? '' : 'none';
+  }
+  if (experimentsSection) {
+    experimentsSection.style.display = config.dry_run ? '' : 'none';
+  }
+  if (sideResearchCard) {
+    sideResearchCard.style.display = config.dry_run ? '' : 'none';
+  }
 
   document.getElementById('hero-scope').textContent = scopeText;
-  document.getElementById('hero-experiment').textContent = `${repeatText} · 空簿复查${config.stage2_no_book_recheck_experiment_enabled ? '开启' : '关闭'}`;
+  document.getElementById('hero-experiment').textContent = config.dry_run
+    ? `${repeatText} · 空簿复查${config.stage2_no_book_recheck_experiment_enabled ? '开启' : '关闭'}`
+    : 'live-only';
+  document.getElementById('hero-experiment-note').textContent = config.dry_run
+    ? '空簿延迟复查会继续收样本，先验证是否值得放宽。'
+    : liveEntries > 0
+      ? `只做体育 / 电竞；当前已有 ${liveEntries} 笔真实成交，继续积累纯实盘样本。`
+      : `只做体育 / 电竞；当前还没有真实成交，先验证账户读取、挂单和最小单量拦截是否正常。`;
+  document.getElementById('hero-guardrail').textContent = `${fmtMoney(maxTradeValue)} / ${maxPositions || 0} 仓`;
+  document.getElementById('hero-guardrail-note').textContent = config.dry_run
+    ? `纸面日预算 ${fmtMoney(dailyRiskBudget)} · 资本门控 ${config.paper_ignore_capital_gates ? '关闭' : '开启'}`
+    : `账户现金 ${accountCashText} · 已部署 ${fmtMoney(deployedValue)} · 挂单 ${openOrderCount} 笔`;
+  document.getElementById('hero-countdown-note').textContent = config.dry_run
+    ? 'Socket 实时推送，同时保留轮询兜底更新。'
+    : '真实资金模式下，先看账户现金、已部署风险和挂单数量，再看研究统计。';
   document.getElementById('mode-badge').textContent = modeText;
   document.getElementById('mode-badge').className = config.dry_run ? 'amber' : 'red';
   document.getElementById('sidebar-mode').textContent = modeText;
   document.getElementById('sidebar-scope').textContent = scopeText;
   document.getElementById('sidebar-discovery').textContent = discoveryText;
   document.getElementById('sidebar-monitor').textContent = `${config.monitored_trader_limit || 0} 名交易员`;
-  document.getElementById('sidebar-repeat').textContent = repeatText;
-  document.getElementById('sidebar-no-book').textContent = noBookText;
+  if (document.getElementById('sidebar-repeat')) document.getElementById('sidebar-repeat').textContent = repeatText;
+  if (document.getElementById('sidebar-no-book')) document.getElementById('sidebar-no-book').textContent = noBookText;
+
+  if (config.dry_run) {
+    liveAlert.classList.add('hidden');
+    if (delayedAlert) delayedAlert.classList.add('hidden');
+  } else {
+    liveAlert.classList.remove('hidden');
+    liveAlert.innerHTML = `<strong>真实资金提醒：</strong>账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，钱包 ${walletText}，funder ${config.funder_short || '未设置'}。当前 ${liveEntries > 0 ? `已有 ${liveEntries} 笔真实成交` : '尚无真实成交'}，低于市场最小单量的机会会被直接跳过，而不是强行放大仓位。`;
+    if (delayedAlert) {
+      if (config.delayed_order_alert_active) {
+        delayedAlert.classList.remove('hidden');
+        const focusSuffix = delayedOrderFocusOutcome ? ` · ${delayedOrderFocusOutcome}` : '';
+        const openOrderHint = openOrderCount > 0
+          ? `当前 CLOB 仍有 ${openOrderCount} 笔挂单，优先观察最终回执。`
+          : '当前 CLOB 没有挂单，但本地状态仍停在 delayed，建议人工复核。';
+        delayedAlert.innerHTML = `<strong>订单延迟提醒：</strong>${delayedOrderAlertCount} 笔订单在本地保持 delayed 超过 ${delayedOrderAlertSec} 秒；最老 ${delayedOrderOldestAgeLabel}，最近一笔 ${delayedOrderFocusSlug}${focusSuffix}（${delayedOrderFocusTime || delayedOrderFocusAgeLabel}）。${openOrderHint}`;
+      } else {
+        delayedAlert.classList.add('hidden');
+      }
+    }
+  }
 
   document.getElementById('sys-mode').textContent = modeText;
   document.getElementById('sys-scope').textContent = scopeText;
+  document.getElementById('sys-wallet').textContent = walletText;
+  document.getElementById('sys-funder').textContent = config.dry_run
+     ? '未启用'
+     : (config.funder_short || '未设置');
+  document.getElementById('sys-auth').textContent = authText;
   document.getElementById('sys-discovery').textContent = discoveryText;
+  document.getElementById('sys-budget-label').textContent = config.dry_run ? '研究预算' : '账户与预算';
   document.getElementById('sys-budget').textContent = config.dry_run
     ? `纸面预算 ${fmtMoney(config.paper_daily_risk_budget)} · 资本门控 ${config.paper_ignore_capital_gates ? '关闭' : '开启'}`
-    : `实盘资金 ${fmtMoney(config.bankroll)}`;
-  document.getElementById('sys-experiments').textContent = `repeat-entry ${repeatText}；空簿延迟复查 ${noBookText}`;
+    : `账户现金 ${accountCashText} · 策略预算 ${fmtMoney(strategyBankroll)} · 差额 ${accountCashDeltaText}`;
+  document.getElementById('sys-guards-label').textContent = config.dry_run ? '研究护栏' : '实盘护栏';
+  document.getElementById('sys-guards').textContent = config.dry_run
+    ? `单笔上限 ${fmtMoney(maxTradeValue)} · 确认 ${config.min_signal_confirm_sec || 0}s`
+    : `单笔 ${fmtMoney(maxTradeValue)} · 已部署 ${fmtMoney(deployedValue)} · 挂单 ${openOrderCount} · 持仓 ${openPositionCount}/${maxPositions}${delayedOrderCount > 0 ? ` · 延迟 ${delayedOrderCount}` : ''}`;
+  document.getElementById('sys-experiments').textContent = config.dry_run
+    ? `repeat-entry ${repeatText}；空簿延迟复查 ${noBookText}`
+    : '模拟盘 / shadow / experiment 已归档，不再进入当前实盘视图';
 
-  const bankrollNote = document.getElementById('s-bankroll-note');
   if (config.dry_run) {
+    document.getElementById('label-bankroll').textContent = '研究资金';
+    document.getElementById('label-deployed').textContent = '已部署风险';
+    document.getElementById('label-budget-left').textContent = '剩余日预算';
+    document.getElementById('label-max-trade').textContent = '单笔上限';
+    document.getElementById('label-samples').textContent = '已执行样本';
+    document.getElementById('label-closed').textContent = '已平仓样本';
+    document.getElementById('label-winrate').textContent = '决策胜率';
+    document.getElementById('label-realized').textContent = '已实现收益';
+    document.getElementById('label-signals').textContent = '最新信号';
+    document.getElementById('label-open-positions').textContent = '当前持仓';
+    document.getElementById('s-bankroll').textContent = fmtMoney(strategyBankroll);
+    document.getElementById('s-bankroll').className = 'stat-value blue';
     const bankrollText = config.live_bankroll !== config.bankroll
       ? `研究资金 ${fmtMoney(config.bankroll)} / live ${fmtMoney(config.live_bankroll)}`
       : `研究资金 ${fmtMoney(config.bankroll)}`;
-    bankrollNote.textContent = `${bankrollText} · stake ${config.stake_pct}% · ${scopeText}`;
+    document.getElementById('s-bankroll-note').textContent = `${bankrollText} · stake ${config.stake_pct}% · ${scopeText}`;
+    document.getElementById('s-deployed').textContent = fmtMoney(deployedValue);
+    document.getElementById('s-deployed').className = `stat-value ${deployedValue > 0 ? 'amber' : 'blue'}`;
+    document.getElementById('s-deployed-note').textContent = '纸面口径下仍按 open executed 视图展示';
+    document.getElementById('s-budget-left').textContent = fmtMoney(remainingBudget);
+    document.getElementById('s-budget-left').className = 'stat-value blue';
+    document.getElementById('s-budget-left-note').textContent = `纸面日预算 ${fmtMoney(dailyRiskBudget)}`;
+    document.getElementById('s-max-trade').textContent = fmtMoney(maxTradeValue);
+    document.getElementById('s-max-trade').className = 'stat-value';
+    document.getElementById('s-max-trade-note').textContent = `max trade ${Number(config.max_trade_pct || 0).toFixed(1)}% of bankroll`;
+    document.getElementById('s-signals').textContent = stats.signal_count;
+    document.getElementById('s-signals').className = 'stat-value';
+    document.getElementById('s-signals-note').innerHTML = `买入 <span class="green" id="s-buys">${stats.buy_count}</span> / 卖出 <span class="red" id="s-sells">${stats.sell_count}</span> / 开仓 <span id="s-open">0</span>`;
+    document.getElementById('s-open-positions').textContent = `${openPositionCount} / ${maxPositions}`;
+    document.getElementById('s-open-positions').className = 'stat-value';
+    document.getElementById('s-open-positions-note').textContent = 'open executed positions 与上限';
   } else {
-    bankrollNote.textContent = `实盘 stake ${config.stake_pct}% · ${scopeText}`;
+    document.getElementById('label-bankroll').textContent = '账户现金';
+    document.getElementById('label-deployed').textContent = '策略预算';
+    document.getElementById('label-budget-left').textContent = '已部署风险';
+    document.getElementById('label-max-trade').textContent = '剩余日预算';
+    document.getElementById('label-samples').textContent = '单笔上限';
+    document.getElementById('label-closed').textContent = '挂单数量';
+    document.getElementById('label-winrate').textContent = '真实成交';
+    document.getElementById('label-realized').textContent = '真实已实现收益';
+    document.getElementById('label-signals').textContent = '最新信号';
+    document.getElementById('label-open-positions').textContent = '当前 live 持仓';
+
+    document.getElementById('s-bankroll').textContent = accountCashText;
+    document.getElementById('s-bankroll').className = `stat-value ${hasAccountCash ? 'blue' : 'red'}`;
+    document.getElementById('s-bankroll-note').textContent =
+      hasAccountCash
+        ? `Polymarket 可用余额 · 策略预算 ${fmtMoney(strategyBankroll)} · 差额 ${accountCashDeltaText}`
+        : `还没有成功读取账户余额，请先检查 live 鉴权`;
+
+    document.getElementById('s-deployed').textContent = fmtMoney(strategyBankroll);
+    document.getElementById('s-deployed').className = 'stat-value blue';
+    document.getElementById('s-deployed-note').textContent = '本地机器人预算上限，不等于账户总现金';
+
+    document.getElementById('s-budget-left').textContent = fmtMoney(deployedValue);
+    document.getElementById('s-budget-left').className = `stat-value ${deployedValue > 0 ? 'amber' : 'blue'}`;
+    document.getElementById('s-budget-left-note').textContent = `只统计非 dry_run executed 持仓 · 上限 ${fmtMoney(dailyRiskBudget)}`;
+
+    document.getElementById('s-max-trade').textContent = fmtMoney(remainingBudget);
+    document.getElementById('s-max-trade').className = 'stat-value';
+    document.getElementById('s-max-trade-note').textContent = `日预算 ${fmtMoney(dailyRiskBudget)} · 日损止损 ${fmtMoney(dailyLossLimit)}`;
+
+    document.getElementById('s-simulated').textContent = fmtMoney(maxTradeValue);
+    document.getElementById('s-simulated').className = 'stat-value';
+    document.getElementById('s-simulated-note').textContent = `MAX_TRADE_PCT ${Number(config.max_trade_pct || 0).toFixed(1)}% · trader 上限 ${fmtMoney(config.max_trader_exposure_value || 0)}`;
+
+    document.getElementById('s-closed').textContent = openOrderCount;
+    document.getElementById('s-closed').className = 'stat-value';
+    document.getElementById('s-closed-note').textContent = '来自 CLOB open orders，只代表当前挂单，不代表已经成交';
+
+    document.getElementById('s-winrate').textContent = liveEntries;
+    document.getElementById('s-winrate').className = `stat-value ${liveEntries > 0 ? 'blue' : ''}`;
+    document.getElementById('s-winrate-note').textContent =
+      liveEntries > 0
+        ? `已平仓 ${liveClosedEntries} · 已判定 ${liveDecisionCount} · live 胜率 ${liveWinRateLabel}`
+        : '当前尚无真实 executed 成交；当前页面只会等待真实样本，不再混入模拟成绩';
+
+    document.getElementById('s-realized').textContent = fmtSignedMoney(liveRealizedPnl);
+    document.getElementById('s-realized').className = `stat-value ${liveRealizedPnl >= 0 ? 'green' : 'red'}`;
+    document.getElementById('s-realized-note').innerHTML = `真实 executed 已实现收益 · 平均入场偏移 <span id="s-drift">${liveDrift}</span>`;
+
+    document.getElementById('s-signals').textContent = stats.signal_count;
+    document.getElementById('s-signals').className = 'stat-value';
+    document.getElementById('s-signals-note').innerHTML = `买入 <span class="green" id="s-buys">${stats.buy_count}</span> / 卖出 <span class="red" id="s-sells">${stats.sell_count}</span> / 真实成交 ${liveEntries}`;
+
+    document.getElementById('s-open-positions').textContent = `${openPositionCount} / ${maxPositions}`;
+    document.getElementById('s-open-positions').className = 'stat-value';
+    document.getElementById('s-open-positions-note').textContent = `只统计非 dry_run executed 持仓 · 挂单 ${openOrderCount} 笔`;
   }
 
-  document.getElementById('s-signals').textContent = stats.signal_count;
   document.getElementById('s-buys').textContent = stats.buy_count;
   document.getElementById('s-sells').textContent = stats.sell_count;
 
   document.getElementById('sidebar-footnote').textContent =
-    `当前只看 ${scopeText}。Repeat-entry ${repeatText}，空簿延迟复查 ${noBookText}。指标口径保持 executed / shadow / experiment 分层。`;
+    config.dry_run
+      ? `当前只看 ${scopeText}。Repeat-entry ${repeatText}，空簿延迟复查 ${noBookText}。指标口径保持 executed / shadow / experiment 分层。`
+      : `当前是真实资金 ${canaryText}：账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，只看 ${scopeText}。模拟盘、shadow 和 experiment 已归档；若订单低于市场最小单量，会直接跳过而不是强行放大仓位。`;
 }
 
 function highlightSections() {
@@ -1551,28 +1888,30 @@ function render(data) {
   const config = data.config || {};
   const stats = data.stats || {};
   const performance = data.performance || {};
+  const liveExecution = data.live_execution || {};
 
   pollInterval = config.poll_interval || 15;
   document.getElementById('cycle-num').textContent = data.cycle || 0;
   document.getElementById('update-time').textContent = (data.timestamp || '').split(' ')[1] || '--:--:--';
-  document.getElementById('s-bankroll').textContent = fmtMoney(config.bankroll || 0);
 
-  renderSystem(config, stats, performance);
-  renderPerformance(performance);
+  renderSystem(config, stats, performance, liveExecution);
+  renderPerformance(performance, config, liveExecution);
   renderTraders(data.traders || []);
-  renderBlockedReasons(data.blocked_reasons || []);
-  renderExperimentWatch([
-    {
-      name: 'Repeat Entry（已暂停）',
-      enabled: !!config.stage2_repeat_entry_experiment_enabled,
-      row: data.repeat_entry_experiment || {}
-    },
-    {
-      name: '空簿延迟复查',
-      enabled: !!config.stage2_no_book_recheck_experiment_enabled,
-      row: data.no_book_recheck_experiment || {}
-    }
-  ]);
+  if (config.show_research_panels) {
+    renderBlockedReasons(data.blocked_reasons || []);
+    renderExperimentWatch([
+      {
+        name: 'Repeat Entry（已暂停）',
+        enabled: !!config.stage2_repeat_entry_experiment_enabled,
+        row: data.repeat_entry_experiment || {}
+      },
+      {
+        name: '空簿延迟复查',
+        enabled: !!config.stage2_no_book_recheck_experiment_enabled,
+        row: data.no_book_recheck_experiment || {}
+      }
+    ]);
+  }
   renderSignals(data.trades || []);
   renderRiskLogs(data.risk_logs || []);
 

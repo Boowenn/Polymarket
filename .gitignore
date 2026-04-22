@@ -8,6 +8,7 @@ copybot.db
 copybot.db-shm
 copybot.db-wal
 copybot.log
+archives/
 
 .claude/
 .pytest_cache/

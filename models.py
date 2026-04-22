@@ -17,6 +17,11 @@ BLOCK_REASON_META = {
         "default_action": "watch",
         "note": "Do not chase empty books. If you test this, re-check later instead of forcing an immediate fill.",
     },
+    "below_min_size": {
+        "label": "Below Market Minimum",
+        "default_action": "keep",
+        "note": "Do not auto-inflate tiny copy sizes just to force a live fill. Increase bankroll or accept sparse canary fills.",
+    },
     "market_drift": {
         "label": "Price Drift Guard",
         "default_action": "keep",
@@ -85,6 +90,8 @@ def normalize_block_reason(reason):
         return "repeat_harvest"
     if lowered.startswith("no executable book levels"):
         return "no_book_levels"
+    if lowered.startswith("order size below market minimum"):
+        return "below_min_size"
     if lowered.startswith("market drift too large"):
         return "market_drift"
     if lowered.startswith("top level too thin"):
@@ -183,6 +190,13 @@ def _ensure_column(conn, table_name, column_name, ddl):
         except sqlite3.OperationalError as exc:
             if "duplicate column name" not in str(exc).lower():
                 raise
+
+
+def _scalar(conn, query, params=()):
+    row = conn.execute(query, params).fetchone()
+    if row is None:
+        return 0
+    return row[0]
 
 
 def init_db():
@@ -344,6 +358,137 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_journal_sample_experiment ON trade_journal(sample_type, experiment_key, entry_timestamp DESC);
             """
         )
+
+
+def get_non_live_data_counts():
+    with db() as conn:
+        return {
+            "journal_shadow": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE COALESCE(sample_type, 'executed') = 'shadow'",
+                )
+                or 0
+            ),
+            "journal_experiment": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE COALESCE(sample_type, 'executed') = 'experiment'",
+                )
+                or 0
+            ),
+            "journal_dry_run": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE LOWER(COALESCE(entry_status, '')) = 'dry_run'",
+                )
+                or 0
+            ),
+            "trade_dry_run_mirrors": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trades WHERE LOWER(COALESCE(our_status, '')) = 'dry_run'",
+                )
+                or 0
+            ),
+            "risk_log_rows": int(_scalar(conn, "SELECT COUNT(*) FROM risk_log") or 0),
+            "pnl_log_rows": int(_scalar(conn, "SELECT COUNT(*) FROM pnl_log") or 0),
+        }
+
+
+def purge_non_live_state(clear_risk_logs=True, clear_pnl_logs=True):
+    with db() as conn:
+        before = {
+            "journal_shadow": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE COALESCE(sample_type, 'executed') = 'shadow'",
+                )
+                or 0
+            ),
+            "journal_experiment": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE COALESCE(sample_type, 'executed') = 'experiment'",
+                )
+                or 0
+            ),
+            "journal_dry_run": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE LOWER(COALESCE(entry_status, '')) = 'dry_run'",
+                )
+                or 0
+            ),
+            "trade_dry_run_mirrors": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trades WHERE LOWER(COALESCE(our_status, '')) = 'dry_run'",
+                )
+                or 0
+            ),
+            "risk_log_rows": int(_scalar(conn, "SELECT COUNT(*) FROM risk_log") or 0),
+            "pnl_log_rows": int(_scalar(conn, "SELECT COUNT(*) FROM pnl_log") or 0),
+        }
+
+        conn.execute(
+            """
+            DELETE FROM trade_journal
+            WHERE COALESCE(sample_type, 'executed') != 'executed'
+               OR LOWER(COALESCE(entry_status, '')) = 'dry_run'
+            """
+        )
+        conn.execute(
+            """
+            UPDATE trades
+            SET mirrored = 0,
+                our_order_id = NULL,
+                our_side = NULL,
+                our_size = NULL,
+                our_price = NULL,
+                our_status = NULL
+            WHERE LOWER(COALESCE(our_status, '')) = 'dry_run'
+            """
+        )
+        if clear_risk_logs:
+            conn.execute("DELETE FROM risk_log")
+        if clear_pnl_logs:
+            conn.execute("DELETE FROM pnl_log")
+
+        after = {
+            "journal_shadow": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE COALESCE(sample_type, 'executed') = 'shadow'",
+                )
+                or 0
+            ),
+            "journal_experiment": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE COALESCE(sample_type, 'executed') = 'experiment'",
+                )
+                or 0
+            ),
+            "journal_dry_run": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE LOWER(COALESCE(entry_status, '')) = 'dry_run'",
+                )
+                or 0
+            ),
+            "trade_dry_run_mirrors": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trades WHERE LOWER(COALESCE(our_status, '')) = 'dry_run'",
+                )
+                or 0
+            ),
+            "risk_log_rows": int(_scalar(conn, "SELECT COUNT(*) FROM risk_log") or 0),
+            "pnl_log_rows": int(_scalar(conn, "SELECT COUNT(*) FROM pnl_log") or 0),
+        }
+
+    return {"before": before, "after": after}
 
 
 # --- Trader operations ---
@@ -652,6 +797,56 @@ def get_recent_trades(limit=20):
     return [dict(row) for row in rows]
 
 
+def get_recent_delayed_trades(limit=10):
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                tr.*,
+                CASE
+                    WHEN COALESCE(tr.signal_source, 'copy') = 'consensus' THEN 'Consensus'
+                    ELSE COALESCE(t.username, tr.trader_wallet)
+                END AS trader_username,
+                COALESCE(p.status, 'observe') AS trader_status,
+                COALESCE(p.quality_score, 0) AS trader_score
+            FROM trades tr
+            LEFT JOIN traders t ON t.wallet = tr.trader_wallet
+            LEFT JOIN trader_profiles p ON p.wallet = tr.trader_wallet
+            WHERE tr.mirrored = 1
+              AND LOWER(COALESCE(tr.our_status, '')) = 'delayed'
+            ORDER BY tr.timestamp DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_delayed_trades_for_reconciliation(limit=10, min_age_sec=0):
+    cutoff_ts = time.time() - max(float(min_age_sec or 0), 0)
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM trades
+            WHERE mirrored = 1
+              AND COALESCE(our_order_id, '') NOT IN ('', 'unknown')
+              AND timestamp <= ?
+              AND (
+                    LOWER(COALESCE(our_status, '')) = 'delayed'
+                    OR (
+                        LOWER(COALESCE(our_status, '')) IN ('matched', 'order_status_matched')
+                        AND COALESCE(our_size, 0) <= 0
+                    )
+                  )
+            ORDER BY timestamp ASC
+            LIMIT ?
+            """,
+            (cutoff_ts, int(limit)),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def get_mirrored_trades():
     with db() as conn:
         rows = conn.execute(
@@ -726,7 +921,7 @@ def upsert_trade_journal(
         )
 
 
-def close_open_journal_entries(signal):
+def close_open_journal_entries(signal, exit_price=None, exit_ts=None, close_trade_id=None, exit_reason="opposite_signal"):
     with db() as conn:
         rows = conn.execute(
             """
@@ -747,10 +942,22 @@ def close_open_journal_entries(signal):
             ),
         ).fetchall()
 
-        exit_price = float(signal.get("price", 0) or 0)
-        exit_ts = float(signal.get("timestamp", time.time()) or time.time())
-        close_trade_id = signal.get("id", "")
-        exit_reason = "opposite_signal"
+        exit_price = float(
+            exit_price
+            if exit_price is not None
+            else (signal.get("price", 0) or 0)
+        )
+        exit_ts = float(
+            exit_ts
+            if exit_ts is not None
+            else (signal.get("timestamp", time.time()) or time.time())
+        )
+        close_trade_id = str(
+            close_trade_id
+            if close_trade_id is not None
+            else signal.get("id", "")
+        )
+        updated = 0
 
         for row in rows:
             entry_basis = float(row["protected_price"] or row["tradable_price"] or row["signal_price"] or 0)
@@ -779,6 +986,9 @@ def close_open_journal_entries(signal):
                     row["trade_id"],
                 ),
             )
+            updated += 1
+
+    return updated
 
 
 def get_recent_trade_journal(limit=10):
@@ -1038,6 +1248,55 @@ def get_trade_journal_summary(since_ts=None, sample_types=None, experiment_key=N
         params.append(str(experiment_key or ""))
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
+
+    with db() as conn:
+        row = conn.execute(sql, params).fetchone()
+    if row:
+        return _summary_with_derived_metrics(dict(row))
+    return _summary_with_derived_metrics(
+        {
+            "total_entries": 0,
+            "open_entries": 0,
+            "closed_entries": 0,
+            "realized_pnl": 0,
+            "avg_entry_drift": 0,
+            "wins": 0,
+            "losses": 0,
+            "flat_count": 0,
+        }
+    )
+
+
+def _active_executed_status_clause():
+    if config.DRY_RUN:
+        return "LOWER(COALESCE(entry_status, '')) = 'dry_run'"
+    return "LOWER(COALESCE(entry_status, '')) NOT IN ('', 'dry_run')"
+
+
+def get_live_execution_summary(since_ts=None):
+    sql = """
+        SELECT
+            COUNT(*) AS total_entries,
+            SUM(CASE WHEN exit_timestamp IS NULL THEN 1 ELSE 0 END) AS open_entries,
+            SUM(CASE WHEN exit_timestamp IS NOT NULL THEN 1 ELSE 0 END) AS closed_entries,
+            COALESCE(SUM(realized_pnl), 0) AS realized_pnl,
+            COALESCE(AVG(ABS(COALESCE(tradable_price, signal_price) - signal_price)), 0) AS avg_entry_drift,
+            SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins,
+            SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) AS losses,
+            SUM(
+                CASE
+                    WHEN exit_timestamp IS NOT NULL AND ABS(COALESCE(realized_pnl, 0)) <= 0.000001 THEN 1
+                    ELSE 0
+                END
+            ) AS flat_count
+        FROM trade_journal
+        WHERE COALESCE(sample_type, 'executed') = 'executed'
+          AND LOWER(COALESCE(entry_status, '')) NOT IN ('', 'dry_run')
+    """
+    params = []
+    if since_ts is not None:
+        sql += " AND entry_timestamp >= ?"
+        params.append(float(since_ts))
 
     with db() as conn:
         row = conn.execute(sql, params).fetchone()
@@ -1421,13 +1680,15 @@ def get_latest_pnl():
 
 
 def get_daily_deployed_value():
+    status_clause = _active_executed_status_clause()
     with db() as conn:
         row = conn.execute(
-            """
+            f"""
             SELECT COALESCE(SUM(COALESCE(entry_value, entry_size * COALESCE(protected_price, tradable_price, signal_price), 0)), 0) AS spent
             FROM trade_journal
             WHERE COALESCE(sample_type, 'executed') = 'executed'
               AND exit_timestamp IS NULL
+              AND {status_clause}
             """
         ).fetchone()
     return row["spent"] if row else 0
@@ -1438,14 +1699,16 @@ def get_daily_pnl():
 
 
 def get_exposure_by_trader(wallet, lookback_sec=86400):
+    status_clause = _active_executed_status_clause()
     with db() as conn:
         row = conn.execute(
-            """
+            f"""
             SELECT COALESCE(SUM(COALESCE(entry_value, entry_size * COALESCE(protected_price, tradable_price, signal_price), 0)), 0) AS exposure
             FROM trade_journal
             WHERE COALESCE(sample_type, 'executed') = 'executed'
               AND exit_timestamp IS NULL
               AND trader_wallet = ?
+              AND {status_clause}
             """,
             (wallet,),
         ).fetchone()
@@ -1453,12 +1716,14 @@ def get_exposure_by_trader(wallet, lookback_sec=86400):
 
 
 def get_exposure_by_market(condition_id, outcome=None, lookback_sec=86400):
-    sql = """
+    status_clause = _active_executed_status_clause()
+    sql = f"""
         SELECT COALESCE(SUM(COALESCE(entry_value, entry_size * COALESCE(protected_price, tradable_price, signal_price), 0)), 0) AS exposure
         FROM trade_journal
         WHERE COALESCE(sample_type, 'executed') = 'executed'
           AND exit_timestamp IS NULL
           AND condition_id = ?
+          AND {status_clause}
     """
     params = [condition_id]
     if outcome is not None:
@@ -1492,13 +1757,15 @@ def get_recent_risk_logs(limit=10):
 # --- Position operations ---
 
 def get_open_position_count():
+    status_clause = _active_executed_status_clause()
     with db() as conn:
         row = conn.execute(
-            """
+            f"""
             SELECT COUNT(DISTINCT condition_id || '|' || outcome) AS cnt
             FROM trade_journal
             WHERE COALESCE(sample_type, 'executed') = 'executed'
               AND exit_timestamp IS NULL
+              AND {status_clause}
             """
         ).fetchone()
     return row["cnt"] if row else 0

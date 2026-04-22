@@ -6,17 +6,17 @@ Verified local baseline:
 
 - Date: `2026-04-22` JST
 - Command: `python report.py --days 3 --top 5`
-- `executed_entries = 128`
-- `executed_closed = 83`
-- `executed_decision_count = 81`
-- `executed_win_rate = 46.9%`
-- `executed_realized_pnl = -36.15`
-- `shadow_entries = 1902`
-- `shadow_closed = 1568`
-- `shadow_decision_count = 1524`
-- `shadow_win_rate = 65.2%`
-- `shadow_realized_pnl = +142.88`
-- `stage2_repeat_entry_experiment = 23 entries / 9 closed / 9 decided / -30.98 pnl`
+- `executed_entries = 200`
+- `executed_closed = 185`
+- `executed_decision_count = 182`
+- `executed_win_rate = 50.0%`
+- `executed_realized_pnl = +60.05`
+- `shadow_entries = 3582`
+- `shadow_closed = 3130`
+- `shadow_decision_count = 2699`
+- `shadow_win_rate = 67.7%`
+- `shadow_realized_pnl = +387.42`
+- `stage2_repeat_entry_experiment = 60 entries / 58 closed / 58 decided / -87.62 pnl`
 
 Use this snapshot as the current reference point until a newer report is intentionally recorded.
 
@@ -74,3 +74,32 @@ Do not claim stable live-readiness until all of the following are true:
 - exposure and position guards are based on open executed journal state
 - dashboards and reports keep sample types separated
 - experiments stay isolated from default policy until reviewed
+- wallet auth is verified with a read-only authenticated CLOB call, not just local client initialization
+- proxy wallet users set the correct `POLY_SIGNATURE_TYPE` and `POLY_FUNDER` from Polymarket account settings before any live canary
+
+### Small-Bankroll Canary Policy
+
+If live bankroll is extremely small (for example, around `$20`), treat the run as an execution smoke test first:
+
+- keep secrets in local `.env` only and never commit them
+- keep scope narrowed to the intended live segment, such as `sports,esports`
+- keep repeat-entry paused and avoid widening experiments
+- show live guardrails clearly in the dashboard: bankroll, deployed notional, remaining daily budget, max trade size, max positions, wallet type, and funder summary
+- surface any live order that stays locally `delayed` beyond the alert threshold before widening size or changing execution rules
+- re-query delayed live orders on a short loop and write back `matched / canceled / expired` before treating them as unresolved execution failures
+- only write `opposite_signal` exits when the bot's mirrored opposite-side order actually books a fill; the copied trader's reversal alone is not enough
+- show real account cash separately from the strategy bankroll cap; the wallet balance is not the same thing as the bot budget
+- when live mode is enabled, exclude historical `dry_run` executed positions from live deployed-risk, exposure, and max-position views
+- block orders that fall below the market `min_order_size` instead of automatically increasing size to force a fill
+
+This avoids disguising a sizing problem as successful live execution.
+
+### Live Cutover Hygiene
+
+When the operator decides that dry-run research is finished and the active system should become live-only:
+
+- archive the current DB locally before deleting anything
+- clear active `trade_journal` rows where `sample_type != executed` or `entry_status = dry_run`
+- reset `trades` rows that were only mirrored in `dry_run` so signal history stays but fake mirror metadata does not
+- clear old `risk_log` / `pnl_log` rows if they only represent pre-live research state
+- after cutover, dashboard and CLI reports should describe only real executed behavior
