@@ -1,13 +1,16 @@
 import logging
+import threading
 import time
 
 import config
+import liquidity
 import models
 from risk import risk_checker
 
 logger = logging.getLogger("executor")
 
 _clob_client = None
+_experiment_lock = threading.Lock()
 
 
 def _safe_float(value, default=None):
@@ -136,6 +139,106 @@ def _record_repeat_entry_experiment(signal, size, value, blocked_reason):
     )
 
 
+def _can_record_experiment(signal, experiment_key, max_entries):
+    if max_entries <= 0:
+        return False, "experiment quota disabled"
+
+    experiment_entries = models.get_experiment_entry_count(
+        experiment_key,
+        signal.get("trader_wallet", ""),
+        signal.get("condition_id", ""),
+        signal.get("outcome", ""),
+    )
+    if experiment_entries >= max_entries:
+        return False, "experiment quota reached"
+    return True, ""
+
+
+def _record_no_book_delayed_recheck_experiment(signal, size, value, blocked_reason):
+    if models.normalize_block_reason(blocked_reason) != "no_book_levels":
+        return
+    if not config.stage2_no_book_delayed_recheck_experiment_enabled():
+        return
+
+    with _experiment_lock:
+        approved, experiment_reason = _can_record_experiment(
+            signal,
+            config.NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY,
+            config.NO_BOOK_DELAYED_RECHECK_MAX_EXTRA_ENTRIES,
+        )
+    if not approved:
+        logger.info(
+            f"[STAGE2 SKIP] no-book delayed recheck not scheduled: {experiment_reason} | "
+            f"{signal.get('market_slug', '')} {signal.get('side', 'BUY')}"
+        )
+        return
+
+    thread = threading.Thread(
+        target=_run_no_book_delayed_recheck_experiment,
+        args=(dict(signal), float(size or 0), float(value or 0), blocked_reason),
+        daemon=True,
+        name=f"no-book-recheck-{signal.get('id', 'unknown')}",
+    )
+    thread.start()
+    logger.info(
+        f"[STAGE2] no-book delayed recheck scheduled | "
+        f"{signal.get('signal_source', 'copy')} {signal.get('market_slug', '')} "
+        f"{signal.get('side', 'BUY')} delay={config.NO_BOOK_DELAYED_RECHECK_DELAY_SEC}s"
+    )
+
+
+def _run_no_book_delayed_recheck_experiment(signal, size, value, blocked_reason):
+    delay_sec = max(int(config.NO_BOOK_DELAYED_RECHECK_DELAY_SEC or 0), 0)
+    if delay_sec:
+        time.sleep(delay_sec)
+
+    assessment = liquidity.assess_execution(signal, size)
+    if not assessment.get("ok"):
+        logger.info(
+            f"[STAGE2 SKIP] no-book delayed recheck still blocked: {assessment.get('reason', 'orderbook check failed')} | "
+            f"{signal.get('market_slug', '')} {signal.get('side', 'BUY')}"
+        )
+        return
+
+    with _experiment_lock:
+        approved, experiment_reason = _can_record_experiment(
+            signal,
+            config.NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY,
+            config.NO_BOOK_DELAYED_RECHECK_MAX_EXTRA_ENTRIES,
+        )
+        if not approved:
+            logger.info(
+                f"[STAGE2 SKIP] no-book delayed recheck not recorded: {experiment_reason} | "
+                f"{signal.get('market_slug', '')} {signal.get('side', 'BUY')}"
+            )
+            return
+
+        recheck_signal = dict(signal)
+        recheck_signal["timestamp"] = time.time()
+        recheck_signal["_execution_assessment"] = assessment
+        tradable_price = float(assessment.get("avg_price", signal.get("price", 0)) or 0)
+        protected_price = float(assessment.get("limit_price", tradable_price) or tradable_price)
+        recheck_value = round(size * tradable_price, 4) if tradable_price > 0 else round(value, 4)
+        models.upsert_trade_journal(
+            recheck_signal,
+            size=size,
+            value=recheck_value,
+            status="stage2_no_book_delayed_recheck_shadow",
+            tradable_price=tradable_price,
+            protected_price=protected_price,
+            sample_type="experiment",
+            trade_id=_experiment_trade_id(signal, config.NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY),
+            experiment_key=config.NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY,
+            entry_reason=f"delayed_recheck:{blocked_reason}",
+        )
+
+    logger.info(
+        f"[STAGE2] no-book delayed recheck recorded | "
+        f"{signal.get('signal_source', 'copy')} {signal.get('market_slug', '')} {signal.get('side', 'BUY')} "
+        f"tradable=${tradable_price:.3f} limit=${protected_price:.3f}"
+    )
+
+
 def _get_clob_client():
     global _clob_client
     if _clob_client is not None:
@@ -192,6 +295,7 @@ def execute_trade(signal):
     if not approved:
         _record_blocked_shadow(signal, our_size, our_value, reason)
         _record_repeat_entry_experiment(signal, our_size, our_value, reason)
+        _record_no_book_delayed_recheck_experiment(signal, our_size, our_value, reason)
         logger.warning(
             f"BLOCKED: {reason} | {signal.get('signal_source', 'copy')} "
             f"{signal.get('market_slug', '')} {signal.get('side', 'BUY')}"

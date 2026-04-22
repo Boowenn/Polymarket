@@ -496,13 +496,14 @@
 
     <div class="panel full">
       <div class="panel-header">
-        <div class="panel-title">Stage 2 Repeat-Entry Experiment</div>
+        <div class="panel-title">Experiment Watch</div>
         <div class="panel-badge" id="stage2-count">0</div>
       </div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
+              <th>Experiment</th>
               <th>Status</th>
               <th class="text-right">Entries</th>
               <th class="text-right">Closed</th>
@@ -641,6 +642,9 @@ function renderPerformance(perf) {
   const stage2Entries = Number(perf.repeat_entry_experiment_entries || 0);
   const stage2ClosedEntries = Number(perf.repeat_entry_experiment_closed_entries || 0);
   const stage2Status = perf.repeat_entry_experiment_status || 'idle';
+  const noBookEntries = Number(perf.no_book_recheck_experiment_entries || 0);
+  const noBookClosedEntries = Number(perf.no_book_recheck_experiment_closed_entries || 0);
+  const noBookStatus = perf.no_book_recheck_experiment_status || 'idle';
 
   document.getElementById('s-simulated').textContent = executedEntries;
   document.getElementById('s-closed').textContent = executedClosedEntries;
@@ -680,7 +684,7 @@ function renderPerformance(perf) {
 
   document.getElementById('performance-note').textContent =
     executedClosedEntries > 0
-      ? `Executed 已平仓 ${executedClosedEntries} 笔，其中 ${executedDecisionCount} 笔已经明确胜负，win rate ${executedWinRateLabel}。Shadow 单独统计为 ${shadowEntries} 笔（${shadowClosedEntries} 已结算，${shadowDecisionCount} 笔已判定，${shadowWinRate === null || shadowWinRate === undefined ? 'N/A' : `${Number(shadowWinRate).toFixed(1)}%`}）。Experiment 单独统计为 ${experimentEntries} 笔（${experimentClosedEntries} 已结算，${experimentDecisionCount} 笔已判定，${experimentWinRate === null || experimentWinRate === undefined ? 'N/A' : `${Number(experimentWinRate).toFixed(1)}%`}）。${stage2Entries > 0 ? ` Repeat-entry stage2 当前 ${stage2Entries} 笔，${stage2ClosedEntries} 笔已结算，状态 ${stage2Status}。` : ''}`
+      ? `Executed 已平仓 ${executedClosedEntries} 笔，其中 ${executedDecisionCount} 笔已经明确胜负，win rate ${executedWinRateLabel}。Shadow 单独统计为 ${shadowEntries} 笔（${shadowClosedEntries} 已结算，${shadowDecisionCount} 笔已判定，${shadowWinRate === null || shadowWinRate === undefined ? 'N/A' : `${Number(shadowWinRate).toFixed(1)}%`}）。Experiment 单独统计为 ${experimentEntries} 笔（${experimentClosedEntries} 已结算，${experimentDecisionCount} 笔已判定，${experimentWinRate === null || experimentWinRate === undefined ? 'N/A' : `${Number(experimentWinRate).toFixed(1)}%`}）。${stage2Entries > 0 ? ` Repeat-entry 当前 ${stage2Entries} 笔，${stage2ClosedEntries} 笔已结算，状态 ${stage2Status}。` : ''}${noBookEntries > 0 ? ` No-book delayed recheck 当前 ${noBookEntries} 笔，${noBookClosedEntries} 笔已结算，状态 ${noBookStatus}。` : ''}`
       : shadowEntries > 0 || experimentEntries > 0
         ? `当前还没有任何 executed 样本平仓。Shadow 已记录 ${shadowEntries} 笔（${shadowClosedEntries} 已结算），experiment 已记录 ${experimentEntries} 笔（${experimentClosedEntries} 已结算），它们只用于研究，不直接证明可执行 edge。`
         : '当前还没有任何已平仓 / 已结算样本，所以这里显示 N/A，而不是把模拟建仓次数误算成全胜。';
@@ -723,39 +727,43 @@ function renderBlockedReasons(rows) {
   `).join('');
 }
 
-function renderStage2Experiment(row) {
-  const stage2Row = row || null;
+function renderStage2Experiment(rows) {
+  const stage2Rows = rows || [];
   const tbody = document.getElementById('stage2-body');
-  document.getElementById('stage2-count').textContent = stage2Row ? Number(stage2Row.total_entries || 0) : 0;
+  const totalEntries = stage2Rows.reduce((sum, item) => sum + Number((item.row && item.row.total_entries) || 0), 0);
+  document.getElementById('stage2-count').textContent = totalEntries;
 
-  if (!stage2Row) {
+  if (!stage2Rows.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="8" class="muted">No stage-2 repeat-entry experiment data yet.</td>
+        <td colspan="9" class="muted">No experiment watch data yet.</td>
       </tr>
     `;
     return;
   }
 
-  const topMarket = stage2Row.top_market
-    ? `${stage2Row.top_market} (${Number(stage2Row.top_market_share || 0).toFixed(1)}%)`
-    : 'N/A';
-  const topTrader = stage2Row.top_trader
-    ? `${stage2Row.top_trader} (${Number(stage2Row.top_trader_share || 0).toFixed(1)}%)`
-    : 'N/A';
-
-  tbody.innerHTML = `
-    <tr>
-      <td><span class="${actionClass(stage2Row.status === 'mature' ? 'experiment' : (stage2Row.status === 'idle' ? 'watch' : 'watch'))}">${stage2Row.status || 'idle'}</span></td>
-      <td class="text-right">${Number(stage2Row.total_entries || 0)}</td>
-      <td class="text-right">${Number(stage2Row.closed_entries || 0)}</td>
-      <td class="text-right">${stage2Row.win_rate === null ? 'N/A' : `${Number(stage2Row.win_rate).toFixed(1)}%`}</td>
-      <td class="text-right ${Number(stage2Row.realized_pnl || 0) >= 0 ? 'green' : 'red'}">${fmtSignedMoney(stage2Row.realized_pnl || 0)}</td>
-      <td class="text-right">${Number(stage2Row.distinct_markets || 0)} / ${Number(stage2Row.closed_distinct_markets || 0)}</td>
-      <td class="text-right">${Number(stage2Row.distinct_traders || 0)} / ${Number(stage2Row.closed_distinct_traders || 0)}</td>
-      <td class="block-note">Top market: ${topMarket}<br>Top trader: ${topTrader}</td>
-    </tr>
-  `;
+  tbody.innerHTML = stage2Rows.map(item => {
+    const row = item.row || {};
+    const topMarket = row.top_market
+      ? `${row.top_market} (${Number(row.top_market_share || 0).toFixed(1)}%)`
+      : 'N/A';
+    const topTrader = row.top_trader
+      ? `${row.top_trader} (${Number(row.top_trader_share || 0).toFixed(1)}%)`
+      : 'N/A';
+    return `
+      <tr>
+        <td>${item.name}</td>
+        <td><span class="${actionClass(row.status === 'mature' ? 'experiment' : 'watch')}">${item.enabled ? (row.status || 'collecting') : 'paused'}</span></td>
+        <td class="text-right">${Number(row.total_entries || 0)}</td>
+        <td class="text-right">${Number(row.closed_entries || 0)}</td>
+        <td class="text-right">${row.win_rate === null || row.win_rate === undefined ? 'N/A' : `${Number(row.win_rate).toFixed(1)}%`}</td>
+        <td class="text-right ${Number(row.realized_pnl || 0) >= 0 ? 'green' : 'red'}">${fmtSignedMoney(row.realized_pnl || 0)}</td>
+        <td class="text-right">${Number(row.distinct_markets || 0)} / ${Number(row.closed_distinct_markets || 0)}</td>
+        <td class="text-right">${Number(row.distinct_traders || 0)} / ${Number(row.closed_distinct_traders || 0)}</td>
+        <td class="block-note">Top market: ${topMarket}<br>Top trader: ${topTrader}</td>
+      </tr>
+    `;
+  }).join('');
 }
 
 function render(data) {
@@ -792,7 +800,18 @@ function render(data) {
 
   renderPerformance(performance);
   renderBlockedReasons(data.blocked_reasons || []);
-  renderStage2Experiment(data.repeat_entry_experiment || null);
+  renderStage2Experiment([
+    {
+      name: 'repeat-entry',
+      enabled: !!config.stage2_repeat_entry_experiment_enabled,
+      row: data.repeat_entry_experiment || {}
+    },
+    {
+      name: 'no-book delayed recheck',
+      enabled: !!config.stage2_no_book_recheck_experiment_enabled,
+      row: data.no_book_recheck_experiment || {}
+    }
+  ]);
 
   document.getElementById('trader-count').textContent = data.traders.length;
   document.getElementById('traders-body').innerHTML = data.traders.map(trader => `

@@ -1176,6 +1176,10 @@ def get_performance_snapshot(since_ts=None):
     experiment_summary = get_trade_journal_summary(since_ts=since_ts, sample_types=("experiment",))
     research_summary = get_trade_journal_summary(since_ts=since_ts)
     repeat_experiment = get_experiment_analysis(config.REPEAT_ENTRY_EXPERIMENT_KEY, since_ts=since_ts)
+    no_book_recheck_experiment = get_experiment_analysis(
+        config.NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY,
+        since_ts=since_ts,
+    )
     blocked_reason_rows = get_block_reason_analysis(since_ts=since_ts, sample_types=("shadow",), limit=1)
     blocked_reason_focus = blocked_reason_rows[0] if blocked_reason_rows else None
     sample_metrics = {
@@ -1238,6 +1242,28 @@ def get_performance_snapshot(since_ts=None):
         "repeat_entry_experiment_top_trader": repeat_experiment.get("top_trader", ""),
         "repeat_entry_experiment_top_trader_share": float(repeat_experiment.get("top_trader_share", 0) or 0),
         "repeat_entry_experiment_status": repeat_experiment.get("status", "idle"),
+        "no_book_recheck_experiment_enabled": config.stage2_no_book_delayed_recheck_experiment_enabled(),
+        "no_book_recheck_experiment_entries": int(no_book_recheck_experiment.get("total_entries", 0) or 0),
+        "no_book_recheck_experiment_open_entries": int(no_book_recheck_experiment.get("open_entries", 0) or 0),
+        "no_book_recheck_experiment_closed_entries": int(no_book_recheck_experiment.get("closed_entries", 0) or 0),
+        "no_book_recheck_experiment_wins": int(no_book_recheck_experiment.get("wins", 0) or 0),
+        "no_book_recheck_experiment_losses": int(no_book_recheck_experiment.get("losses", 0) or 0),
+        "no_book_recheck_experiment_flat_count": int(no_book_recheck_experiment.get("flat_count", 0) or 0),
+        "no_book_recheck_experiment_decision_count": int(no_book_recheck_experiment.get("decision_count", 0) or 0),
+        "no_book_recheck_experiment_win_rate": no_book_recheck_experiment.get("win_rate"),
+        "no_book_recheck_experiment_close_rate": float(no_book_recheck_experiment.get("close_rate", 0) or 0),
+        "no_book_recheck_experiment_realized_pnl": float(no_book_recheck_experiment.get("realized_pnl", 0) or 0),
+        "no_book_recheck_experiment_distinct_markets": int(no_book_recheck_experiment.get("distinct_markets", 0) or 0),
+        "no_book_recheck_experiment_distinct_traders": int(no_book_recheck_experiment.get("distinct_traders", 0) or 0),
+        "no_book_recheck_experiment_top_market": no_book_recheck_experiment.get("top_market", ""),
+        "no_book_recheck_experiment_top_market_share": float(
+            no_book_recheck_experiment.get("top_market_share", 0) or 0
+        ),
+        "no_book_recheck_experiment_top_trader": no_book_recheck_experiment.get("top_trader", ""),
+        "no_book_recheck_experiment_top_trader_share": float(
+            no_book_recheck_experiment.get("top_trader_share", 0) or 0
+        ),
+        "no_book_recheck_experiment_status": no_book_recheck_experiment.get("status", "idle"),
         "blocked_reason_focus": blocked_reason_focus,
     }
 

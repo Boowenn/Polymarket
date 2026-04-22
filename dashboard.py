@@ -128,6 +128,10 @@ def render_dashboard(traders=None, cycle_count=0):
     experiment_closed = int(experiment.get("closed_entries", 0) or 0)
     experiment_decisions = int(experiment.get("decision_count", 0) or 0)
     experiment_wr = f"{experiment.get('win_rate', 0):.1f}%" if experiment.get("win_rate") is not None else "N/A"
+    repeat_status = performance.get("repeat_entry_experiment_status", "idle")
+    repeat_entries = int(performance.get("repeat_entry_experiment_entries", 0) or 0)
+    no_book_status = performance.get("no_book_recheck_experiment_status", "idle")
+    no_book_entries = int(performance.get("no_book_recheck_experiment_entries", 0) or 0)
 
     stats_lines = [
         f"  Bankroll     [cyan]${config.effective_bankroll():,.0f}[/cyan]",
@@ -145,6 +149,8 @@ def render_dashboard(traders=None, cycle_count=0):
         f"  Shadow WR    {shadow_wr}  on {shadow_decisions} decided trades",
         f"  Experiment   {experiment_total} entries ({experiment_open} open / {experiment_closed} closed)",
         f"  Experiment WR {experiment_wr}  on {experiment_decisions} decided trades",
+        f"  Repeat Exp   {repeat_status} ({repeat_entries} entries, {'on' if config.stage2_repeat_entry_experiment_enabled() else 'off'})",
+        f"  No-Book Exp  {no_book_status} ({no_book_entries} entries, {'on' if config.stage2_no_book_delayed_recheck_experiment_enabled() else 'off'})",
         (
             f"  Research     budget ${config.effective_daily_risk_budget():,.0f}, "
             f"capital gates {'off' if config.PAPER_IGNORE_CAPITAL_GATES else 'on'}"

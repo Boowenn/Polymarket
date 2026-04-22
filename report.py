@@ -324,6 +324,16 @@ def filter_traders_by_sample(trader_rows, sample_type):
     return [row for row in trader_rows if row.get("sample_type") == sample_type]
 
 
+def build_experiment_watch_rows(experiments):
+    rows = []
+    for name, enabled, row in experiments:
+        current = dict(row or {})
+        current["name"] = name
+        current["enabled"] = enabled
+        rows.append(current)
+    return rows
+
+
 def build_recommendations(journal_summary, risk_counts, trader_rows, source_rows):
     recommendations = []
     stable = select_candidate_traders(trader_rows)
@@ -395,12 +405,18 @@ def build_block_reason_recommendations(rows):
 
     top_candidate = next((row for row in rows if row["action"] == "experiment"), None)
     if top_candidate:
-        recommendations.append(
-            "第一阶段最该优化的是 "
-            f"{top_candidate['label']}。当前 shadow blocked 样本 {top_candidate['total_entries']}，"
-            f"已结算 {top_candidate['closed_entries']}，shadow PnL {_fmt_money(top_candidate['realized_pnl'])}。"
-            "不要直接放松滑点保护，先做受控的二次入场实验。"
-        )
+        if top_candidate["category"] == "repeat_harvest" and not config.stage2_repeat_entry_experiment_enabled():
+            recommendations.append(
+                "Repeat Entry Limit 仍然是历史上最需要解释的 blocked reason，但当前 repeat-entry 实验已经暂停。"
+                "先保留 control/shadow 样本，不要继续按旧规则放宽。"
+            )
+        else:
+            recommendations.append(
+                "第一阶段最该优化的是 "
+                f"{top_candidate['label']}。当前 shadow blocked 样本 {top_candidate['total_entries']}，"
+                f"已结算 {top_candidate['closed_entries']}，shadow PnL {_fmt_money(top_candidate['realized_pnl'])}。"
+                "不要直接放松滑点保护，先做受控的窄实验。"
+            )
 
     drift_row = next((row for row in rows if row["category"] == "market_drift"), None)
     if drift_row and drift_row["closed_entries"] >= 5 and drift_row["realized_pnl"] < 0:
@@ -419,13 +435,13 @@ def build_block_reason_recommendations(rows):
     return recommendations[:3]
 
 
-def build_stage2_recommendations(experiment_row):
+def build_repeat_entry_recommendations(experiment_row):
     if not experiment_row:
         return []
 
     recommendations = []
     if not config.stage2_repeat_entry_experiment_enabled():
-        recommendations.append("第二阶段 repeat-entry 实验开关当前是关闭的。开启后才会开始积累独立样本。")
+        recommendations.append("repeat-entry 实验已暂停。先保留历史样本，不再继续按当前规则扩张。")
         return recommendations
 
     closed_entries = int(experiment_row.get("closed_entries", 0) or 0)
@@ -447,6 +463,34 @@ def build_stage2_recommendations(experiment_row):
             "第二阶段样本仍然偏向少数交易员。需要更多分散样本后再判断 repeat-entry 是否值得默认放宽。"
         )
     return recommendations[:3]
+
+
+def build_no_book_recheck_recommendations(experiment_row):
+    if not experiment_row:
+        return []
+
+    recommendations = []
+    if not config.stage2_no_book_delayed_recheck_experiment_enabled():
+        recommendations.append("no-book delayed recheck 实验当前是关闭的。开启后才会开始积累独立样本。")
+        return recommendations
+
+    total_entries = int(experiment_row.get("total_entries", 0) or 0)
+    closed_entries = int(experiment_row.get("closed_entries", 0) or 0)
+    if total_entries == 0:
+        recommendations.append(
+            f"no-book delayed recheck 实验已开启，当前会在空簿阻断后等待 {config.NO_BOOK_DELAYED_RECHECK_DELAY_SEC}s 再复查。"
+        )
+        return recommendations
+
+    if closed_entries < 20:
+        recommendations.append(
+            f"no-book delayed recheck 还在收集期，目前 {total_entries} 笔、已结算 {closed_entries} 笔。先观察 1 天，再决定是否继续扩大。"
+        )
+    else:
+        recommendations.append(
+            f"no-book delayed recheck 已有 {closed_entries} 笔已结算样本。下一步优先比较它和原始 no-book shadow 的胜率、PnL、市场集中度。"
+        )
+    return recommendations[:2]
 
 
 def print_source_table(rows):
@@ -492,26 +536,29 @@ def print_block_reason_table(rows, limit=8):
         print(f"  note={row['note']}")
 
 
-def print_stage2_experiment(row):
-    print("Stage 2 repeat-entry experiment:")
-    if not row:
+def print_experiment_watch_table(rows):
+    print("Experiment watch:")
+    if not rows:
         print("none")
         return
-    enabled = "on" if config.stage2_repeat_entry_experiment_enabled() else "off"
-    win_rate = f"{row['win_rate']:.1f}%" if row["win_rate"] is not None else "N/A"
-    print(
-        f"enabled={enabled}  status={row['status']}  entries={row['total_entries']}  "
-        f"closed={row['closed_entries']}  open={row['open_entries']}  win_rate={win_rate}  "
-        f"realized_pnl={_fmt_money(row['realized_pnl'])}  avg_entry_drift={row['avg_entry_drift']:.3f}"
-    )
-    print(
-        f"distinct_markets={row['distinct_markets']}  closed_markets={row['closed_distinct_markets']}  "
-        f"distinct_traders={row['distinct_traders']}  closed_traders={row['closed_distinct_traders']}"
-    )
-    if row["top_market"]:
-        print(f"top_market={row['top_market']}  share={row['top_market_share']:.1f}%")
-    if row["top_trader"]:
-        print(f"top_trader={row['top_trader']}  share={row['top_trader_share']:.1f}%")
+    print("experiment                 enabled  status      entries  closed  decs  win_rate  pnl")
+    for row in rows:
+        win_rate = f"{row['win_rate']:.1f}%" if row.get("win_rate") is not None else "N/A"
+        print(
+            f"{row['name'][:24]:24s}  "
+            f"{'on' if row.get('enabled') else 'off':7s}  "
+            f"{(row.get('status') or 'idle')[:10]:10s}  "
+            f"{int(row.get('total_entries', 0) or 0):7d}  "
+            f"{int(row.get('closed_entries', 0) or 0):6d}  "
+            f"{int(row.get('decision_count', 0) or 0):4d}  "
+            f"{win_rate:8s}  "
+            f"{_fmt_money(row.get('realized_pnl', 0)):>9s}"
+        )
+        print(
+            f"  mkts={int(row.get('distinct_markets', 0) or 0)}/{int(row.get('closed_distinct_markets', 0) or 0)}  "
+            f"traders={int(row.get('distinct_traders', 0) or 0)}/{int(row.get('closed_distinct_traders', 0) or 0)}  "
+            f"top_market={row.get('top_market') or 'N/A'}  top_trader={row.get('top_trader') or 'N/A'}"
+        )
 
 
 def print_trader_table(title, rows, limit=5):
@@ -554,6 +601,16 @@ def main():
     shadow_summary = models.get_trade_journal_summary(since_ts=since_ts, sample_types=("shadow",))
     experiment_summary = models.get_trade_journal_summary(since_ts=since_ts, sample_types=("experiment",))
     repeat_entry_experiment = models.get_experiment_analysis(config.REPEAT_ENTRY_EXPERIMENT_KEY, since_ts=since_ts)
+    no_book_recheck_experiment = models.get_experiment_analysis(
+        config.NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY,
+        since_ts=since_ts,
+    )
+    experiment_watch_rows = build_experiment_watch_rows(
+        [
+            ("repeat-entry", config.stage2_repeat_entry_experiment_enabled(), repeat_entry_experiment),
+            ("no-book delayed recheck", config.stage2_no_book_delayed_recheck_experiment_enabled(), no_book_recheck_experiment),
+        ]
+    )
     blocked_reason_rows = models.get_block_reason_analysis(since_ts=since_ts, sample_types=("shadow",), limit=8)
     source_rows = summarize_sources(journal_rows)
     trader_rows = summarize_traders(journal_rows, history_rows)
@@ -565,7 +622,8 @@ def main():
     review = select_review_traders(executed_trader_rows)
     recommendations = build_recommendations(executed_summary, risk_counts, executed_trader_rows, source_rows)
     recommendations = (
-        build_stage2_recommendations(repeat_entry_experiment)
+        build_repeat_entry_recommendations(repeat_entry_experiment)
+        + build_no_book_recheck_recommendations(no_book_recheck_experiment)
         + build_block_reason_recommendations(blocked_reason_rows)
         + recommendations
     )[:6]
@@ -601,6 +659,7 @@ def main():
         f"shadow_entries={int(shadow_summary.get('total_entries', 0) or 0)}  "
         f"experiment_entries={int(experiment_summary.get('total_entries', 0) or 0)}  "
         f"stage2_repeat_entries={int(repeat_entry_experiment.get('total_entries', 0) or 0)}  "
+        f"stage2_no_book_entries={int(no_book_recheck_experiment.get('total_entries', 0) or 0)}  "
         f"mirrored={mirrored_signals}"
     )
     print(
@@ -608,6 +667,7 @@ def main():
         f"executed_decision_count={decision_count}  executed_close_rate={float(executed_summary.get('close_rate', 0) or 0):.1f}%  "
         f"shadow_closed={int(shadow_summary.get('closed_entries', 0) or 0)}  shadow_open={int(shadow_summary.get('open_entries', 0) or 0)}  "
         f"stage2_repeat_closed={int(repeat_entry_experiment.get('closed_entries', 0) or 0)}  "
+        f"stage2_no_book_closed={int(no_book_recheck_experiment.get('closed_entries', 0) or 0)}  "
         f"win_rate={win_rate_label}  realized_pnl={_fmt_money(executed_summary.get('realized_pnl', 0))}  "
         f"avg_entry_drift={float(executed_summary.get('avg_entry_drift', 0) or 0):.3f}"
     )
@@ -623,7 +683,7 @@ def main():
     print_block_reason_table(blocked_reason_rows, limit=8)
     print()
 
-    print_stage2_experiment(repeat_entry_experiment)
+    print_experiment_watch_table(experiment_watch_rows)
     print()
 
     print_trader_table("Best executed traders:", candidates, limit=args.top)

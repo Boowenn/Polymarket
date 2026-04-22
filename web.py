@@ -26,8 +26,11 @@ if not os.path.exists(env_path):
         f.write("ESPORT_SPORT_CODES=codmw,cs2,dota2,hok,lcs,lol,lpl,mlbb,ow,pubg,r6siege,rl,sc2,val,wildrift\n")
         f.write("MARKET_SCOPE_CACHE_SEC=3600\n")
         f.write("DRY_RUN_RECORD_BLOCKED_SAMPLES=true\n")
-        f.write("ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT=true\n")
+        f.write("ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT=false\n")
         f.write("REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES=1\n")
+        f.write("ENABLE_STAGE2_NO_BOOK_DELAYED_RECHECK_EXPERIMENT=true\n")
+        f.write("NO_BOOK_DELAYED_RECHECK_DELAY_SEC=30\n")
+        f.write("NO_BOOK_DELAYED_RECHECK_MAX_EXTRA_ENTRIES=1\n")
         f.write("MAX_TRADE_PCT=0.05\nDAILY_LOSS_LIMIT=50\nMAX_POSITIONS=10\n")
         f.write("DAILY_RISK_BUDGET=50\nPAPER_BANKROLL=250\nPAPER_DAILY_RISK_BUDGET=250\n")
         f.write("PAPER_IGNORE_CAPITAL_GATES=true\nMAX_TRADER_EXPOSURE_PCT=0.12\n")
@@ -84,6 +87,7 @@ def get_dashboard_data():
     performance = models.get_performance_snapshot()
     blocked_reasons = models.get_block_reason_analysis(sample_types=("shadow",), limit=6)
     repeat_entry_experiment = models.get_experiment_analysis(config.REPEAT_ENTRY_EXPERIMENT_KEY)
+    no_book_recheck_experiment = models.get_experiment_analysis(config.NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY)
     risk = models.get_recent_risk_logs(20)
     mirrored = models.get_mirrored_trades()
 
@@ -113,6 +117,7 @@ def get_dashboard_data():
         },
         "blocked_reasons": blocked_reasons,
         "repeat_entry_experiment": repeat_entry_experiment,
+        "no_book_recheck_experiment": no_book_recheck_experiment,
         "risk_logs": [{**r, "time_str": ts_fmt(r["timestamp"])} for r in risk],
         "config": {
             "dry_run": config.DRY_RUN,
@@ -137,6 +142,9 @@ def get_dashboard_data():
             "dry_run_record_blocked_samples": config.DRY_RUN_RECORD_BLOCKED_SAMPLES,
             "stage2_repeat_entry_experiment_enabled": config.stage2_repeat_entry_experiment_enabled(),
             "repeat_entry_experiment_max_extra_entries": config.REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES,
+            "stage2_no_book_recheck_experiment_enabled": config.stage2_no_book_delayed_recheck_experiment_enabled(),
+            "no_book_recheck_delay_sec": config.NO_BOOK_DELAYED_RECHECK_DELAY_SEC,
+            "no_book_recheck_max_extra_entries": config.NO_BOOK_DELAYED_RECHECK_MAX_EXTRA_ENTRIES,
         },
         "stats": {
             "buy_count": buy_count,

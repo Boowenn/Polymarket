@@ -59,7 +59,8 @@ Do not use trailing 24-hour `trades` history as a proxy for current open exposur
 
 ## Experiment Policy
 
-- Keep `Repeat Entry Limit` as a capped experiment until clean metrics are in place.
+- Keep historical `Repeat Entry Limit` samples for review, but keep the experiment paused by default after the weak overnight read.
+- Run `No Executable Book -> delayed recheck` as the active narrow experiment before opening any broader liquidity relaxations.
 - Do not widen repeat-entry or open new broad experiments while the metric plumbing is being repaired.
 - If a blocked reason looks promising in `shadow`, convert it into a narrow experiment before touching defaults.
 - Promotion decisions require executed evidence, not shadow evidence.

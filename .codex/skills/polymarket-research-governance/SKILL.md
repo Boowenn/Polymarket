@@ -20,7 +20,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 4. Promote only from executed evidence.
    `shadow` and `experiment` can justify a hypothesis, not a default rollout.
 5. Keep experiments capped until the metric plumbing is trustworthy.
-   Do not widen repeat-entry or add broader experiments while report and risk views are inconsistent.
+   Keep repeat-entry paused by default, and use only narrow experiments such as `No Executable Book -> delayed recheck` while report and risk views are being validated.
 6. When governance changes land, update this skill and the repo README in the same change.
 
 ## Guardrails
