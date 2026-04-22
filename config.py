@@ -1,4 +1,6 @@
 import os
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -109,7 +111,9 @@ MAX_TRADE_PCT = float(os.getenv("MAX_TRADE_PCT", "0.05"))
 MAX_TRADE_VALUE_USDC = float(os.getenv("MAX_TRADE_VALUE_USDC", "0"))
 DAILY_LOSS_LIMIT = float(os.getenv("DAILY_LOSS_LIMIT", "50"))
 SESSION_STOP_LOSS_USDC = float(os.getenv("SESSION_STOP_LOSS_USDC", str(DAILY_LOSS_LIMIT)))
+SESSION_STOP_MODE = os.getenv("SESSION_STOP_MODE", "calendar_day").strip().lower()
 SESSION_STOP_LOOKBACK_SEC = int(os.getenv("SESSION_STOP_LOOKBACK_SEC", "86400"))
+SESSION_STOP_TIMEZONE = os.getenv("SESSION_STOP_TIMEZONE", "Asia/Tokyo").strip() or "Asia/Tokyo"
 GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO = float(os.getenv("GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO", "0.70"))
 GAME_MARKET_ACTIVE_EXIT_ABS_DROP = float(os.getenv("GAME_MARKET_ACTIVE_EXIT_ABS_DROP", "0.15"))
 GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC = int(os.getenv("GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC", "60"))
@@ -218,6 +222,43 @@ def entry_engine_label():
 
 def session_stop_loss_enabled():
     return (not DRY_RUN) and ENABLE_SESSION_STOP_LOSS and SESSION_STOP_LOSS_USDC > 0
+
+
+def session_stop_timezone():
+    try:
+        return ZoneInfo(SESSION_STOP_TIMEZONE)
+    except Exception:
+        normalized = SESSION_STOP_TIMEZONE.strip()
+        fallback_offsets = {
+            "Asia/Tokyo": 9,
+            "UTC": 0,
+            "Etc/UTC": 0,
+        }
+        if normalized in fallback_offsets:
+            return timezone(timedelta(hours=fallback_offsets[normalized]), normalized)
+        if normalized.startswith(("+", "-")) and ":" in normalized:
+            sign = 1 if normalized[0] == "+" else -1
+            try:
+                hours, minutes = normalized[1:].split(":", 1)
+                delta = timedelta(hours=int(hours), minutes=int(minutes))
+                return timezone(sign * delta, normalized)
+            except Exception:
+                pass
+        return timezone.utc
+
+
+def session_stop_window(now_ts):
+    if SESSION_STOP_MODE in ("calendar_day", "day", "daily"):
+        tz = session_stop_timezone()
+        local_now = datetime.fromtimestamp(now_ts, tz)
+        day_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        label = f"since {day_start.strftime('%Y-%m-%d %H:%M')} {SESSION_STOP_TIMEZONE}"
+        return day_start.timestamp(), label
+
+    lookback_sec = int(SESSION_STOP_LOOKBACK_SEC or 0)
+    if lookback_sec <= 0:
+        return None, "all-time"
+    return now_ts - lookback_sec, f"over trailing {int(lookback_sec // 3600 or 0)}h"
 
 
 def game_market_active_exit_enabled():

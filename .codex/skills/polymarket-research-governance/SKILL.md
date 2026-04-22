@@ -26,7 +26,8 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 7. For tiny live bankrolls, prefer a smoke-test mindset over a sizing mindset.
    Surface real guardrails in the dashboard, keep `.env` local-only, block sub-minimum market sizes instead of auto-inflating order size, explicitly alert on live orders that stay `delayed` beyond the configured threshold, and auto-reconcile those delayed orders back to their final CLOB status before drawing conclusions. For bankrolls around `$20`, prefer a small absolute cap such as `$0.6-$1.5` per trade over a pure percentage cap; cent-level caps are usually non-executable because Polymarket books commonly require `min_order_size=5`.
 8. For the first real-money stop, prefer a session-level drawdown cap over a position `%` stop.
-   Keep that stop on a rolling window (for example `24h`) so one bad live stretch pauses new entries without permanently locking the bot forever.
+   Prefer a calendar-day reset in the repo's operating timezone (for example `Asia/Tokyo`) so one bad live stretch pauses new entries for the rest of that trading day without permanently locking the bot forever.
+   Keep trailing-window mode available only when explicitly needed.
    In live mode, use realized + marked unrealized PnL to pause new entries once the drawdown limit is breached. If the book is too thin to mark from executable bids, fall back to Gamma outcome prices instead of silently assuming no drawdown.
 9. For single-game sports and esports markets, add a dedicated active-exit rule before trusting mirrored SELLs alone.
    `Game 1 / Game 2 / Game 3 Winner` style markets can run to near-max loss before the copied trader ever exits. Keep a narrow proactive exit that only targets those single-game markets, uses cooldowns, and only closes journal size that the bot actually sells.

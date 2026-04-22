@@ -2488,6 +2488,7 @@ function renderSystem(config, stats, performance, liveExecution) {
   const sessionStopActive = Boolean(config.session_stop_active);
   const sessionStopLimit = Number(config.session_stop_loss_limit || dailyLossLimit || 0);
   const sessionStopReason = String(config.session_stop_reason || '');
+  const sessionStopWindowLabel = String(config.session_stop_window_label || '');
   const sessionStopMarkFailures = Number(config.session_stop_mark_failures || 0);
   const sessionStopEntryValue = Number(config.session_stop_entry_value || 0);
   const sessionStopMarkedValue = Number(config.session_stop_marked_value || 0);
@@ -2753,7 +2754,7 @@ function renderSystem(config, stats, performance, liveExecution) {
     document.getElementById('s-max-trade').textContent = fmtMoney(remainingBudget);
     document.getElementById('s-max-trade').className = 'stat-value';
     document.getElementById('s-max-trade-note').textContent = sessionStopEnabled
-      ? `日预算 ${fmtMoney(dailyRiskBudget)} · 会话止损 ${fmtMoney(sessionStopLimit)}${sessionStopActive ? ' · 当前已暂停新开仓' : ''}`
+      ? `日预算 ${fmtMoney(dailyRiskBudget)} · 会话止损 ${fmtMoney(sessionStopLimit)}${sessionStopWindowLabel ? ` · ${sessionStopWindowLabel}` : ''}${sessionStopActive ? ' · 当前已暂停新开仓' : ''}`
       : `日预算 ${fmtMoney(dailyRiskBudget)} · 日损止损 ${fmtMoney(dailyLossLimit)}`;
 
     document.getElementById('s-simulated').textContent = fmtMoney(maxTradeValue);
@@ -2792,7 +2793,7 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('sidebar-footnote').textContent =
     config.dry_run
       ? `当前只看 ${scopeText}。Repeat-entry ${repeatText}，空簿延迟复查 ${noBookText}。指标口径保持 executed / shadow / experiment 分层。`
-      : `当前是真实资金 ${canaryText}：账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，只看 ${scopeText}。${autonomousEnabled && !copyEnabled ? '默认引擎已经切到自主扫描，不再依赖外部交易员。' : '模拟盘、shadow 和 experiment 已归档。'} 若订单低于市场最小单量，会直接跳过而不是强行放大仓位。${sessionStopEnabled ? ` 会话级止损阈值 ${fmtMoney(sessionStopLimit)}，当前总盈亏 ${fmtSignedMoney(liveTotalPnl)}，当前估值 ${fmtMoney(sessionStopMarkedValue)}${sessionStopActive ? '，已暂停新开仓。' : '。'}` : ''}${gameMarketActiveExitEnabled ? ` 单局市场主动退出已开启；当盘口太薄时，会先用 Gamma 价格做风险估值。` : ''}`;
+      : `当前是真实资金 ${canaryText}：账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，只看 ${scopeText}。${autonomousEnabled && !copyEnabled ? '默认引擎已经切到自主扫描，不再依赖外部交易员。' : '模拟盘、shadow 和 experiment 已归档。'} 若订单低于市场最小单量，会直接跳过而不是强行放大仓位。${sessionStopEnabled ? ` 会话级止损阈值 ${fmtMoney(sessionStopLimit)}${sessionStopWindowLabel ? `（${sessionStopWindowLabel}）` : ''}，当前总盈亏 ${fmtSignedMoney(liveTotalPnl)}，当前估值 ${fmtMoney(sessionStopMarkedValue)}${sessionStopActive ? '，已暂停新开仓。' : '。'}` : ''}${gameMarketActiveExitEnabled ? ` 单局市场主动退出已开启；当盘口太薄时，会先用 Gamma 价格做风险估值。` : ''}`;
 }
 
 function highlightSections() {

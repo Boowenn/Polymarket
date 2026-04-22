@@ -328,8 +328,7 @@ def get_live_drawdown_snapshot(limit=500, force=False):
     if not force and cached and now - cached_ts < ttl_sec:
         return dict(cached)
 
-    lookback_sec = int(config.SESSION_STOP_LOOKBACK_SEC or 0)
-    since_ts = (now - lookback_sec) if lookback_sec > 0 else None
+    since_ts, stop_window_label = config.session_stop_window(now)
     live_summary = models.get_live_execution_summary(since_ts=since_ts)
     positions = get_live_open_position_marks(limit=limit)
     realized_pnl = round(float(live_summary.get("realized_pnl", 0) or 0), 4)
@@ -343,13 +342,10 @@ def get_live_drawdown_snapshot(limit=500, force=False):
     stop_active = bool(stop_enabled and total_pnl <= -loss_limit_usdc)
     stop_reason = ""
     if stop_active:
-        if lookback_sec > 0:
-            stop_reason = (
-                f"session stop active ({total_pnl:.2f} <= -{loss_limit_usdc:.2f}) "
-                f"over trailing {int(lookback_sec // 3600 or 0)}h"
-            )
-        else:
-            stop_reason = f"session stop active ({total_pnl:.2f} <= -{loss_limit_usdc:.2f})"
+        stop_reason = (
+            f"session stop active ({total_pnl:.2f} <= -{loss_limit_usdc:.2f}) "
+            f"{stop_window_label}"
+        ).strip()
 
     snapshot = {
         "computed_at": time.time(),
@@ -366,6 +362,7 @@ def get_live_drawdown_snapshot(limit=500, force=False):
         "stop_enabled": stop_enabled,
         "stop_active": stop_active,
         "stop_reason": stop_reason,
+        "stop_window_label": stop_window_label,
     }
     _drawdown_cache["ts"] = time.time()
     _drawdown_cache["data"] = dict(snapshot)
