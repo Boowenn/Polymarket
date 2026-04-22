@@ -822,6 +822,31 @@ def get_recent_delayed_trades(limit=10):
     return [dict(row) for row in rows]
 
 
+def get_delayed_trades_for_reconciliation(limit=10, min_age_sec=0):
+    cutoff_ts = time.time() - max(float(min_age_sec or 0), 0)
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM trades
+            WHERE mirrored = 1
+              AND COALESCE(our_order_id, '') NOT IN ('', 'unknown')
+              AND timestamp <= ?
+              AND (
+                    LOWER(COALESCE(our_status, '')) = 'delayed'
+                    OR (
+                        LOWER(COALESCE(our_status, '')) IN ('matched', 'order_status_matched')
+                        AND COALESCE(our_size, 0) <= 0
+                    )
+                  )
+            ORDER BY timestamp ASC
+            LIMIT ?
+            """,
+            (cutoff_ts, int(limit)),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def get_mirrored_trades():
     with db() as conn:
         rows = conn.execute(

@@ -72,6 +72,14 @@ DELAYED_ORDER_ALERT_SEC = max(
     30,
     int(os.getenv("DELAYED_ORDER_ALERT_SEC", "120")),
 )
+DELAYED_ORDER_RECHECK_SEC = max(
+    5,
+    int(os.getenv("DELAYED_ORDER_RECHECK_SEC", "15")),
+)
+DELAYED_ORDER_RECHECK_LIMIT = max(
+    1,
+    int(os.getenv("DELAYED_ORDER_RECHECK_LIMIT", "10")),
+)
 
 # Risk controls
 MAX_TRADE_PCT = float(os.getenv("MAX_TRADE_PCT", "0.05"))

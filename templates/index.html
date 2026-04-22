@@ -1279,6 +1279,15 @@ function tradeStatusLabel(row) {
   if (status === 'live' || status === 'order_status_live') {
     return { cls: 'status-chip status-observe', text: '挂单中' };
   }
+  if (status === 'canceled' || status === 'cancelled' || status === 'order_status_canceled' || status === 'order_status_cancelled') {
+    return { cls: 'status-chip status-blocked', text: '已取消' };
+  }
+  if (status === 'expired' || status === 'order_status_expired') {
+    return { cls: 'status-chip status-blocked', text: '已过期' };
+  }
+  if (status === 'unmatched' || status === 'order_status_unmatched' || status === 'failed' || status === 'rejected') {
+    return { cls: 'status-chip status-blocked', text: '未成交结束' };
+  }
   if (status === 'delayed') {
     if (row.delayed_alert) {
       return {

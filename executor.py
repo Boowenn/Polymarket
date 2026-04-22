@@ -31,6 +31,18 @@ def _normalize_order_status(status):
     return str(status or "").strip().lower()
 
 
+def _order_size_to_float(value):
+    raw = _safe_float(value)
+    if raw is None:
+        return None
+    text = str(value or "").strip()
+    if "." in text:
+        return raw
+    if raw >= 1_000_000:
+        return raw / 1_000_000
+    return raw
+
+
 def _normalize_live_fill(client, order_id, response, side, fallback_price):
     status = str((response or {}).get("status", "submitted") or "submitted")
     matched_size = None
@@ -48,7 +60,7 @@ def _normalize_live_fill(client, order_id, response, side, fallback_price):
             if state_status:
                 status = str(state_status)
 
-            matched_size = _fixed_math_to_float(order_state.get("size_matched"))
+            matched_size = _order_size_to_float(order_state.get("size_matched"))
             matched_price = _safe_float(order_state.get("price"))
             normalized = _normalize_order_status(state_status)
             if matched_size and matched_size > 0:
@@ -81,6 +93,107 @@ def _normalize_live_fill(client, order_id, response, side, fallback_price):
     booked_price = float(matched_price or fallback_price or 0)
     booked_value = round(matched_size * booked_price, 4)
     return status, matched_size, booked_value, booked_price
+
+
+def _signal_from_trade_row(trade):
+    return {
+        "id": trade.get("id", ""),
+        "trader_wallet": trade.get("trader_wallet", ""),
+        "trader_username": trade.get("trader_username", ""),
+        "condition_id": trade.get("condition_id", ""),
+        "token_id": trade.get("token_id", ""),
+        "market_slug": trade.get("market_slug", ""),
+        "market_scope": trade.get("market_scope", ""),
+        "outcome": trade.get("outcome", ""),
+        "side": trade.get("side", trade.get("our_side", "BUY")),
+        "price": float(trade.get("price", 0) or 0),
+        "signal_source": trade.get("signal_source", "copy"),
+        "timestamp": float(trade.get("timestamp", time.time()) or time.time()),
+    }
+
+
+def reconcile_delayed_orders(limit=None, min_age_sec=None):
+    if config.DRY_RUN:
+        return {"checked": 0, "updated": 0, "matched": 0, "closed": 0}
+
+    limit = int(limit or config.DELAYED_ORDER_RECHECK_LIMIT or 10)
+    min_age_sec = config.DELAYED_ORDER_RECHECK_SEC if min_age_sec is None else min_age_sec
+    delayed_rows = models.get_delayed_trades_for_reconciliation(limit=limit, min_age_sec=min_age_sec)
+    if not delayed_rows:
+        return {"checked": 0, "updated": 0, "matched": 0, "closed": 0}
+
+    client = _get_clob_client()
+    if client is None:
+        return {"checked": 0, "updated": 0, "matched": 0, "closed": 0}
+
+    summary = {"checked": 0, "updated": 0, "matched": 0, "closed": 0}
+    final_no_fill_statuses = {
+        "canceled",
+        "cancelled",
+        "expired",
+        "unmatched",
+        "failed",
+        "rejected",
+        "order_status_canceled",
+        "order_status_cancelled",
+        "order_status_expired",
+        "order_status_unmatched",
+    }
+
+    for trade in delayed_rows:
+        summary["checked"] += 1
+        order_id = trade.get("our_order_id", "")
+        side = trade.get("our_side") or trade.get("side", "BUY")
+        fallback_price = float(trade.get("our_price") or trade.get("price") or 0)
+        status, booked_size, booked_value, booked_price = _normalize_live_fill(
+            client,
+            order_id,
+            {"status": trade.get("our_status", "delayed")},
+            side,
+            fallback_price,
+        )
+        normalized = _normalize_order_status(status)
+
+        if normalized == "delayed":
+            continue
+
+        models.mark_trade_mirrored(
+            trade["id"],
+            order_id,
+            side,
+            booked_size,
+            booked_price,
+            status,
+        )
+        summary["updated"] += 1
+
+        if booked_size > 0:
+            signal = _signal_from_trade_row(trade)
+            models.upsert_trade_journal(
+                signal,
+                size=booked_size,
+                value=booked_value,
+                status=status,
+                tradable_price=float(trade.get("price", 0) or 0),
+                protected_price=booked_price,
+                sample_type="executed",
+            )
+            summary["matched"] += 1
+            logger.info(
+                f"[LIVE RECONCILE] order {order_id} delayed -> {status} "
+                f"filled={booked_size:.4f} booked=${booked_price:.3f}"
+            )
+            continue
+
+        if normalized in final_no_fill_statuses:
+            summary["closed"] += 1
+
+        logger.info(
+            f"[LIVE RECONCILE] order {order_id} delayed -> {status} "
+            f"filled={booked_size:.4f}"
+        )
+
+    return summary
 
 
 def _experiment_trade_id(signal, experiment_key):

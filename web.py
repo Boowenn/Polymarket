@@ -33,6 +33,8 @@ if not os.path.exists(env_path):
         f.write("NO_BOOK_DELAYED_RECHECK_DELAY_SEC=30\n")
         f.write("NO_BOOK_DELAYED_RECHECK_MAX_EXTRA_ENTRIES=1\n")
         f.write("DELAYED_ORDER_ALERT_SEC=120\n")
+        f.write("DELAYED_ORDER_RECHECK_SEC=15\n")
+        f.write("DELAYED_ORDER_RECHECK_LIMIT=10\n")
         f.write("MAX_TRADE_PCT=0.05\nDAILY_LOSS_LIMIT=50\nMAX_POSITIONS=10\n")
         f.write("DAILY_RISK_BUDGET=50\nPAPER_BANKROLL=250\nPAPER_DAILY_RISK_BUDGET=250\n")
         f.write("PAPER_IGNORE_CAPITAL_GATES=true\nMAX_TRADER_EXPOSURE_PCT=0.12\n")
@@ -433,6 +435,18 @@ def bot_loop():
         except Exception as e:
             logger.error(f"Settlement: {e}")
             models.log_risk_event("SETTLEMENT_ERROR", str(e), "skipped")
+
+        try:
+            reconcile_summary = executor.reconcile_delayed_orders()
+            if reconcile_summary.get("updated", 0):
+                logger.info(
+                    "Delayed order reconciliation updated %(updated)s/%(checked)s "
+                    "(matched=%(matched)s, closed=%(closed)s)",
+                    reconcile_summary,
+                )
+        except Exception as e:
+            logger.error(f"Delayed reconcile: {e}")
+            models.log_risk_event("DELAYED_RECONCILE_ERROR", str(e), "skipped")
 
         # PnL snapshot
         performance = models.get_performance_snapshot()

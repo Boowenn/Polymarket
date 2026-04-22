@@ -86,6 +86,7 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
 - keep repeat-entry paused and avoid widening experiments
 - show live guardrails clearly in the dashboard: bankroll, deployed notional, remaining daily budget, max trade size, max positions, wallet type, and funder summary
 - surface any live order that stays locally `delayed` beyond the alert threshold before widening size or changing execution rules
+- re-query delayed live orders on a short loop and write back `matched / canceled / expired` before treating them as unresolved execution failures
 - show real account cash separately from the strategy bankroll cap; the wallet balance is not the same thing as the bot budget
 - when live mode is enabled, exclude historical `dry_run` executed positions from live deployed-risk, exposure, and max-position views
 - block orders that fall below the market `min_order_size` instead of automatically increasing size to force a fill
