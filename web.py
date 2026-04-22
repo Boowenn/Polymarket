@@ -32,6 +32,7 @@ if not os.path.exists(env_path):
         f.write("ENABLE_STAGE2_NO_BOOK_DELAYED_RECHECK_EXPERIMENT=true\n")
         f.write("NO_BOOK_DELAYED_RECHECK_DELAY_SEC=30\n")
         f.write("NO_BOOK_DELAYED_RECHECK_MAX_EXTRA_ENTRIES=1\n")
+        f.write("DELAYED_ORDER_ALERT_SEC=120\n")
         f.write("MAX_TRADE_PCT=0.05\nDAILY_LOSS_LIMIT=50\nMAX_POSITIONS=10\n")
         f.write("DAILY_RISK_BUDGET=50\nPAPER_BANKROLL=250\nPAPER_DAILY_RISK_BUDGET=250\n")
         f.write("PAPER_IGNORE_CAPITAL_GATES=true\nMAX_TRADER_EXPOSURE_PCT=0.12\n")
@@ -88,6 +89,60 @@ def mask_address(address):
     if len(raw) < 12:
         return raw or "未设置"
     return f"{raw[:6]}...{raw[-4:]}"
+
+
+def fmt_age_label(age_sec):
+    age_sec = max(int(age_sec or 0), 0)
+    if age_sec < 60:
+        return f"{age_sec}秒"
+    minutes, seconds = divmod(age_sec, 60)
+    if minutes < 60:
+        return f"{minutes}分{seconds:02d}秒"
+    hours, minutes = divmod(minutes, 60)
+    if hours < 24:
+        return f"{hours}小时{minutes:02d}分"
+    days, hours = divmod(hours, 24)
+    return f"{days}天{hours}小时"
+
+
+def summarize_delayed_trades(rows):
+    threshold_sec = max(int(config.DELAYED_ORDER_ALERT_SEC or 0), 0)
+    now_ts = time.time()
+    delayed_rows = []
+
+    for row in rows or []:
+        ts = float(row.get("timestamp") or 0)
+        age_sec = max(int(now_ts - ts), 0) if ts else 0
+        delayed_alert = age_sec >= threshold_sec if threshold_sec else True
+        delayed_rows.append(
+            {
+                **row,
+                "time_str": ts_fmt(ts),
+                "wallet_short": (row.get("trader_wallet") or "")[:10],
+                "slug_short": (row.get("market_slug") or row.get("condition_id", ""))[:35],
+                "delayed_age_sec": age_sec,
+                "delayed_age_label": fmt_age_label(age_sec),
+                "delayed_alert": delayed_alert,
+            }
+        )
+
+    alert_rows = [row for row in delayed_rows if row["delayed_alert"]]
+    focus_row = alert_rows[0] if alert_rows else (delayed_rows[0] if delayed_rows else {})
+    oldest_age_sec = max((row["delayed_age_sec"] for row in alert_rows), default=0)
+
+    return {
+        "rows": delayed_rows,
+        "count": len(delayed_rows),
+        "alert_count": len(alert_rows),
+        "alert_active": bool(alert_rows),
+        "oldest_age_sec": oldest_age_sec,
+        "oldest_age_label": fmt_age_label(oldest_age_sec) if oldest_age_sec else "",
+        "focus_slug": focus_row.get("market_slug", ""),
+        "focus_slug_short": focus_row.get("slug_short", ""),
+        "focus_outcome": focus_row.get("outcome", ""),
+        "focus_time_str": focus_row.get("time_str", ""),
+        "focus_age_label": focus_row.get("delayed_age_label", ""),
+    }
 
 
 def _empty_account_snapshot(auth_state, error=""):
@@ -159,6 +214,9 @@ def get_live_account_snapshot(force=False):
 def get_dashboard_data():
     traders = models.get_tracked_traders(limit=config.monitored_trader_limit())
     recent = models.get_recent_trades(80)
+    delayed_trades = models.get_recent_delayed_trades(8) if not config.DRY_RUN else []
+    delayed_summary = summarize_delayed_trades(delayed_trades)
+    delayed_lookup = {row.get("id"): row for row in delayed_summary["rows"] if row.get("id")}
     pnl = models.get_latest_pnl()
     performance = models.get_performance_snapshot()
     live_execution = models.get_live_execution_summary()
@@ -189,6 +247,9 @@ def get_dashboard_data():
                 "time_str": ts_fmt(t["timestamp"]),
                 "wallet_short": (t.get("trader_wallet") or "")[:10],
                 "slug_short": (t.get("market_slug") or t.get("condition_id", ""))[:35],
+                "delayed_age_sec": delayed_lookup.get(t.get("id"), {}).get("delayed_age_sec", 0),
+                "delayed_age_label": delayed_lookup.get(t.get("id"), {}).get("delayed_age_label", ""),
+                "delayed_alert": delayed_lookup.get(t.get("id"), {}).get("delayed_alert", False),
             }
             for t in recent
         ],
@@ -253,6 +314,16 @@ def get_dashboard_data():
             "account_snapshot_error": account_snapshot["error"],
             "show_research_panels": config.DRY_RUN,
             "small_bankroll_canary": (not config.DRY_RUN) and config.BANKROLL <= 25,
+            "delayed_order_alert_sec": config.DELAYED_ORDER_ALERT_SEC,
+            "delayed_order_count": delayed_summary["count"],
+            "delayed_order_alert_count": delayed_summary["alert_count"],
+            "delayed_order_alert_active": delayed_summary["alert_active"],
+            "delayed_order_oldest_age_sec": delayed_summary["oldest_age_sec"],
+            "delayed_order_oldest_age_label": delayed_summary["oldest_age_label"],
+            "delayed_order_focus_slug": delayed_summary["focus_slug_short"] or delayed_summary["focus_slug"],
+            "delayed_order_focus_outcome": delayed_summary["focus_outcome"],
+            "delayed_order_focus_time": delayed_summary["focus_time_str"],
+            "delayed_order_focus_age_label": delayed_summary["focus_age_label"],
             "dry_run_record_blocked_samples": config.DRY_RUN_RECORD_BLOCKED_SAMPLES,
             "stage2_repeat_entry_experiment_enabled": config.stage2_repeat_entry_experiment_enabled(),
             "repeat_entry_experiment_max_extra_entries": config.REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES,

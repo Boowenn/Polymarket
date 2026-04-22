@@ -266,6 +266,16 @@
     display: none;
   }
 
+  .live-alert.live-alert-warning {
+    border-color: rgba(211, 138, 31, 0.22);
+    background: linear-gradient(180deg, rgba(211, 138, 31, 0.18), rgba(211, 138, 31, 0.08));
+    color: #7a4b10;
+  }
+
+  .live-alert.live-alert-warning strong {
+    color: #603708;
+  }
+
   .hero-pill {
     display: inline-flex;
     align-items: center;
@@ -847,6 +857,9 @@
       <div class="live-alert hidden" id="live-alert">
         真实资金模式已开启。
       </div>
+      <div class="live-alert live-alert-warning hidden" id="delayed-alert">
+        订单延迟提醒会显示在这里。
+      </div>
       <div class="hero-strip">
         <div class="hero-strip-card">
           <div class="hero-strip-label">市场范围</div>
@@ -1267,7 +1280,16 @@ function tradeStatusLabel(row) {
     return { cls: 'status-chip status-observe', text: '挂单中' };
   }
   if (status === 'delayed') {
-    return { cls: 'status-chip status-observe', text: '延迟确认' };
+    if (row.delayed_alert) {
+      return {
+        cls: 'status-chip status-blocked',
+        text: row.delayed_age_label ? `延迟 ${row.delayed_age_label}` : '延迟超时',
+      };
+    }
+    return {
+      cls: 'status-chip status-observe',
+      text: row.delayed_age_label ? `延迟 ${row.delayed_age_label}` : '延迟确认',
+    };
   }
   return { cls: 'status-chip status-observe', text: row.our_status || '待处理' };
 }
@@ -1627,9 +1649,18 @@ function renderSystem(config, stats, performance, liveExecution) {
   const liveRealizedPnl = Number((liveExecution && liveExecution.realized_pnl) || 0);
   const liveDrift = Number((liveExecution && liveExecution.avg_entry_drift) || 0).toFixed(3);
   const liveAlert = document.getElementById('live-alert');
+  const delayedAlert = document.getElementById('delayed-alert');
   const navExperiments = document.getElementById('nav-experiments');
   const experimentsSection = document.getElementById('section-experiments');
   const sideResearchCard = document.getElementById('side-research-card');
+  const delayedOrderCount = Number(config.delayed_order_count || 0);
+  const delayedOrderAlertCount = Number(config.delayed_order_alert_count || 0);
+  const delayedOrderAlertSec = Number(config.delayed_order_alert_sec || 0);
+  const delayedOrderOldestAgeLabel = String(config.delayed_order_oldest_age_label || '--');
+  const delayedOrderFocusSlug = String(config.delayed_order_focus_slug || '最近订单');
+  const delayedOrderFocusOutcome = String(config.delayed_order_focus_outcome || '');
+  const delayedOrderFocusTime = String(config.delayed_order_focus_time || '');
+  const delayedOrderFocusAgeLabel = String(config.delayed_order_focus_age_label || delayedOrderOldestAgeLabel || '--');
 
   document.getElementById('overview-note').textContent = config.dry_run
     ? '上排先看研究预算与执行护栏，下排再看 executed 研究基线；不要把 shadow 或 experiment 当成默认策略。'
@@ -1679,9 +1710,22 @@ function renderSystem(config, stats, performance, liveExecution) {
 
   if (config.dry_run) {
     liveAlert.classList.add('hidden');
+    if (delayedAlert) delayedAlert.classList.add('hidden');
   } else {
     liveAlert.classList.remove('hidden');
     liveAlert.innerHTML = `<strong>真实资金提醒：</strong>账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，钱包 ${walletText}，funder ${config.funder_short || '未设置'}。当前 ${liveEntries > 0 ? `已有 ${liveEntries} 笔真实成交` : '尚无真实成交'}，低于市场最小单量的机会会被直接跳过，而不是强行放大仓位。`;
+    if (delayedAlert) {
+      if (config.delayed_order_alert_active) {
+        delayedAlert.classList.remove('hidden');
+        const focusSuffix = delayedOrderFocusOutcome ? ` · ${delayedOrderFocusOutcome}` : '';
+        const openOrderHint = openOrderCount > 0
+          ? `当前 CLOB 仍有 ${openOrderCount} 笔挂单，优先观察最终回执。`
+          : '当前 CLOB 没有挂单，但本地状态仍停在 delayed，建议人工复核。';
+        delayedAlert.innerHTML = `<strong>订单延迟提醒：</strong>${delayedOrderAlertCount} 笔订单在本地保持 delayed 超过 ${delayedOrderAlertSec} 秒；最老 ${delayedOrderOldestAgeLabel}，最近一笔 ${delayedOrderFocusSlug}${focusSuffix}（${delayedOrderFocusTime || delayedOrderFocusAgeLabel}）。${openOrderHint}`;
+      } else {
+        delayedAlert.classList.add('hidden');
+      }
+    }
   }
 
   document.getElementById('sys-mode').textContent = modeText;
@@ -1699,7 +1743,7 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('sys-guards-label').textContent = config.dry_run ? '研究护栏' : '实盘护栏';
   document.getElementById('sys-guards').textContent = config.dry_run
     ? `单笔上限 ${fmtMoney(maxTradeValue)} · 确认 ${config.min_signal_confirm_sec || 0}s`
-    : `单笔 ${fmtMoney(maxTradeValue)} · 已部署 ${fmtMoney(deployedValue)} · 挂单 ${openOrderCount} · 持仓 ${openPositionCount}/${maxPositions}`;
+    : `单笔 ${fmtMoney(maxTradeValue)} · 已部署 ${fmtMoney(deployedValue)} · 挂单 ${openOrderCount} · 持仓 ${openPositionCount}/${maxPositions}${delayedOrderCount > 0 ? ` · 延迟 ${delayedOrderCount}` : ''}`;
   document.getElementById('sys-experiments').textContent = config.dry_run
     ? `repeat-entry ${repeatText}；空簿延迟复查 ${noBookText}`
     : '模拟盘 / shadow / experiment 已归档，不再进入当前实盘视图';

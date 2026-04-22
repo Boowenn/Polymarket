@@ -68,6 +68,10 @@ NO_BOOK_DELAYED_RECHECK_MAX_EXTRA_ENTRIES = max(
     int(os.getenv("NO_BOOK_DELAYED_RECHECK_MAX_EXTRA_ENTRIES", "1")),
 )
 NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY = "no_book_delayed_recheck_stage2"
+DELAYED_ORDER_ALERT_SEC = max(
+    30,
+    int(os.getenv("DELAYED_ORDER_ALERT_SEC", "120")),
+)
 
 # Risk controls
 MAX_TRADE_PCT = float(os.getenv("MAX_TRADE_PCT", "0.05"))

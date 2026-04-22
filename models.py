@@ -797,6 +797,31 @@ def get_recent_trades(limit=20):
     return [dict(row) for row in rows]
 
 
+def get_recent_delayed_trades(limit=10):
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                tr.*,
+                CASE
+                    WHEN COALESCE(tr.signal_source, 'copy') = 'consensus' THEN 'Consensus'
+                    ELSE COALESCE(t.username, tr.trader_wallet)
+                END AS trader_username,
+                COALESCE(p.status, 'observe') AS trader_status,
+                COALESCE(p.quality_score, 0) AS trader_score
+            FROM trades tr
+            LEFT JOIN traders t ON t.wallet = tr.trader_wallet
+            LEFT JOIN trader_profiles p ON p.wallet = tr.trader_wallet
+            WHERE tr.mirrored = 1
+              AND LOWER(COALESCE(tr.our_status, '')) = 'delayed'
+            ORDER BY tr.timestamp DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def get_mirrored_trades():
     with db() as conn:
         rows = conn.execute(

@@ -24,7 +24,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 6. Before claiming live-readiness, verify wallet auth with a read-only CLOB call.
    For Polymarket proxy wallets, require the correct `POLY_SIGNATURE_TYPE` and `POLY_FUNDER` from the account settings page before any live canary.
 7. For tiny live bankrolls, prefer a smoke-test mindset over a sizing mindset.
-   Surface real guardrails in the dashboard, keep `.env` local-only, and block sub-minimum market sizes instead of auto-inflating order size.
+   Surface real guardrails in the dashboard, keep `.env` local-only, block sub-minimum market sizes instead of auto-inflating order size, and explicitly alert on live orders that stay `delayed` beyond the configured threshold.
 8. In live mode, keep actual wallet state separate from historical dry-run research state.
    Show real account cash separately from strategy bankroll, and make sure old `dry_run` positions do not consume live deployed-risk, exposure, or max-position views.
 9. When you intentionally cut over from research to live-only operation, archive the old DB snapshot locally and purge active `dry_run` / `shadow` / `experiment` rows from the runtime DB.
