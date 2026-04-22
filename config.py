@@ -41,13 +41,25 @@ MARKET_SCOPE_CACHE_SEC = max(60, int(os.getenv("MARKET_SCOPE_CACHE_SEC", "3600")
 DRY_RUN = os.getenv("DRY_RUN", "true").lower() == "true"
 DRY_RUN_RECORD_BLOCKED_SAMPLES = os.getenv("DRY_RUN_RECORD_BLOCKED_SAMPLES", "true").lower() == "true"
 ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT = (
-    os.getenv("ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT", "true").lower() == "true"
+    os.getenv("ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT", "false").lower() == "true"
 )
 REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES = max(
     0,
     int(os.getenv("REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES", "1")),
 )
 REPEAT_ENTRY_EXPERIMENT_KEY = "repeat_entry_stage2"
+ENABLE_STAGE2_NO_BOOK_DELAYED_RECHECK_EXPERIMENT = (
+    os.getenv("ENABLE_STAGE2_NO_BOOK_DELAYED_RECHECK_EXPERIMENT", "true").lower() == "true"
+)
+NO_BOOK_DELAYED_RECHECK_DELAY_SEC = max(
+    0,
+    int(os.getenv("NO_BOOK_DELAYED_RECHECK_DELAY_SEC", "30")),
+)
+NO_BOOK_DELAYED_RECHECK_MAX_EXTRA_ENTRIES = max(
+    0,
+    int(os.getenv("NO_BOOK_DELAYED_RECHECK_MAX_EXTRA_ENTRIES", "1")),
+)
+NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY = "no_book_delayed_recheck_stage2"
 
 # Risk controls
 MAX_TRADE_PCT = float(os.getenv("MAX_TRADE_PCT", "0.05"))
@@ -115,6 +127,14 @@ def capital_gates_enabled():
 
 def stage2_repeat_entry_experiment_enabled():
     return DRY_RUN and ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT and REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES > 0
+
+
+def stage2_no_book_delayed_recheck_experiment_enabled():
+    return (
+        DRY_RUN
+        and ENABLE_STAGE2_NO_BOOK_DELAYED_RECHECK_EXPERIMENT
+        and NO_BOOK_DELAYED_RECHECK_MAX_EXTRA_ENTRIES > 0
+    )
 
 
 def market_scope_set():

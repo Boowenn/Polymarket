@@ -130,6 +130,30 @@ def _block_reason_action_order(action):
     return {"experiment": 0, "watch": 1, "keep": 2}.get(action, 3)
 
 
+def _summary_with_derived_metrics(summary):
+    normalized = dict(summary or {})
+    normalized["total_entries"] = int(normalized.get("total_entries", 0) or 0)
+    normalized["open_entries"] = int(normalized.get("open_entries", 0) or 0)
+    normalized["closed_entries"] = int(normalized.get("closed_entries", 0) or 0)
+    normalized["wins"] = int(normalized.get("wins", 0) or 0)
+    normalized["losses"] = int(normalized.get("losses", 0) or 0)
+    normalized["flat_count"] = int(normalized.get("flat_count", 0) or 0)
+    normalized["realized_pnl"] = float(normalized.get("realized_pnl", 0) or 0)
+    normalized["avg_entry_drift"] = float(normalized.get("avg_entry_drift", 0) or 0)
+    normalized["decision_count"] = normalized["wins"] + normalized["losses"]
+    normalized["win_rate"] = (
+        round(normalized["wins"] / normalized["decision_count"] * 100, 1)
+        if normalized["decision_count"]
+        else None
+    )
+    normalized["close_rate"] = (
+        round(normalized["closed_entries"] / normalized["total_entries"] * 100, 1)
+        if normalized["total_entries"]
+        else 0.0
+    )
+    return normalized
+
+
 def get_connection():
     conn = sqlite3.connect(config.DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -631,7 +655,13 @@ def get_recent_trades(limit=20):
 def get_mirrored_trades():
     with db() as conn:
         rows = conn.execute(
-            "SELECT * FROM trades WHERE mirrored = 1 ORDER BY timestamp DESC"
+            """
+            SELECT *
+            FROM trades
+            WHERE mirrored = 1
+              AND COALESCE(our_size, 0) > 0
+            ORDER BY timestamp DESC
+            """
         ).fetchall()
     return [dict(row) for row in rows]
 
@@ -1011,16 +1041,20 @@ def get_trade_journal_summary(since_ts=None, sample_types=None, experiment_key=N
 
     with db() as conn:
         row = conn.execute(sql, params).fetchone()
-    return dict(row) if row else {
-        "total_entries": 0,
-        "open_entries": 0,
-        "closed_entries": 0,
-        "realized_pnl": 0,
-        "avg_entry_drift": 0,
-        "wins": 0,
-        "losses": 0,
-        "flat_count": 0,
-    }
+    if row:
+        return _summary_with_derived_metrics(dict(row))
+    return _summary_with_derived_metrics(
+        {
+            "total_entries": 0,
+            "open_entries": 0,
+            "closed_entries": 0,
+            "realized_pnl": 0,
+            "avg_entry_drift": 0,
+            "wins": 0,
+            "losses": 0,
+            "flat_count": 0,
+        }
+    )
 
 
 def get_experiment_entry_count(experiment_key, trader_wallet, condition_id, outcome, lookback_sec=86400):
@@ -1087,7 +1121,7 @@ def get_experiment_analysis(experiment_key, since_ts=None):
     closed_entries = int(summary.get("closed_entries", 0) or 0)
     wins = int(summary.get("wins", 0) or 0)
     losses = int(summary.get("losses", 0) or 0)
-    decision_count = wins + losses
+    decision_count = int(summary.get("decision_count", 0) or 0)
     top_market = ""
     top_market_share = 0.0
     top_trader = ""
@@ -1116,7 +1150,8 @@ def get_experiment_analysis(experiment_key, since_ts=None):
         "losses": losses,
         "flat_count": int(summary.get("flat_count", 0) or 0),
         "decision_count": decision_count,
-        "win_rate": round(wins / decision_count * 100, 1) if decision_count else None,
+        "win_rate": summary.get("win_rate"),
+        "close_rate": float(summary.get("close_rate", 0) or 0),
         "realized_pnl": float(summary.get("realized_pnl", 0) or 0),
         "avg_entry_drift": float(summary.get("avg_entry_drift", 0) or 0),
         "pnl_per_entry": (float(summary.get("realized_pnl", 0) or 0) / total_entries) if total_entries else 0.0,
@@ -1138,48 +1173,57 @@ def get_experiment_analysis(experiment_key, since_ts=None):
 def get_performance_snapshot(since_ts=None):
     summary = get_trade_journal_summary(since_ts=since_ts, sample_types=("executed",))
     shadow_summary = get_trade_journal_summary(since_ts=since_ts, sample_types=("shadow",))
+    experiment_summary = get_trade_journal_summary(since_ts=since_ts, sample_types=("experiment",))
     research_summary = get_trade_journal_summary(since_ts=since_ts)
     repeat_experiment = get_experiment_analysis(config.REPEAT_ENTRY_EXPERIMENT_KEY, since_ts=since_ts)
+    no_book_recheck_experiment = get_experiment_analysis(
+        config.NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY,
+        since_ts=since_ts,
+    )
     blocked_reason_rows = get_block_reason_analysis(since_ts=since_ts, sample_types=("shadow",), limit=1)
     blocked_reason_focus = blocked_reason_rows[0] if blocked_reason_rows else None
-    total_entries = int(summary.get("total_entries", 0) or 0)
-    open_entries = int(summary.get("open_entries", 0) or 0)
-    closed_entries = int(summary.get("closed_entries", 0) or 0)
-    wins = int(summary.get("wins", 0) or 0)
-    losses = int(summary.get("losses", 0) or 0)
-    flat_count = int(summary.get("flat_count", 0) or 0)
-    decision_count = wins + losses
-    win_rate = round(wins / decision_count * 100, 1) if decision_count > 0 else None
-    shadow_entries = int(shadow_summary.get("total_entries", 0) or 0)
-    shadow_open_entries = int(shadow_summary.get("open_entries", 0) or 0)
-    shadow_closed_entries = int(shadow_summary.get("closed_entries", 0) or 0)
-    shadow_wins = int(shadow_summary.get("wins", 0) or 0)
-    shadow_losses = int(shadow_summary.get("losses", 0) or 0)
-    shadow_decision_count = shadow_wins + shadow_losses
-    shadow_win_rate = round(shadow_wins / shadow_decision_count * 100, 1) if shadow_decision_count > 0 else None
+    sample_metrics = {
+        "executed": summary,
+        "shadow": shadow_summary,
+        "experiment": experiment_summary,
+        "research": research_summary,
+    }
 
     return {
-        "simulated_entries": total_entries,
-        "open_entries": open_entries,
-        "closed_entries": closed_entries,
-        "wins": wins,
-        "losses": losses,
-        "flat_count": flat_count,
-        "decision_count": decision_count,
-        "win_rate": win_rate,
+        "sample_metrics": sample_metrics,
+        "simulated_entries": int(summary.get("total_entries", 0) or 0),
+        "open_entries": int(summary.get("open_entries", 0) or 0),
+        "closed_entries": int(summary.get("closed_entries", 0) or 0),
+        "wins": int(summary.get("wins", 0) or 0),
+        "losses": int(summary.get("losses", 0) or 0),
+        "flat_count": int(summary.get("flat_count", 0) or 0),
+        "decision_count": int(summary.get("decision_count", 0) or 0),
+        "win_rate": summary.get("win_rate"),
+        "close_rate": float(summary.get("close_rate", 0) or 0),
         "realized_pnl": float(summary.get("realized_pnl", 0) or 0),
         "avg_entry_drift": float(summary.get("avg_entry_drift", 0) or 0),
         "research_entries": int(research_summary.get("total_entries", 0) or 0),
         "research_open_entries": int(research_summary.get("open_entries", 0) or 0),
         "research_closed_entries": int(research_summary.get("closed_entries", 0) or 0),
-        "shadow_entries": shadow_entries,
-        "shadow_open_entries": shadow_open_entries,
-        "shadow_closed_entries": shadow_closed_entries,
-        "shadow_wins": shadow_wins,
-        "shadow_losses": shadow_losses,
-        "shadow_decision_count": shadow_decision_count,
-        "shadow_win_rate": shadow_win_rate,
+        "research_decision_count": int(research_summary.get("decision_count", 0) or 0),
+        "research_win_rate": research_summary.get("win_rate"),
+        "research_close_rate": float(research_summary.get("close_rate", 0) or 0),
+        "shadow_entries": int(shadow_summary.get("total_entries", 0) or 0),
+        "shadow_open_entries": int(shadow_summary.get("open_entries", 0) or 0),
+        "shadow_closed_entries": int(shadow_summary.get("closed_entries", 0) or 0),
+        "shadow_wins": int(shadow_summary.get("wins", 0) or 0),
+        "shadow_losses": int(shadow_summary.get("losses", 0) or 0),
+        "shadow_decision_count": int(shadow_summary.get("decision_count", 0) or 0),
+        "shadow_win_rate": shadow_summary.get("win_rate"),
+        "shadow_close_rate": float(shadow_summary.get("close_rate", 0) or 0),
         "shadow_realized_pnl": float(shadow_summary.get("realized_pnl", 0) or 0),
+        "experiment_entries": int(experiment_summary.get("total_entries", 0) or 0),
+        "experiment_open_entries": int(experiment_summary.get("open_entries", 0) or 0),
+        "experiment_closed_entries": int(experiment_summary.get("closed_entries", 0) or 0),
+        "experiment_decision_count": int(experiment_summary.get("decision_count", 0) or 0),
+        "experiment_win_rate": experiment_summary.get("win_rate"),
+        "experiment_close_rate": float(experiment_summary.get("close_rate", 0) or 0),
+        "experiment_realized_pnl": float(experiment_summary.get("realized_pnl", 0) or 0),
         "repeat_entry_experiment_enabled": config.stage2_repeat_entry_experiment_enabled(),
         "repeat_entry_experiment_entries": int(repeat_experiment.get("total_entries", 0) or 0),
         "repeat_entry_experiment_open_entries": int(repeat_experiment.get("open_entries", 0) or 0),
@@ -1189,6 +1233,7 @@ def get_performance_snapshot(since_ts=None):
         "repeat_entry_experiment_flat_count": int(repeat_experiment.get("flat_count", 0) or 0),
         "repeat_entry_experiment_decision_count": int(repeat_experiment.get("decision_count", 0) or 0),
         "repeat_entry_experiment_win_rate": repeat_experiment.get("win_rate"),
+        "repeat_entry_experiment_close_rate": float(repeat_experiment.get("close_rate", 0) or 0),
         "repeat_entry_experiment_realized_pnl": float(repeat_experiment.get("realized_pnl", 0) or 0),
         "repeat_entry_experiment_distinct_markets": int(repeat_experiment.get("distinct_markets", 0) or 0),
         "repeat_entry_experiment_distinct_traders": int(repeat_experiment.get("distinct_traders", 0) or 0),
@@ -1197,6 +1242,28 @@ def get_performance_snapshot(since_ts=None):
         "repeat_entry_experiment_top_trader": repeat_experiment.get("top_trader", ""),
         "repeat_entry_experiment_top_trader_share": float(repeat_experiment.get("top_trader_share", 0) or 0),
         "repeat_entry_experiment_status": repeat_experiment.get("status", "idle"),
+        "no_book_recheck_experiment_enabled": config.stage2_no_book_delayed_recheck_experiment_enabled(),
+        "no_book_recheck_experiment_entries": int(no_book_recheck_experiment.get("total_entries", 0) or 0),
+        "no_book_recheck_experiment_open_entries": int(no_book_recheck_experiment.get("open_entries", 0) or 0),
+        "no_book_recheck_experiment_closed_entries": int(no_book_recheck_experiment.get("closed_entries", 0) or 0),
+        "no_book_recheck_experiment_wins": int(no_book_recheck_experiment.get("wins", 0) or 0),
+        "no_book_recheck_experiment_losses": int(no_book_recheck_experiment.get("losses", 0) or 0),
+        "no_book_recheck_experiment_flat_count": int(no_book_recheck_experiment.get("flat_count", 0) or 0),
+        "no_book_recheck_experiment_decision_count": int(no_book_recheck_experiment.get("decision_count", 0) or 0),
+        "no_book_recheck_experiment_win_rate": no_book_recheck_experiment.get("win_rate"),
+        "no_book_recheck_experiment_close_rate": float(no_book_recheck_experiment.get("close_rate", 0) or 0),
+        "no_book_recheck_experiment_realized_pnl": float(no_book_recheck_experiment.get("realized_pnl", 0) or 0),
+        "no_book_recheck_experiment_distinct_markets": int(no_book_recheck_experiment.get("distinct_markets", 0) or 0),
+        "no_book_recheck_experiment_distinct_traders": int(no_book_recheck_experiment.get("distinct_traders", 0) or 0),
+        "no_book_recheck_experiment_top_market": no_book_recheck_experiment.get("top_market", ""),
+        "no_book_recheck_experiment_top_market_share": float(
+            no_book_recheck_experiment.get("top_market_share", 0) or 0
+        ),
+        "no_book_recheck_experiment_top_trader": no_book_recheck_experiment.get("top_trader", ""),
+        "no_book_recheck_experiment_top_trader_share": float(
+            no_book_recheck_experiment.get("top_trader_share", 0) or 0
+        ),
+        "no_book_recheck_experiment_status": no_book_recheck_experiment.get("status", "idle"),
         "blocked_reason_focus": blocked_reason_focus,
     }
 
@@ -1231,6 +1298,7 @@ def get_recent_mirrored_trade(condition_id, outcome, side, within_sec, trader_wa
         SELECT *
         FROM trades
         WHERE mirrored = 1
+          AND COALESCE(our_size, 0) > 0
           AND condition_id = ?
           AND outcome = ?
           AND side = ?
@@ -1302,6 +1370,7 @@ def get_mirrored_entry_count(trader_wallet, condition_id, outcome, lookback_sec=
             SELECT COUNT(*) AS cnt
             FROM trades
             WHERE mirrored = 1
+              AND COALESCE(our_size, 0) > 0
               AND trader_wallet = ?
               AND condition_id = ?
               AND outcome = ?
@@ -1352,15 +1421,14 @@ def get_latest_pnl():
 
 
 def get_daily_deployed_value():
-    day_start = time.time() - 86400
     with db() as conn:
         row = conn.execute(
             """
-            SELECT COALESCE(SUM(COALESCE(our_price, price) * COALESCE(our_size, size)), 0) AS spent
-            FROM trades
-            WHERE mirrored = 1 AND timestamp > ?
-            """,
-            (day_start,),
+            SELECT COALESCE(SUM(COALESCE(entry_value, entry_size * COALESCE(protected_price, tradable_price, signal_price), 0)), 0) AS spent
+            FROM trade_journal
+            WHERE COALESCE(sample_type, 'executed') = 'executed'
+              AND exit_timestamp IS NULL
+            """
         ).fetchone()
     return row["spent"] if row else 0
 
@@ -1370,31 +1438,29 @@ def get_daily_pnl():
 
 
 def get_exposure_by_trader(wallet, lookback_sec=86400):
-    cutoff = time.time() - lookback_sec
     with db() as conn:
         row = conn.execute(
             """
-            SELECT COALESCE(SUM(COALESCE(our_price, price) * COALESCE(our_size, size)), 0) AS exposure
-            FROM trades
-            WHERE mirrored = 1
+            SELECT COALESCE(SUM(COALESCE(entry_value, entry_size * COALESCE(protected_price, tradable_price, signal_price), 0)), 0) AS exposure
+            FROM trade_journal
+            WHERE COALESCE(sample_type, 'executed') = 'executed'
+              AND exit_timestamp IS NULL
               AND trader_wallet = ?
-              AND timestamp >= ?
             """,
-            (wallet, cutoff),
+            (wallet,),
         ).fetchone()
     return row["exposure"] if row else 0
 
 
 def get_exposure_by_market(condition_id, outcome=None, lookback_sec=86400):
-    cutoff = time.time() - lookback_sec
     sql = """
-        SELECT COALESCE(SUM(COALESCE(our_price, price) * COALESCE(our_size, size)), 0) AS exposure
-        FROM trades
-        WHERE mirrored = 1
+        SELECT COALESCE(SUM(COALESCE(entry_value, entry_size * COALESCE(protected_price, tradable_price, signal_price), 0)), 0) AS exposure
+        FROM trade_journal
+        WHERE COALESCE(sample_type, 'executed') = 'executed'
+          AND exit_timestamp IS NULL
           AND condition_id = ?
-          AND timestamp >= ?
     """
-    params = [condition_id, cutoff]
+    params = [condition_id]
     if outcome is not None:
         sql += " AND outcome = ?"
         params.append(outcome)
@@ -1426,16 +1492,13 @@ def get_recent_risk_logs(limit=10):
 # --- Position operations ---
 
 def get_open_position_count():
-    cutoff = time.time() - 86400
     with db() as conn:
         row = conn.execute(
             """
             SELECT COUNT(DISTINCT condition_id || '|' || outcome) AS cnt
-            FROM trades
-            WHERE mirrored = 1
-              AND COALESCE(our_status, '') IN ('filled', 'submitted', 'live', 'dry_run')
-              AND timestamp >= ?
-            """,
-            (cutoff,),
+            FROM trade_journal
+            WHERE COALESCE(sample_type, 'executed') = 'executed'
+              AND exit_timestamp IS NULL
+            """
         ).fetchone()
     return row["cnt"] if row else 0

@@ -67,8 +67,11 @@ def first_run_setup():
         f.write(f"MARKET_SCOPE_CACHE_SEC=3600\n")
         f.write(f"DRY_RUN={dry_run}\n")
         f.write(f"DRY_RUN_RECORD_BLOCKED_SAMPLES=true\n")
-        f.write(f"ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT=true\n")
+        f.write(f"ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT=false\n")
         f.write(f"REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES=1\n")
+        f.write(f"ENABLE_STAGE2_NO_BOOK_DELAYED_RECHECK_EXPERIMENT=true\n")
+        f.write(f"NO_BOOK_DELAYED_RECHECK_DELAY_SEC=30\n")
+        f.write(f"NO_BOOK_DELAYED_RECHECK_MAX_EXTRA_ENTRIES=1\n")
         f.write(f"MAX_TRADE_PCT=0.05\n")
         f.write(f"DAILY_LOSS_LIMIT=50\n")
         f.write(f"MAX_POSITIONS=10\n")
@@ -168,7 +171,8 @@ def show_banner():
             f"  Research:  paper budget [cyan]${config.effective_daily_risk_budget():,.0f}[/cyan], "
             f"capital gates [cyan]{gate_mode}[/cyan], "
             f"blocked shadows [cyan]{'on' if config.DRY_RUN_RECORD_BLOCKED_SAMPLES else 'off'}[/cyan], "
-            f"stage2 repeat-entry [cyan]{'on' if config.stage2_repeat_entry_experiment_enabled() else 'off'}[/cyan]"
+            f"repeat-entry [cyan]{'on' if config.stage2_repeat_entry_experiment_enabled() else 'off'}[/cyan], "
+            f"no-book recheck [cyan]{'on' if config.stage2_no_book_delayed_recheck_experiment_enabled() else 'off'}[/cyan]"
         )
     console.print()
 

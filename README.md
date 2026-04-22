@@ -10,7 +10,7 @@ A defensive Polymarket copy-trading bot focused on paper trading, trader screeni
 - Uses order book checks before mirroring to avoid wide spread, drift, and impact traps.
 - Supports `DRY_RUN=true` so you can simulate copy-trading without funding an account.
 - In `DRY_RUN`, blocked signals can also be written into the journal as shadow research samples so liquidity gates do not erase observation data.
-- Supports a stage-2 repeat-entry experiment that keeps the original blocked control sample and separately journals one capped second-entry shadow sample for later comparison.
+- Supports isolated stage-2 experiments, including a paused repeat-entry track and an active delayed no-book recheck track.
 - Records signal price, tradable price, protected execution price, and final exit or settlement price in a trade journal.
 - Backfills journal exits from closed-market settlement data.
 - Captures trader profile history over time and generates observation reports with improvement suggestions.
@@ -71,11 +71,20 @@ The report summarizes:
 
 See `.env.example` for all configuration values.
 
-## Design document
+## Research Governance Skill
 
-Long-term maintenance and AI-learning design:
+Long-term maintenance, metric definitions, and rollout governance now live in the repo skill:
 
-- `docs/AI_SELF_LEARNING_STRATEGY_DESIGN.md`
+- `.codex/skills/polymarket-research-governance/SKILL.md`
+- `.codex/skills/polymarket-research-governance/references/governance.md`
+
+Authoritative rules:
+
+- keep `executed`, `shadow`, and `experiment` separated in reports and dashboards
+- use `decision_count = wins + losses`
+- use `win_rate = wins / decision_count`
+- use `close_rate = closed_entries / total_entries`
+- use open `trade_journal` executed rows for capital, exposure, and max-position guards
 
 Relevant scope controls:
 
@@ -86,5 +95,8 @@ Relevant scope controls:
 - `LEADERBOARD_DISCOVERY_PERIODS=day,week,month` and `LEADERBOARD_DISCOVERY_ORDER_BY=pnl,vol` to merge multiple sports leaderboard slices into one larger monitored pool.
 - `MONITOR_FETCH_WORKERS=12` to fetch trader activity in parallel so the bot can scan a larger pool without aging signals out.
 - `DRY_RUN_RECORD_BLOCKED_SAMPLES=true` to keep blocked-but-interesting signals as shadow samples for later settlement analysis.
-- `ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT=true` to start collecting the second-stage repeat-entry experiment without changing live execution.
+- `ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT=false` keeps the repeat-entry experiment paused by default while retaining historical samples.
 - `REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES=1` to keep the experiment tightly capped to one extra re-entry shadow sample per trader/market/outcome.
+- `ENABLE_STAGE2_NO_BOOK_DELAYED_RECHECK_EXPERIMENT=true` to start a delayed recheck experiment for `no executable book levels`.
+- `NO_BOOK_DELAYED_RECHECK_DELAY_SEC=30` to wait before re-checking whether the book becomes executable.
+- `NO_BOOK_DELAYED_RECHECK_MAX_EXTRA_ENTRIES=1` to keep the delayed recheck experiment tightly capped.

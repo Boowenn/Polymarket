@@ -3,177 +3,536 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Polymarket Copy Trading Dashboard</title>
+<title>Polymarket 体育与电竞研究看板</title>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <style>
   :root {
-    --bg: #09111d;
-    --bg-accent: #0f1d33;
-    --card: rgba(14, 24, 42, 0.92);
-    --border: rgba(120, 148, 186, 0.18);
-    --text: #e8eef8;
-    --muted: #8ea2bd;
-    --green: #2dd4bf;
-    --red: #fb7185;
-    --amber: #fbbf24;
-    --blue: #60a5fa;
-    --slate: #24354f;
-    --panel-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+    --bg: #f4efe6;
+    --bg-deep: #173247;
+    --bg-ink: #122638;
+    --bg-panel: rgba(255, 251, 245, 0.94);
+    --bg-panel-strong: rgba(255, 248, 239, 0.98);
+    --border: rgba(22, 53, 76, 0.12);
+    --border-strong: rgba(22, 53, 76, 0.18);
+    --text: #13212e;
+    --muted: #647689;
+    --green: #0f8a6c;
+    --red: #cf4c56;
+    --amber: #d38a1f;
+    --blue: #2d73b9;
+    --navy: #16354c;
+    --cream: #fffaf2;
+    --shadow: 0 18px 42px rgba(18, 38, 56, 0.1);
+    --shadow-soft: 0 12px 28px rgba(18, 38, 56, 0.08);
   }
 
-  * { box-sizing: border-box; }
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     margin: 0;
     min-height: 100vh;
-    background:
-      radial-gradient(circle at top left, rgba(96, 165, 250, 0.14), transparent 30%),
-      radial-gradient(circle at top right, rgba(45, 212, 191, 0.12), transparent 28%),
-      linear-gradient(180deg, #08101b 0%, #0a1320 100%);
     color: var(--text);
-    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-family: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(15, 138, 108, 0.12), transparent 24%),
+      radial-gradient(circle at top right, rgba(45, 115, 185, 0.12), transparent 30%),
+      linear-gradient(180deg, #f6f2ea 0%, #efe8dc 100%);
   }
 
-  .shell {
-    max-width: 1480px;
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .app-shell {
+    max-width: 1600px;
     margin: 0 auto;
-    padding: 20px 20px 28px;
-  }
-
-  .hero {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    align-items: center;
-    padding: 18px 22px;
-    border: 1px solid var(--border);
-    border-radius: 18px;
-    background: linear-gradient(135deg, rgba(19, 35, 60, 0.95), rgba(11, 20, 34, 0.96));
-    box-shadow: var(--panel-shadow);
-  }
-
-  .hero-title {
-    font-size: 28px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-  }
-
-  .hero-subtitle {
-    margin-top: 6px;
-    color: var(--muted);
-    font-size: 13px;
-  }
-
-  .hero-meta {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-
-  .pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 9px 12px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: rgba(255, 255, 255, 0.03);
-    font-size: 12px;
-    color: var(--muted);
-  }
-
-  .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--green);
-    box-shadow: 0 0 0 6px rgba(45, 212, 191, 0.18);
-  }
-
-  .mode-watch { color: var(--amber); }
-  .mode-live { color: var(--red); }
-
-  .stats-grid {
+    padding: 22px;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 14px;
-    margin-top: 16px;
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 22px;
   }
 
+  .sidebar {
+    position: sticky;
+    top: 22px;
+    align-self: start;
+    display: grid;
+    gap: 16px;
+  }
+
+  .brand-card,
+  .side-card,
+  .hero,
   .stat-card,
   .panel {
     border: 1px solid var(--border);
-    background: var(--card);
-    border-radius: 18px;
-    box-shadow: var(--panel-shadow);
+    background: var(--bg-panel);
+    border-radius: 24px;
+    box-shadow: var(--shadow-soft);
   }
 
-  .stat-card {
-    padding: 16px 18px;
+  .brand-card {
+    padding: 22px 20px;
+    color: #f7efe4;
+    background:
+      linear-gradient(150deg, rgba(16, 49, 71, 0.98), rgba(17, 37, 54, 0.94)),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0));
+    border-color: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    position: relative;
   }
 
-  .stat-label {
+  .brand-card::after {
+    content: "";
+    position: absolute;
+    inset: auto -30px -60px auto;
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(66, 199, 172, 0.25), transparent 68%);
+    pointer-events: none;
+  }
+
+  .brand-kicker {
     font-size: 11px;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
+    color: rgba(247, 239, 228, 0.72);
+  }
+
+  .brand-title {
+    margin-top: 10px;
+    font-size: 28px;
+    line-height: 1.12;
+    font-weight: 800;
+  }
+
+  .brand-subtitle {
+    margin-top: 12px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: rgba(247, 239, 228, 0.76);
+  }
+
+  .nav-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .nav-link {
+    display: grid;
+    gap: 4px;
+    padding: 14px 14px 14px 16px;
+    border-radius: 18px;
+    border: 1px solid transparent;
+    transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+    background: rgba(255, 255, 255, 0.36);
+  }
+
+  .nav-link:hover,
+  .nav-link.active {
+    transform: translateX(4px);
+    border-color: rgba(45, 115, 185, 0.18);
+    background: rgba(45, 115, 185, 0.08);
+  }
+
+  .nav-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--navy);
+  }
+
+  .nav-note {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .side-card {
+    padding: 18px 18px 16px;
+    background: var(--bg-panel-strong);
+  }
+
+  .side-card-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--navy);
     letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .side-stack {
+    margin-top: 14px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .side-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    font-size: 13px;
+  }
+
+  .side-row span {
     color: var(--muted);
   }
 
-  .stat-value {
-    margin-top: 10px;
-    font-size: 30px;
+  .side-row strong {
+    text-align: right;
     font-weight: 700;
-    line-height: 1;
+    color: var(--text);
   }
 
-  .stat-sub {
-    margin-top: 8px;
+  .side-footnote {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed rgba(22, 53, 76, 0.16);
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.65;
+  }
+
+  .content {
+    min-width: 0;
+    display: grid;
+    gap: 18px;
+  }
+
+  .hero {
+    padding: 26px 28px;
+    background:
+      radial-gradient(circle at 78% 22%, rgba(45, 115, 185, 0.16), transparent 22%),
+      radial-gradient(circle at 15% 10%, rgba(15, 138, 108, 0.14), transparent 24%),
+      linear-gradient(145deg, rgba(255, 252, 246, 0.96), rgba(250, 244, 235, 0.98));
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow);
+  }
+
+  .hero-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .hero-title {
+    font-size: 34px;
+    line-height: 1.05;
+    font-weight: 900;
+    color: var(--navy);
+  }
+
+  .hero-subtitle {
+    margin-top: 10px;
+    max-width: 760px;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.75;
+  }
+
+  .hero-badges {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .hero-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(22, 53, 76, 0.1);
     color: var(--muted);
     font-size: 12px;
   }
 
+  .hero-pill strong {
+    color: var(--text);
+    font-size: 13px;
+  }
+
+  .conn-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 0 6px rgba(15, 138, 108, 0.18);
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .hero-strip {
+    margin-top: 18px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .hero-strip-card {
+    padding: 16px 16px 14px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.66);
+    border: 1px solid rgba(22, 53, 76, 0.08);
+  }
+
+  .hero-strip-label {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .hero-strip-value {
+    margin-top: 8px;
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--navy);
+  }
+
+  .hero-strip-note {
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--muted);
+  }
+
+  .section {
+    scroll-margin-top: 26px;
+  }
+
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: end;
+    margin-bottom: 12px;
+  }
+
+  .section-title {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--navy);
+  }
+
+  .section-note {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+    max-width: 760px;
+  }
+
+  .section-tag {
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(15, 138, 108, 0.1);
+    color: var(--green);
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  .stat-card {
+    padding: 18px 18px 16px;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+  }
+
+  .stat-label {
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .stat-value {
+    margin-top: 12px;
+    font-size: 30px;
+    line-height: 1;
+    font-weight: 800;
+    color: var(--navy);
+  }
+
+  .stat-sub {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  .blue { color: var(--blue); }
   .green { color: var(--green); }
   .red { color: var(--red); }
   .amber { color: var(--amber); }
-  .blue { color: var(--blue); }
   .muted { color: var(--muted); }
 
-  .main-grid {
+  .overview-grid,
+  .signal-grid {
     display: grid;
-    grid-template-columns: 1.2fr 0.8fr;
+    grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
     gap: 16px;
     margin-top: 16px;
   }
 
-  .main-grid .full {
-    grid-column: 1 / -1;
+  .panel {
+    overflow: hidden;
   }
 
   .panel-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
     gap: 12px;
+    align-items: center;
     padding: 16px 18px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid rgba(22, 53, 76, 0.08);
   }
 
   .panel-title {
-    font-size: 16px;
-    font-weight: 600;
+    font-size: 17px;
+    font-weight: 800;
+    color: var(--navy);
   }
 
   .panel-badge {
-    padding: 4px 10px;
+    padding: 5px 11px;
     border-radius: 999px;
-    background: rgba(96, 165, 250, 0.12);
+    background: rgba(45, 115, 185, 0.1);
     color: var(--blue);
-    font-size: 11px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .panel-body {
+    padding: 18px;
+  }
+
+  .performance-layout {
+    display: flex;
+    gap: 22px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .ring {
+    width: 126px;
+    height: 126px;
+    flex: 0 0 auto;
+  }
+
+  .ring-bg {
+    fill: none;
+    stroke: rgba(22, 53, 76, 0.12);
+    stroke-width: 10;
+  }
+
+  .ring-fg {
+    fill: none;
+    stroke: var(--green);
+    stroke-width: 10;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.6s ease, stroke 0.6s ease;
+  }
+
+  .ring-label {
+    fill: var(--navy);
+    font-size: 22px;
+    font-weight: 800;
+    text-anchor: middle;
+    dominant-baseline: middle;
+  }
+
+  .metric-grid {
+    flex: 1 1 460px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 18px;
+  }
+
+  .metric-card {
+    padding: 14px 14px 12px;
+    border-radius: 18px;
+    background: rgba(22, 53, 76, 0.04);
+    border: 1px solid rgba(22, 53, 76, 0.08);
+  }
+
+  .metric-k {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .metric-v {
+    margin-top: 6px;
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--text);
+  }
+
+  .metric-sub {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .panel-note {
+    margin-top: 16px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    background: linear-gradient(180deg, rgba(45, 115, 185, 0.08), rgba(45, 115, 185, 0.04));
+    border: 1px solid rgba(45, 115, 185, 0.14);
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
+  .health-grid {
+    display: grid;
+    gap: 10px;
+  }
+
+  .health-row {
+    display: grid;
+    grid-template-columns: 104px 1fr;
+    gap: 10px;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(22, 53, 76, 0.08);
+    font-size: 13px;
+  }
+
+  .health-row:last-child {
+    border-bottom: 0;
+  }
+
+  .health-row span {
+    color: var(--muted);
+  }
+
+  .health-row strong {
+    line-height: 1.6;
   }
 
   .table-wrap {
     overflow: auto;
-    max-height: 430px;
+    max-height: 520px;
   }
 
   table {
@@ -183,368 +542,542 @@
 
   th,
   td {
-    padding: 12px 14px;
-    border-bottom: 1px solid rgba(120, 148, 186, 0.12);
+    padding: 13px 14px;
+    border-bottom: 1px solid rgba(22, 53, 76, 0.08);
     text-align: left;
     font-size: 13px;
+    vertical-align: top;
   }
 
   th {
     position: sticky;
     top: 0;
-    background: rgba(13, 23, 39, 0.98);
+    z-index: 1;
+    background: rgba(255, 250, 243, 0.98);
     color: var(--muted);
-    letter-spacing: 0.04em;
-    font-size: 11px;
     text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.06em;
   }
 
-  tr:hover td {
-    background: rgba(96, 165, 250, 0.04);
+  tbody tr:hover td {
+    background: rgba(45, 115, 185, 0.04);
   }
 
-  .text-right { text-align: right; }
+  .text-right {
+    text-align: right;
+  }
 
   .status-chip,
-  .side-chip {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 4px 9px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .status-approved { background: rgba(45, 212, 191, 0.14); color: var(--green); }
-  .status-observe { background: rgba(251, 191, 36, 0.12); color: var(--amber); }
-  .status-blocked { background: rgba(251, 113, 133, 0.12); color: var(--red); }
-  .status-signal { background: rgba(142, 162, 189, 0.13); color: var(--muted); }
-
-  .side-buy { background: rgba(45, 212, 191, 0.14); color: var(--green); }
-  .side-sell { background: rgba(251, 113, 133, 0.14); color: var(--red); }
-
-  .performance {
-    padding: 18px;
-  }
-
-  .performance-top {
-    display: flex;
-    gap: 18px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .ring {
-    width: 112px;
-    height: 112px;
-    flex: 0 0 auto;
-  }
-
-  .ring-bg {
-    fill: none;
-    stroke: rgba(142, 162, 189, 0.16);
-    stroke-width: 8;
-  }
-
-  .ring-fg {
-    fill: none;
-    stroke: var(--green);
-    stroke-width: 8;
-    stroke-linecap: round;
-    transition: stroke-dashoffset 0.6s ease, stroke 0.6s ease;
-  }
-
-  .ring-label {
-    fill: var(--text);
-    font-size: 18px;
-    font-weight: 700;
-    text-anchor: middle;
-    dominant-baseline: middle;
-  }
-
-  .performance-metrics {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(160px, 1fr));
-    gap: 10px 18px;
-    flex: 1 1 420px;
-  }
-
-  .metric-k {
-    color: var(--muted);
-    font-size: 12px;
-    margin-bottom: 4px;
-  }
-
-  .metric-v {
-    font-size: 22px;
-    font-weight: 700;
-  }
-
-  .performance-note {
-    margin-top: 14px;
-    padding: 12px 14px;
-    border-radius: 14px;
-    background: rgba(96, 165, 250, 0.08);
-    border: 1px solid rgba(96, 165, 250, 0.14);
-    color: var(--muted);
-    font-size: 12px;
-    line-height: 1.6;
-  }
-
-  .risk-list {
-    max-height: 260px;
-    overflow: auto;
-  }
-
-  .risk-item {
-    display: grid;
-    grid-template-columns: 68px 92px 1fr;
-    gap: 10px;
-    padding: 12px 18px;
-    border-bottom: 1px solid rgba(120, 148, 186, 0.12);
-    font-size: 13px;
-  }
-
-  .risk-time { color: var(--muted); }
-  .risk-event { color: var(--amber); font-weight: 700; }
-  .risk-detail { color: var(--muted); }
-
+  .side-chip,
   .action-chip {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     padding: 4px 10px;
+    min-height: 26px;
     border-radius: 999px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
   }
 
-  .action-experiment { background: rgba(96, 165, 250, 0.14); color: var(--blue); }
-  .action-watch { background: rgba(251, 191, 36, 0.12); color: var(--amber); }
-  .action-keep { background: rgba(251, 113, 133, 0.12); color: var(--red); }
+  .status-approved { background: rgba(15, 138, 108, 0.12); color: var(--green); }
+  .status-observe { background: rgba(211, 138, 31, 0.12); color: var(--amber); }
+  .status-blocked { background: rgba(207, 76, 86, 0.12); color: var(--red); }
+  .status-signal { background: rgba(100, 118, 137, 0.12); color: var(--muted); }
+
+  .side-buy { background: rgba(15, 138, 108, 0.12); color: var(--green); }
+  .side-sell { background: rgba(207, 76, 86, 0.12); color: var(--red); }
+
+  .action-experiment { background: rgba(45, 115, 185, 0.12); color: var(--blue); }
+  .action-watch { background: rgba(211, 138, 31, 0.12); color: var(--amber); }
+  .action-keep { background: rgba(207, 76, 86, 0.12); color: var(--red); }
+  .action-paused { background: rgba(100, 118, 137, 0.14); color: var(--muted); }
 
   .block-note {
     color: var(--muted);
+    line-height: 1.6;
     font-size: 12px;
-    line-height: 1.5;
+  }
+
+  .risk-list {
+    max-height: 520px;
+    overflow: auto;
+  }
+
+  .risk-item {
+    display: grid;
+    grid-template-columns: 72px 92px 1fr;
+    gap: 12px;
+    padding: 13px 18px;
+    border-bottom: 1px solid rgba(22, 53, 76, 0.08);
+    font-size: 13px;
+  }
+
+  .risk-time {
+    color: var(--muted);
+  }
+
+  .risk-event {
+    color: var(--navy);
+    font-weight: 800;
+  }
+
+  .risk-detail {
+    color: var(--muted);
+    line-height: 1.55;
   }
 
   .footer {
-    margin-top: 16px;
-    text-align: center;
+    margin-top: 4px;
+    padding: 12px 4px 0;
     color: var(--muted);
     font-size: 12px;
+    text-align: center;
+  }
+
+  .hero,
+  .stat-card,
+  .panel,
+  .side-card,
+  .brand-card {
+    animation: rise-in 0.5s ease both;
+  }
+
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @media (max-width: 1240px) {
+    .app-shell {
+      grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+      position: static;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+    }
+
+    .brand-card {
+      grid-column: 1 / -1;
+    }
   }
 
   @media (max-width: 980px) {
-    .hero,
-    .performance-top {
-      flex-direction: column;
-      align-items: flex-start;
+    .sidebar {
+      grid-template-columns: 1fr;
     }
 
-    .hero-meta {
+    .hero-top {
+      flex-direction: column;
+    }
+
+    .hero-badges {
       justify-content: flex-start;
     }
 
-    .main-grid {
+    .hero-strip,
+    .stats-grid,
+    .overview-grid,
+    .signal-grid {
       grid-template-columns: 1fr;
+    }
+
+    .metric-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .app-shell {
+      padding: 14px;
+      gap: 14px;
+    }
+
+    .hero,
+    .brand-card,
+    .side-card,
+    .stat-card,
+    .panel {
+      border-radius: 20px;
+    }
+
+    .hero,
+    .panel-body {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+
+    .panel-header {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+
+    .hero-title {
+      font-size: 28px;
+    }
+
+    th,
+    td {
+      padding: 11px 12px;
+    }
+
+    .nav-link:hover,
+    .nav-link.active {
+      transform: none;
     }
   }
 </style>
 </head>
 <body>
-<div class="shell">
-  <section class="hero">
-    <div>
-      <div class="hero-title">Polymarket Copy Trading Dashboard</div>
-      <div class="hero-subtitle">防守型模拟跟单面板。胜率只按已平仓 / 已结算样本统计，未平仓 dry-run 不计入。</div>
-    </div>
-    <div class="hero-meta">
-      <div class="pill"><span class="dot" id="conn-dot"></span><span id="conn-text">Connected</span></div>
-      <div class="pill">模式 <strong id="mode-badge" class="mode-watch">观察 / 模拟</strong></div>
-      <div class="pill">轮次 <strong id="cycle-num">0</strong></div>
-      <div class="pill">更新时间 <strong id="update-time">--:--:--</strong></div>
-      <div class="pill">下次扫描 <strong id="countdown">--:--</strong></div>
-    </div>
-  </section>
-
-  <section class="stats-grid">
-    <div class="stat-card">
-      <div class="stat-label">Bankroll</div>
-      <div class="stat-value blue" id="s-bankroll">$0.00</div>
-      <div class="stat-sub" id="s-bankroll-note">跟单比例 0%</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Simulated Entries</div>
-      <div class="stat-value" id="s-simulated">0</div>
-      <div class="stat-sub" id="s-simulated-note">Executed entries only</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Closed Samples</div>
-      <div class="stat-value" id="s-closed">0</div>
-      <div class="stat-sub" id="s-closed-note">Open executed <span id="s-open">0</span></div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Win Rate</div>
-      <div class="stat-value" id="s-winrate">N/A</div>
-      <div class="stat-sub" id="s-winrate-note">只按已平仓样本统计</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Realized PnL</div>
-      <div class="stat-value" id="s-realized">$0.00</div>
-      <div class="stat-sub">入场漂移 <span id="s-drift">0.000</span></div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Signals</div>
-      <div class="stat-value" id="s-signals">0</div>
-      <div class="stat-sub">买入 <span class="green" id="s-buys">0</span> / 卖出 <span class="red" id="s-sells">0</span></div>
-    </div>
-  </section>
-
-  <section class="main-grid">
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">观察中的交易员</div>
-        <div class="panel-badge" id="trader-count">0</div>
+<div class="app-shell">
+  <aside class="sidebar">
+    <section class="brand-card">
+      <div class="brand-kicker">Polymarket Research Console</div>
+      <div class="brand-title">体育 / 电竞<br>研究看板</div>
+      <div class="brand-subtitle">
+        只观察体育与电竞两个 market，把执行样本、shadow 样本和实验样本分开看，
+        避免把研究结论和可执行结论混在一起。
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>交易员</th>
-              <th>状态</th>
-              <th class="text-right">评分</th>
-              <th class="text-right">PnL</th>
-              <th class="text-right">Volume</th>
-            </tr>
-          </thead>
-          <tbody id="traders-body"></tbody>
-        </table>
-      </div>
-    </div>
+    </section>
 
-    <div class="panel">
-      <div class="panel-header">
-        <div class="panel-title">交易表现</div>
-        <div class="panel-badge">口径: 已平仓 / 已结算</div>
+    <section class="side-card">
+      <div class="side-card-title">页面导航</div>
+      <div class="nav-list">
+        <a class="nav-link active" href="#section-overview" data-target="section-overview">
+          <div class="nav-title">总览</div>
+          <div class="nav-note">资金、胜率、平仓率、当前研究状态</div>
+        </a>
+        <a class="nav-link" href="#section-traders" data-target="section-traders">
+          <div class="nav-title">交易员</div>
+          <div class="nav-note">当前跟踪对象、状态和质量评分</div>
+        </a>
+        <a class="nav-link" href="#section-experiments" data-target="section-experiments">
+          <div class="nav-title">实验</div>
+          <div class="nav-note">阻断理由、repeat-entry、空簿延迟复查</div>
+        </a>
+        <a class="nav-link" href="#section-signals" data-target="section-signals">
+          <div class="nav-title">信号与风险</div>
+          <div class="nav-note">最新信号、风险日志和执行状态</div>
+        </a>
       </div>
-      <div class="performance">
-        <div class="performance-top">
-          <svg class="ring" viewBox="0 0 120 120">
-            <circle class="ring-bg" cx="60" cy="60" r="44"></circle>
-            <circle class="ring-fg" id="ring-circle" cx="60" cy="60" r="44" stroke-dasharray="276.46" stroke-dashoffset="276.46" transform="rotate(-90 60 60)"></circle>
-            <text class="ring-label" id="ring-label" x="60" y="60">N/A</text>
-          </svg>
-          <div class="performance-metrics">
-            <div>
-              <div class="metric-k">胜 / 负 / 平</div>
-              <div class="metric-v"><span class="green" id="ring-wins">0</span> / <span class="red" id="ring-losses">0</span> / <span id="ring-flats">0</span></div>
-            </div>
-            <div>
-              <div class="metric-k">已平仓样本</div>
-              <div class="metric-v" id="ring-closed">0</div>
-            </div>
-            <div>
-              <div class="metric-k">已判定样本</div>
-              <div class="metric-v" id="ring-decided">0</div>
-            </div>
-            <div>
-              <div class="metric-k">未平仓样本</div>
-              <div class="metric-v" id="ring-open">0</div>
-            </div>
+    </section>
+
+    <section class="side-card">
+      <div class="side-card-title">运行状态</div>
+      <div class="side-stack">
+        <div class="side-row"><span>连接</span><strong id="sidebar-connection">已连接</strong></div>
+        <div class="side-row"><span>模式</span><strong id="sidebar-mode">观察 / 模拟</strong></div>
+        <div class="side-row"><span>市场范围</span><strong id="sidebar-scope">体育 + 电竞</strong></div>
+        <div class="side-row"><span>榜单来源</span><strong id="sidebar-discovery">体育榜单</strong></div>
+        <div class="side-row"><span>监控池</span><strong id="sidebar-monitor">0 名交易员</strong></div>
+        <div class="side-row"><span>倒计时</span><strong id="sidebar-countdown">--:--</strong></div>
+      </div>
+      <div class="side-footnote" id="sidebar-footnote">
+        指标口径：`decision_count = wins + losses`，`win_rate = wins / decision_count`，
+        `close_rate = closed_entries / total_entries`。
+      </div>
+    </section>
+
+    <section class="side-card">
+      <div class="side-card-title">研究提醒</div>
+      <div class="side-stack">
+        <div class="side-row"><span>repeat-entry</span><strong id="sidebar-repeat">已暂停</strong></div>
+        <div class="side-row"><span>空簿复查</span><strong id="sidebar-no-book">待收样本</strong></div>
+        <div class="side-row"><span>样本分层</span><strong>executed / shadow / experiment</strong></div>
+      </div>
+      <div class="side-footnote">
+        当前页面只服务体育和电竞范围；即便改实验，也不放大到其他市场。
+      </div>
+    </section>
+  </aside>
+
+  <main class="content">
+    <header class="hero" id="section-overview">
+      <div class="hero-top">
+        <div>
+          <div class="hero-title">Polymarket 体育与电竞研究控制台</div>
+          <div class="hero-subtitle">
+            把所有信息压在一个长页面里很难看清重点，这版界面改成侧边导航 + 分区布局：
+            先看总览，再看交易员，再看实验和信号。页面默认只关注体育与电竞。
           </div>
         </div>
-        <div class="performance-note" id="performance-note">
-          胜率只用已经平仓、已经有结果的样本来算。未平仓、仍在观察中的 dry-run 建仓不会被当成赢单。
+        <div class="hero-badges">
+          <div class="hero-pill"><span class="conn-dot" id="conn-dot"></span><strong id="conn-text">已连接</strong></div>
+          <div class="hero-pill">模式 <strong id="mode-badge" class="amber">观察 / 模拟</strong></div>
+          <div class="hero-pill">轮次 <strong id="cycle-num">0</strong></div>
+          <div class="hero-pill">更新时间 <strong id="update-time">--:--:--</strong></div>
         </div>
       </div>
-      <div class="panel-header">
-        <div class="panel-title">风控日志</div>
-        <div class="panel-badge" id="risk-count">0</div>
+      <div class="hero-strip">
+        <div class="hero-strip-card">
+          <div class="hero-strip-label">市场范围</div>
+          <div class="hero-strip-value" id="hero-scope">体育 + 电竞</div>
+          <div class="hero-strip-note">严格限制在你指定的两个 market，不扩到其他品类。</div>
+        </div>
+        <div class="hero-strip-card">
+          <div class="hero-strip-label">研究状态</div>
+          <div class="hero-strip-value" id="hero-experiment">repeat-entry 暂停</div>
+          <div class="hero-strip-note">空簿延迟复查会继续收样本，先验证是否值得放宽。</div>
+        </div>
+        <div class="hero-strip-card">
+          <div class="hero-strip-label">下次刷新</div>
+          <div class="hero-strip-value" id="countdown">--:--</div>
+          <div class="hero-strip-note">Socket 实时推送，同时保留轮询兜底更新。</div>
+        </div>
       </div>
-      <div class="risk-list" id="risk-body"></div>
-    </div>
+    </header>
 
-    <div class="panel full">
-      <div class="panel-header">
-        <div class="panel-title">Blocked Shadow Reasons</div>
-        <div class="panel-badge" id="blocked-count">0</div>
+    <section class="section">
+      <div class="section-head">
+        <div>
+          <div class="section-title">研究总览</div>
+          <div class="section-note">先看已执行样本，再看 shadow 和 experiment；不要被单一维度的好看数字带偏。</div>
+        </div>
+        <div class="section-tag">只看体育 / 电竞</div>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Reason</th>
-              <th>Action</th>
-              <th class="text-right">Entries</th>
-              <th class="text-right">Closed</th>
-              <th class="text-right">Win Rate</th>
-              <th class="text-right">PnL</th>
-              <th class="text-right">Markets</th>
-              <th>Note</th>
-            </tr>
-          </thead>
-          <tbody id="blocked-body"></tbody>
-        </table>
-      </div>
-    </div>
 
-    <div class="panel full">
-      <div class="panel-header">
-        <div class="panel-title">Stage 2 Repeat-Entry Experiment</div>
-        <div class="panel-badge" id="stage2-count">0</div>
+      <div class="stats-grid">
+        <article class="stat-card">
+          <div class="stat-label">研究资金</div>
+          <div class="stat-value blue" id="s-bankroll">$0.00</div>
+          <div class="stat-sub" id="s-bankroll-note">当前资金与 stake 配置</div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-label">已执行样本</div>
+          <div class="stat-value" id="s-simulated">0</div>
+          <div class="stat-sub" id="s-simulated-note">执行 / shadow / experiment 分开统计</div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-label">已平仓样本</div>
+          <div class="stat-value" id="s-closed">0</div>
+          <div class="stat-sub" id="s-closed-note">已平仓与未平仓占比</div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-label">决策胜率</div>
+          <div class="stat-value" id="s-winrate">N/A</div>
+          <div class="stat-sub" id="s-winrate-note">只按已判定 executed 样本计算</div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-label">已实现收益</div>
+          <div class="stat-value" id="s-realized">$0.00</div>
+          <div class="stat-sub">平均入场偏移 <span id="s-drift">0.000</span></div>
+        </article>
+        <article class="stat-card">
+          <div class="stat-label">最新信号</div>
+          <div class="stat-value" id="s-signals">0</div>
+          <div class="stat-sub">买入 <span class="green" id="s-buys">0</span> / 卖出 <span class="red" id="s-sells">0</span> / 开仓 <span id="s-open">0</span></div>
+        </article>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Status</th>
-              <th class="text-right">Entries</th>
-              <th class="text-right">Closed</th>
-              <th class="text-right">Win Rate</th>
-              <th class="text-right">PnL</th>
-              <th class="text-right">Markets</th>
-              <th class="text-right">Traders</th>
-              <th>Concentration</th>
-            </tr>
-          </thead>
-          <tbody id="stage2-body"></tbody>
-        </table>
-      </div>
-    </div>
 
-    <div class="panel full">
-      <div class="panel-header">
-        <div class="panel-title">近期信号</div>
-        <div class="panel-badge" id="signal-count">0</div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>时间</th>
-              <th>交易员</th>
-              <th>来源</th>
-              <th>方向</th>
-              <th>市场</th>
-              <th>Outcome</th>
-              <th class="text-right">数量</th>
-              <th class="text-right">信号价</th>
-              <th>状态</th>
-            </tr>
-          </thead>
-          <tbody id="trades-body"></tbody>
-        </table>
-      </div>
-    </div>
-  </section>
+      <div class="overview-grid">
+        <article class="panel">
+          <div class="panel-header">
+            <div class="panel-title">执行质量</div>
+            <div class="panel-badge">只看 executed</div>
+          </div>
+          <div class="panel-body">
+            <div class="performance-layout">
+              <svg class="ring" viewBox="0 0 140 140">
+                <circle class="ring-bg" cx="70" cy="70" r="52"></circle>
+                <circle class="ring-fg" id="ring-circle" cx="70" cy="70" r="52" stroke-dasharray="326.73" stroke-dashoffset="326.73" transform="rotate(-90 70 70)"></circle>
+                <text class="ring-label" id="ring-label" x="70" y="70">N/A</text>
+              </svg>
+              <div class="metric-grid">
+                <div class="metric-card">
+                  <div class="metric-k">胜 / 负 / 平</div>
+                  <div class="metric-v"><span class="green" id="ring-wins">0</span> / <span class="red" id="ring-losses">0</span> / <span id="ring-flats">0</span></div>
+                  <div class="metric-sub">只统计已平仓 executed 样本。</div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-k">已平仓样本</div>
+                  <div class="metric-v" id="ring-closed">0</div>
+                  <div class="metric-sub">观察当前平仓进度与样本成熟度。</div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-k">已判定样本</div>
+                  <div class="metric-v" id="ring-decided">0</div>
+                  <div class="metric-sub">平掉但盈亏为 0 的样本不计入决策胜率。</div>
+                </div>
+                <div class="metric-card">
+                  <div class="metric-k">未平仓样本</div>
+                  <div class="metric-v" id="ring-open">0</div>
+                  <div class="metric-sub">这些仓位会继续影响风险和资金占用。</div>
+                </div>
+              </div>
+            </div>
+            <div class="panel-note" id="performance-note">
+              等待数据更新后展示 executed / shadow / experiment 的对比分层说明。
+            </div>
+          </div>
+        </article>
 
-  <div class="footer">日志文件: copybot.log · 配置文件: .env · Web 端每次推送都会刷新这份统计口径</div>
+        <article class="panel">
+          <div class="panel-header">
+            <div class="panel-title">系统摘要</div>
+            <div class="panel-badge">研究口径</div>
+          </div>
+          <div class="panel-body">
+            <div class="health-grid">
+              <div class="health-row"><span>当前模式</span><strong id="sys-mode">观察 / 模拟</strong></div>
+              <div class="health-row"><span>市场范围</span><strong id="sys-scope">体育 + 电竞</strong></div>
+              <div class="health-row"><span>发现策略</span><strong id="sys-discovery">体育榜单，多周期合并</strong></div>
+              <div class="health-row"><span>研究预算</span><strong id="sys-budget">等待数据</strong></div>
+              <div class="health-row"><span>实验状态</span><strong id="sys-experiments">repeat-entry 暂停；空簿延迟复查开启</strong></div>
+              <div class="health-row"><span>样本口径</span><strong>executed、shadow、experiment 完全分层显示</strong></div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="section-traders">
+      <div class="section-head">
+        <div>
+          <div class="section-title">交易员池</div>
+          <div class="section-note">左表看当前跟踪对象，质量评分和状态一眼能看清，不再和实验信息挤在一起。</div>
+        </div>
+        <div class="section-tag" id="trader-count">0</div>
+      </div>
+      <article class="panel">
+        <div class="panel-header">
+          <div class="panel-title">当前跟踪交易员</div>
+          <div class="panel-badge">Top Pool</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>交易员</th>
+                <th>状态</th>
+                <th class="text-right">分数</th>
+                <th class="text-right">PnL</th>
+                <th class="text-right">成交额</th>
+              </tr>
+            </thead>
+            <tbody id="traders-body"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <section class="section" id="section-experiments">
+      <div class="section-head">
+        <div>
+          <div class="section-title">实验与阻断</div>
+          <div class="section-note">这一层只服务研究，不直接代表可执行 edge。repeat-entry 和空簿复查会单独跟踪。</div>
+        </div>
+        <div class="section-tag">实验面板</div>
+      </div>
+
+      <article class="panel">
+        <div class="panel-header">
+          <div class="panel-title">实验观察</div>
+          <div class="panel-badge" id="stage2-count">0</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>实验</th>
+                <th>状态</th>
+                <th class="text-right">Entries</th>
+                <th class="text-right">Closed</th>
+                <th class="text-right">Win Rate</th>
+                <th class="text-right">PnL</th>
+                <th class="text-right">Markets</th>
+                <th class="text-right">Traders</th>
+                <th>集中度</th>
+              </tr>
+            </thead>
+            <tbody id="stage2-body"></tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="panel" style="margin-top: 16px;">
+        <div class="panel-header">
+          <div class="panel-title">Blocked Shadow 理由</div>
+          <div class="panel-badge" id="blocked-count">0</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>阻断理由</th>
+                <th>建议动作</th>
+                <th class="text-right">Entries</th>
+                <th class="text-right">Closed</th>
+                <th class="text-right">Win Rate</th>
+                <th class="text-right">PnL</th>
+                <th class="text-right">Markets</th>
+                <th>说明</th>
+              </tr>
+            </thead>
+            <tbody id="blocked-body"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <section class="section" id="section-signals">
+      <div class="section-head">
+        <div>
+          <div class="section-title">信号与风险</div>
+          <div class="section-note">把“最近信号”和“最近风险日志”分区并排放，避免滚动时来回找信息。</div>
+        </div>
+        <div class="section-tag" id="signal-count">0</div>
+      </div>
+
+      <div class="signal-grid">
+        <article class="panel">
+          <div class="panel-header">
+            <div class="panel-title">最近信号</div>
+            <div class="panel-badge">Signals</div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>交易员</th>
+                  <th>来源</th>
+                  <th>方向</th>
+                  <th>市场</th>
+                  <th>Outcome</th>
+                  <th class="text-right">数量</th>
+                  <th class="text-right">价格</th>
+                  <th>状态</th>
+                </tr>
+              </thead>
+              <tbody id="trades-body"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div class="panel-title">风险日志</div>
+            <div class="panel-badge" id="risk-count">0</div>
+          </div>
+          <div class="risk-list" id="risk-body"></div>
+        </article>
+      </div>
+    </section>
+
+    <div class="footer">
+      日志文件：`copybot.log` · 配置文件：`.env` · 页面自动实时更新，默认只观察体育与电竞。
+    </div>
+  </main>
 </div>
 
 <script>
@@ -569,18 +1102,116 @@ function fmtSignedMoney(value) {
   return `${number >= 0 ? '+' : '-'}$${Math.abs(number).toFixed(2)}`;
 }
 
+function translateMarketScope(label) {
+  const text = String(label || '');
+  return text
+    .replace('Sports + Esports', '体育 + 电竞')
+    .replace('Sports', '体育')
+    .replace('Esports', '电竞')
+    .replace('All Markets', '全部市场');
+}
+
+function translateCategory(label) {
+  const text = String(label || '');
+  if (text === 'SPORTS') return '体育榜单';
+  if (text === 'ESPORTS') return '电竞榜单';
+  return text;
+}
+
+function translateSource(source) {
+  const text = String(source || 'copy').toLowerCase();
+  if (text === 'consensus') return '共识';
+  if (text === 'copy') return '跟单';
+  return text;
+}
+
+function translateTraderStatus(status) {
+  const text = String(status || 'observe').toLowerCase();
+  if (text === 'approved') return '已批准';
+  if (text === 'blocked') return '已屏蔽';
+  if (text === 'observe') return '观察中';
+  return text || '未知';
+}
+
+function translateExperimentStatus(status, enabled) {
+  if (!enabled) return '已暂停';
+  const text = String(status || 'idle').toLowerCase();
+  if (text === 'collecting') return '收集样本';
+  if (text === 'review') return '待复盘';
+  if (text === 'mature') return '样本成熟';
+  if (text === 'idle') return '空闲';
+  return text || '空闲';
+}
+
+function translateAction(action) {
+  const text = String(action || 'watch').toLowerCase();
+  if (text === 'experiment') return '实验';
+  if (text === 'keep') return '保持';
+  return '观察';
+}
+
+function translateRiskEvent(event) {
+  const text = String(event || '').toUpperCase();
+  const mapping = {
+    BLOCKED: '已拦截',
+    SETTLED: '已结算',
+    NO_CLIENT: '缺少客户端',
+    EXEC_ERROR: '执行失败',
+    EXEC_EXCEPTION: '执行异常',
+    STRATEGY_ERROR: '策略异常',
+    MONITOR_ERROR: '扫描异常',
+    SETTLEMENT_ERROR: '结算异常'
+  };
+  return mapping[text] || (event || '日志');
+}
+
 function statusClass(status) {
-  if (status === 'approved') return 'status-chip status-approved';
-  if (status === 'blocked') return 'status-chip status-blocked';
-  if (status === 'observe') return 'status-chip status-observe';
+  const text = String(status || '').toLowerCase();
+  if (text === 'approved') return 'status-chip status-approved';
+  if (text === 'blocked') return 'status-chip status-blocked';
+  if (text === 'observe') return 'status-chip status-observe';
   return 'status-chip status-signal';
+}
+
+function actionClass(action) {
+  const text = String(action || '').toLowerCase();
+  if (text === 'experiment') return 'action-chip action-experiment';
+  if (text === 'keep') return 'action-chip action-keep';
+  if (text === 'paused') return 'action-chip action-paused';
+  return 'action-chip action-watch';
 }
 
 function tradeStatusLabel(row) {
   if (!row.mirrored) return { cls: 'status-chip status-signal', text: '仅信号' };
-  if (row.our_status === 'dry_run') return { cls: 'status-chip status-approved', text: '模拟建仓' };
-  if (row.our_status === 'filled') return { cls: 'status-chip status-approved', text: '已成交' };
-  return { cls: 'status-chip status-observe', text: row.our_status || '已镜像' };
+  const status = String(row.our_status || '').toLowerCase();
+  if (status === 'dry_run') return { cls: 'status-chip status-approved', text: '模拟建仓' };
+  if (status === 'filled' || status === 'matched' || status === 'order_status_matched') {
+    return { cls: 'status-chip status-approved', text: '已成交' };
+  }
+  if (status === 'live' || status === 'order_status_live') {
+    return { cls: 'status-chip status-observe', text: '挂单中' };
+  }
+  if (status === 'delayed') {
+    return { cls: 'status-chip status-observe', text: '延迟确认' };
+  }
+  return { cls: 'status-chip status-observe', text: row.our_status || '待处理' };
+}
+
+function setConnectionState(connected) {
+  const dot = document.getElementById('conn-dot');
+  const text = document.getElementById('conn-text');
+  const sidebar = document.getElementById('sidebar-connection');
+  if (connected) {
+    dot.style.background = 'var(--green)';
+    dot.style.boxShadow = '0 0 0 6px rgba(15, 138, 108, 0.18)';
+    text.textContent = '已连接';
+    sidebar.textContent = '在线';
+  } else {
+    dot.style.background = 'var(--red)';
+    dot.style.boxShadow = '0 0 0 6px rgba(207, 76, 86, 0.18)';
+    text.textContent = '连接断开';
+    sidebar.textContent = '离线';
+  }
 }
 
 function startCountdown() {
@@ -590,7 +1221,9 @@ function startCountdown() {
     countdownVal = Math.max(0, countdownVal - 1);
     const m = String(Math.floor(countdownVal / 60)).padStart(2, '0');
     const s = String(countdownVal % 60).padStart(2, '0');
-    document.getElementById('countdown').textContent = `${m}:${s}`;
+    const text = `${m}:${s}`;
+    document.getElementById('countdown').textContent = text;
+    document.getElementById('sidebar-countdown').textContent = text;
   }, 1000);
 }
 
@@ -604,78 +1237,96 @@ function resetFallback() {
 function renderPerformance(perf) {
   const ring = document.getElementById('ring-circle');
   const ringLabel = document.getElementById('ring-label');
-  const circleLength = 276.46;
-  const shadowEntries = Number(perf.shadow_entries || 0);
-  const shadowOpenEntries = Number(perf.shadow_open_entries || 0);
-  const shadowClosedEntries = Number(perf.shadow_closed_entries || 0);
-  const stage2Entries = Number(perf.repeat_entry_experiment_entries || 0);
-  const stage2OpenEntries = Number(perf.repeat_entry_experiment_open_entries || 0);
-  const stage2ClosedEntries = Number(perf.repeat_entry_experiment_closed_entries || 0);
-  const stage2Status = perf.repeat_entry_experiment_status || 'idle';
+  const circleLength = 326.73;
+  const samples = perf.sample_metrics || {};
+  const executed = samples.executed || {};
+  const shadow = samples.shadow || {};
+  const experiment = samples.experiment || {};
 
-  document.getElementById('s-simulated').textContent = perf.simulated_entries;
-  document.getElementById('s-closed').textContent = perf.closed_entries;
-  document.getElementById('s-open').textContent = perf.open_entries;
+  const executedEntries = Number(executed.total_entries ?? perf.simulated_entries ?? 0);
+  const executedClosedEntries = Number(executed.closed_entries ?? perf.closed_entries ?? 0);
+  const executedOpenEntries = Number(executed.open_entries ?? perf.open_entries ?? 0);
+  const executedWins = Number(executed.wins ?? perf.wins ?? 0);
+  const executedLosses = Number(executed.losses ?? perf.losses ?? 0);
+  const executedFlats = Number(executed.flat_count ?? perf.flat_count ?? 0);
+  const executedDecisionCount = Number(executed.decision_count ?? perf.decision_count ?? 0);
+  const executedWinRate = executed.win_rate ?? perf.win_rate;
+  const executedWinRateLabel =
+    executedWinRate === null || executedWinRate === undefined
+      ? (perf.win_rate_label || 'N/A')
+      : `${Number(executedWinRate).toFixed(1)}%`;
+  const executedCloseRate = Number(executed.close_rate ?? perf.close_rate ?? 0);
+
+  const shadowEntries = Number(shadow.total_entries ?? perf.shadow_entries ?? 0);
+  const shadowClosedEntries = Number(shadow.closed_entries ?? perf.shadow_closed_entries ?? 0);
+  const shadowDecisionCount = Number(shadow.decision_count ?? perf.shadow_decision_count ?? 0);
+  const shadowWinRate = shadow.win_rate ?? perf.shadow_win_rate;
+
+  const experimentEntries = Number(experiment.total_entries ?? perf.experiment_entries ?? 0);
+  const experimentClosedEntries = Number(experiment.closed_entries ?? perf.experiment_closed_entries ?? 0);
+  const experimentDecisionCount = Number(experiment.decision_count ?? perf.experiment_decision_count ?? 0);
+  const experimentWinRate = experiment.win_rate ?? perf.experiment_win_rate;
+
+  const repeatEntries = Number(perf.repeat_entry_experiment_entries || 0);
+  const repeatClosedEntries = Number(perf.repeat_entry_experiment_closed_entries || 0);
+  const repeatStatus = perf.repeat_entry_experiment_status || 'idle';
+  const noBookEntries = Number(perf.no_book_recheck_experiment_entries || 0);
+  const noBookClosedEntries = Number(perf.no_book_recheck_experiment_closed_entries || 0);
+  const noBookStatus = perf.no_book_recheck_experiment_status || 'idle';
+
+  document.getElementById('s-simulated').textContent = executedEntries;
+  document.getElementById('s-closed').textContent = executedClosedEntries;
+  document.getElementById('s-open').textContent = executedOpenEntries;
   document.getElementById('s-simulated-note').textContent =
-    shadowEntries > 0
-      ? `Executed ${perf.simulated_entries} / shadow ${shadowEntries} / stage2 ${stage2Entries}`
-      : 'Executed entries only';
-  document.getElementById('s-closed-note').innerHTML =
-    shadowEntries > 0
-      ? `Open executed <span id="s-open">${perf.open_entries}</span> · shadow ${shadowOpenEntries}/${shadowClosedEntries} · stage2 ${stage2OpenEntries}/${stage2ClosedEntries}`
-      : `Open executed <span id="s-open">${perf.open_entries}</span>`;
-  document.getElementById('s-winrate').textContent = perf.win_rate_label;
-  document.getElementById('s-winrate').className = `stat-value ${perf.win_rate === null ? '' : (perf.win_rate >= 50 ? 'green' : 'red')}`;
+    `已执行 ${executedEntries} 笔 · shadow ${shadowEntries} 笔 · experiment ${experimentEntries} 笔`;
+  document.getElementById('s-closed-note').textContent =
+    `执行平仓率 ${executedCloseRate.toFixed(1)}% · shadow ${shadowClosedEntries}/${shadowEntries} · experiment ${experimentClosedEntries}/${experimentEntries}`;
+  document.getElementById('s-winrate').textContent = executedWinRateLabel;
+  document.getElementById('s-winrate').className = `stat-value ${executedWinRate === null || executedWinRate === undefined ? '' : (executedWinRate >= 50 ? 'green' : 'red')}`;
   document.getElementById('s-winrate-note').textContent =
-    perf.decision_count > 0
-      ? `按 ${perf.decision_count} 笔已判定 executed 样本统计`
-      : '暂无可判定 executed 样本';
+    executedDecisionCount > 0
+      ? `按 ${executedDecisionCount} 笔已判定 executed 样本计算`
+      : `当前还没有已判定 executed 样本`;
 
   const realized = document.getElementById('s-realized');
-  realized.textContent = fmtSignedMoney(perf.realized_pnl);
-  realized.className = `stat-value ${Number(perf.realized_pnl) >= 0 ? 'green' : 'red'}`;
-  document.getElementById('s-drift').textContent = Number(perf.avg_entry_drift || 0).toFixed(3);
+  realized.textContent = fmtSignedMoney(executed.realized_pnl ?? perf.realized_pnl ?? 0);
+  realized.className = `stat-value ${Number(executed.realized_pnl ?? perf.realized_pnl ?? 0) >= 0 ? 'green' : 'red'}`;
+  document.getElementById('s-drift').textContent = Number(executed.avg_entry_drift ?? perf.avg_entry_drift ?? 0).toFixed(3);
 
-  document.getElementById('ring-wins').textContent = perf.wins;
-  document.getElementById('ring-losses').textContent = perf.losses;
-  document.getElementById('ring-flats').textContent = perf.flat_count;
-  document.getElementById('ring-closed').textContent = perf.closed_entries;
-  document.getElementById('ring-decided').textContent = perf.decision_count;
-  document.getElementById('ring-open').textContent = perf.open_entries;
+  document.getElementById('ring-wins').textContent = executedWins;
+  document.getElementById('ring-losses').textContent = executedLosses;
+  document.getElementById('ring-flats').textContent = executedFlats;
+  document.getElementById('ring-closed').textContent = executedClosedEntries;
+  document.getElementById('ring-decided').textContent = executedDecisionCount;
+  document.getElementById('ring-open').textContent = executedOpenEntries;
 
-  if (perf.win_rate === null) {
+  if (executedWinRate === null || executedWinRate === undefined) {
     ring.setAttribute('stroke-dashoffset', circleLength);
-    ring.setAttribute('stroke', 'rgba(142, 162, 189, 0.5)');
+    ring.setAttribute('stroke', 'rgba(22, 53, 76, 0.18)');
     ringLabel.textContent = 'N/A';
   } else {
-    ring.setAttribute('stroke-dashoffset', circleLength * (1 - perf.win_rate / 100));
-    ring.setAttribute('stroke', perf.win_rate >= 50 ? 'var(--green)' : 'var(--red)');
-    ringLabel.textContent = `${perf.win_rate.toFixed(0)}%`;
+    ring.setAttribute('stroke-dashoffset', circleLength * (1 - executedWinRate / 100));
+    ring.setAttribute('stroke', executedWinRate >= 50 ? 'var(--green)' : 'var(--red)');
+    ringLabel.textContent = `${Number(executedWinRate).toFixed(0)}%`;
   }
 
+  const shadowWinRateLabel = shadowWinRate === null || shadowWinRate === undefined ? 'N/A' : `${Number(shadowWinRate).toFixed(1)}%`;
+  const experimentWinRateLabel = experimentWinRate === null || experimentWinRate === undefined ? 'N/A' : `${Number(experimentWinRate).toFixed(1)}%`;
   document.getElementById('performance-note').textContent =
-    perf.closed_entries > 0
-      ? `当前已平仓 ${perf.closed_entries} 笔 executed 样本，其中 ${perf.decision_count} 笔已经明确胜负。${shadowEntries > 0 ? `另有 ${shadowEntries} 笔 blocked shadow sample（${shadowOpenEntries} 未结算 / ${shadowClosedEntries} 已结算），单独用于第一阶段阻断分析。` : '胜率只按 executed 样本统计。'}${stage2Entries > 0 ? ` 第二阶段 repeat-entry experiment 已记录 ${stage2Entries} 笔（${stage2ClosedEntries} 已结算，状态 ${stage2Status}）。` : ''}`
-      : shadowEntries > 0
-        ? `当前还没有任何 executed 样本平仓，但已经记录 ${shadowEntries} 笔 blocked shadow sample（${shadowOpenEntries} 未结算 / ${shadowClosedEntries} 已结算）。这类样本会等自然结算回填，用来评估“被风控挡掉的单”到底该不该放行。${stage2Entries > 0 ? ` 第二阶段 repeat-entry experiment 同时已记录 ${stage2Entries} 笔（${stage2ClosedEntries} 已结算，状态 ${stage2Status}）。` : ''}`
-        : '当前还没有任何已平仓 / 已结算样本，所以这里显示 N/A，而不是把模拟建仓次数误算成全胜。';
-}
-
-function actionClass(action) {
-  if (action === 'experiment') return 'action-chip action-experiment';
-  if (action === 'keep') return 'action-chip action-keep';
-  return 'action-chip action-watch';
+    executedClosedEntries > 0
+      ? `Executed 已平仓 ${executedClosedEntries} 笔，其中 ${executedDecisionCount} 笔已经明确胜负，胜率 ${executedWinRateLabel}。Shadow 单独统计为 ${shadowEntries} 笔（已判定 ${shadowDecisionCount} 笔，胜率 ${shadowWinRateLabel}），Experiment 单独统计为 ${experimentEntries} 笔（已判定 ${experimentDecisionCount} 笔，胜率 ${experimentWinRateLabel}）。repeat-entry 当前 ${repeatEntries} 笔 / ${repeatClosedEntries} 笔已结算，状态 ${translateExperimentStatus(repeatStatus, true)}；空簿延迟复查当前 ${noBookEntries} 笔 / ${noBookClosedEntries} 笔已结算，状态 ${translateExperimentStatus(noBookStatus, true)}。`
+      : `当前还没有 executed 平仓样本。Shadow 和 experiment 只用于研究，不直接证明可执行 edge。`;
 }
 
 function renderBlockedReasons(rows) {
   const blockedRows = rows || [];
   document.getElementById('blocked-count').textContent = blockedRows.length;
-
   const tbody = document.getElementById('blocked-body');
+
   if (!blockedRows.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="8" class="muted">No blocked shadow reason samples yet.</td>
+        <td colspan="8" class="muted">当前还没有 shadow 阻断理由样本。</td>
       </tr>
     `;
     return;
@@ -687,7 +1338,7 @@ function renderBlockedReasons(rows) {
         <div>${row.label || row.category || '-'}</div>
         <div class="muted">${row.top_raw_reason || ''}</div>
       </td>
-      <td><span class="${actionClass(row.action)}">${row.action || 'watch'}</span></td>
+      <td><span class="${actionClass(row.action)}">${translateAction(row.action)}</span></td>
       <td class="text-right">${Number(row.total_entries || 0)}</td>
       <td class="text-right">${Number(row.closed_entries || 0)}</td>
       <td class="text-right">${row.win_rate === null ? 'N/A' : `${Number(row.win_rate).toFixed(1)}%`}</td>
@@ -698,97 +1349,96 @@ function renderBlockedReasons(rows) {
   `).join('');
 }
 
-function renderStage2Experiment(row) {
-  const stage2Row = row || null;
+function renderExperimentWatch(rows) {
+  const experimentRows = rows || [];
   const tbody = document.getElementById('stage2-body');
-  document.getElementById('stage2-count').textContent = stage2Row ? Number(stage2Row.total_entries || 0) : 0;
+  const totalEntries = experimentRows.reduce((sum, item) => sum + Number((item.row && item.row.total_entries) || 0), 0);
+  document.getElementById('stage2-count').textContent = totalEntries;
 
-  if (!stage2Row) {
+  if (!experimentRows.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="8" class="muted">No stage-2 repeat-entry experiment data yet.</td>
+        <td colspan="9" class="muted">当前还没有实验观察数据。</td>
       </tr>
     `;
     return;
   }
 
-  const topMarket = stage2Row.top_market
-    ? `${stage2Row.top_market} (${Number(stage2Row.top_market_share || 0).toFixed(1)}%)`
-    : 'N/A';
-  const topTrader = stage2Row.top_trader
-    ? `${stage2Row.top_trader} (${Number(stage2Row.top_trader_share || 0).toFixed(1)}%)`
-    : 'N/A';
+  tbody.innerHTML = experimentRows.map(item => {
+    const row = item.row || {};
+    const topMarket = row.top_market
+      ? `${row.top_market} (${Number(row.top_market_share || 0).toFixed(1)}%)`
+      : '暂无';
+    const topTrader = row.top_trader
+      ? `${row.top_trader} (${Number(row.top_trader_share || 0).toFixed(1)}%)`
+      : '暂无';
+    const statusText = translateExperimentStatus(row.status, item.enabled);
+    const statusKey = item.enabled ? (row.status === 'mature' ? 'experiment' : 'watch') : 'paused';
 
-  tbody.innerHTML = `
-    <tr>
-      <td><span class="${actionClass(stage2Row.status === 'mature' ? 'experiment' : (stage2Row.status === 'idle' ? 'watch' : 'watch'))}">${stage2Row.status || 'idle'}</span></td>
-      <td class="text-right">${Number(stage2Row.total_entries || 0)}</td>
-      <td class="text-right">${Number(stage2Row.closed_entries || 0)}</td>
-      <td class="text-right">${stage2Row.win_rate === null ? 'N/A' : `${Number(stage2Row.win_rate).toFixed(1)}%`}</td>
-      <td class="text-right ${Number(stage2Row.realized_pnl || 0) >= 0 ? 'green' : 'red'}">${fmtSignedMoney(stage2Row.realized_pnl || 0)}</td>
-      <td class="text-right">${Number(stage2Row.distinct_markets || 0)} / ${Number(stage2Row.closed_distinct_markets || 0)}</td>
-      <td class="text-right">${Number(stage2Row.distinct_traders || 0)} / ${Number(stage2Row.closed_distinct_traders || 0)}</td>
-      <td class="block-note">Top market: ${topMarket}<br>Top trader: ${topTrader}</td>
-    </tr>
-  `;
+    return `
+      <tr>
+        <td>${item.name}</td>
+        <td><span class="${actionClass(statusKey)}">${statusText}</span></td>
+        <td class="text-right">${Number(row.total_entries || 0)}</td>
+        <td class="text-right">${Number(row.closed_entries || 0)}</td>
+        <td class="text-right">${row.win_rate === null || row.win_rate === undefined ? 'N/A' : `${Number(row.win_rate).toFixed(1)}%`}</td>
+        <td class="text-right ${Number(row.realized_pnl || 0) >= 0 ? 'green' : 'red'}">${fmtSignedMoney(row.realized_pnl || 0)}</td>
+        <td class="text-right">${Number(row.distinct_markets || 0)} / ${Number(row.closed_distinct_markets || 0)}</td>
+        <td class="text-right">${Number(row.distinct_traders || 0)} / ${Number(row.closed_distinct_traders || 0)}</td>
+        <td class="block-note">Top market：${topMarket}<br>Top trader：${topTrader}</td>
+      </tr>
+    `;
+  }).join('');
 }
 
-function render(data) {
-  const config = data.config;
-  const stats = data.stats;
-  const performance = data.performance;
-  const heroSubtitle = document.querySelector('.hero-subtitle');
+function renderTraders(rows) {
+  const traderRows = rows || [];
+  document.getElementById('trader-count').textContent = `${traderRows.length} 名`;
+  const tbody = document.getElementById('traders-body');
 
-  pollInterval = config.poll_interval;
-  if (heroSubtitle) {
-    heroSubtitle.textContent = `Watching ${config.market_scope_label} flow from ${config.leaderboard_category} slices ${config.leaderboard_discovery_label} across up to ${config.monitored_trader_limit} discovered traders.`;
+  if (!traderRows.length) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" class="muted">当前没有交易员数据。</td>
+      </tr>
+    `;
+    return;
   }
 
-  document.getElementById('mode-badge').textContent = config.dry_run ? '观察 / 模拟' : '实盘';
-  document.getElementById('mode-badge').className = config.dry_run ? 'mode-watch' : 'mode-live';
-  document.getElementById('cycle-num').textContent = data.cycle || 0;
-  document.getElementById('update-time').textContent = (data.timestamp || '').split(' ')[1] || '--:--:--';
-  document.getElementById('s-bankroll').textContent = fmtMoney(config.bankroll);
-  const bankrollNote = document.getElementById('s-bankroll-note');
-  if (config.dry_run) {
-    const gateNote = config.paper_ignore_capital_gates ? '资本门槛已关闭' : '资本门槛保留';
-    const baseNote = config.live_bankroll !== config.bankroll
-      ? `研究资金 ${fmtMoney(config.bankroll)} / live ${fmtMoney(config.live_bankroll)}`
-      : `研究资金 ${fmtMoney(config.bankroll)}`;
-    bankrollNote.textContent = `${baseNote} · 跟单比例 ${config.stake_pct}% · ${gateNote}`;
-  } else {
-    bankrollNote.textContent = `跟单比例 ${config.stake_pct}%`;
-  }
-  bankrollNote.textContent = `${bankrollNote.textContent} ﾂｷ scope ${config.market_scope_label}`;
-  document.getElementById('s-signals').textContent = stats.signal_count;
-  document.getElementById('s-buys').textContent = stats.buy_count;
-  document.getElementById('s-sells').textContent = stats.sell_count;
-  document.getElementById('signal-count').textContent = stats.signal_count;
-
-  renderPerformance(performance);
-  renderBlockedReasons(data.blocked_reasons || []);
-  renderStage2Experiment(data.repeat_entry_experiment || null);
-
-  document.getElementById('trader-count').textContent = data.traders.length;
-  document.getElementById('traders-body').innerHTML = data.traders.map(trader => `
+  tbody.innerHTML = traderRows.map(trader => `
     <tr>
       <td>${trader.rank}</td>
       <td>${(trader.username || '').slice(0, 18)}</td>
-      <td><span class="${statusClass(trader.status)}">${trader.status || 'observe'}</span></td>
+      <td><span class="${statusClass(trader.status)}">${translateTraderStatus(trader.status)}</span></td>
       <td class="text-right">${Number(trader.quality_score || 0).toFixed(0)}</td>
       <td class="text-right ${Number(trader.pnl || 0) >= 0 ? 'green' : 'red'}">${fmtMoney(trader.pnl || 0)}</td>
       <td class="text-right">${fmtMoney(trader.volume || 0)}</td>
     </tr>
   `).join('');
+}
 
-  document.getElementById('trades-body').innerHTML = data.trades.map(row => {
+function renderSignals(rows) {
+  const tradeRows = rows || [];
+  document.getElementById('signal-count').textContent = `${tradeRows.length} 条`;
+  const tbody = document.getElementById('trades-body');
+
+  if (!tradeRows.length) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="9" class="muted">当前还没有最近信号。</td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = tradeRows.map(row => {
     const status = tradeStatusLabel(row);
     return `
       <tr>
         <td class="muted">${row.time_str || ''}</td>
         <td>${(row.trader_username || row.wallet_short || '').slice(0, 14)}</td>
-        <td>${row.signal_source || 'copy'}</td>
-        <td><span class="side-chip ${row.side === 'BUY' ? 'side-buy' : 'side-sell'}">${row.side || '-'}</span></td>
+        <td>${translateSource(row.signal_source)}</td>
+        <td><span class="side-chip ${row.side === 'BUY' ? 'side-buy' : 'side-sell'}">${row.side === 'BUY' ? '买入' : '卖出'}</span></td>
         <td>${row.slug_short || '-'}</td>
         <td>${row.outcome || '-'}</td>
         <td class="text-right">${Number(row.size || 0).toFixed(2)}</td>
@@ -797,40 +1447,152 @@ function render(data) {
       </tr>
     `;
   }).join('');
+}
 
-  document.getElementById('risk-count').textContent = data.risk_logs.length;
+function renderRiskLogs(rows) {
+  const logs = rows || [];
+  document.getElementById('risk-count').textContent = logs.length;
   const riskBody = document.getElementById('risk-body');
-  if (!data.risk_logs.length) {
-    riskBody.innerHTML = '<div class="risk-item"><div class="risk-time">--</div><div class="risk-event">EMPTY</div><div class="risk-detail">暂无风险事件。</div></div>';
-  } else {
-    riskBody.innerHTML = data.risk_logs.map(log => `
+
+  if (!logs.length) {
+    riskBody.innerHTML = `
       <div class="risk-item">
-        <div class="risk-time">${log.time_str || ''}</div>
-        <div class="risk-event">${log.event || ''}</div>
-        <div class="risk-detail">${(log.details || '').slice(0, 80)}</div>
+        <div class="risk-time">--</div>
+        <div class="risk-event">空</div>
+        <div class="risk-detail">当前还没有新的风险日志。</div>
       </div>
-    `).join('');
+    `;
+    return;
   }
+
+  riskBody.innerHTML = logs.map(log => `
+    <div class="risk-item">
+      <div class="risk-time">${log.time_str || ''}</div>
+      <div class="risk-event">${translateRiskEvent(log.event)}</div>
+      <div class="risk-detail">${(log.details || '').slice(0, 100)}</div>
+    </div>
+  `).join('');
+}
+
+function renderSystem(config, stats, performance) {
+  const scopeText = translateMarketScope(config.market_scope_label);
+  const discoveryText = `${translateCategory(config.leaderboard_category)} · ${String(config.leaderboard_discovery_label || '').toLowerCase()}`;
+  const modeText = config.dry_run ? '观察 / 模拟' : '实盘';
+  const repeatText = config.stage2_repeat_entry_experiment_enabled ? '开启' : '已暂停';
+  const noBookText = config.stage2_no_book_recheck_experiment_enabled
+    ? `已开启（${config.no_book_recheck_delay_sec || 0}s 后复查）`
+    : '已关闭';
+
+  document.getElementById('hero-scope').textContent = scopeText;
+  document.getElementById('hero-experiment').textContent = `${repeatText} · 空簿复查${config.stage2_no_book_recheck_experiment_enabled ? '开启' : '关闭'}`;
+  document.getElementById('mode-badge').textContent = modeText;
+  document.getElementById('mode-badge').className = config.dry_run ? 'amber' : 'red';
+  document.getElementById('sidebar-mode').textContent = modeText;
+  document.getElementById('sidebar-scope').textContent = scopeText;
+  document.getElementById('sidebar-discovery').textContent = discoveryText;
+  document.getElementById('sidebar-monitor').textContent = `${config.monitored_trader_limit || 0} 名交易员`;
+  document.getElementById('sidebar-repeat').textContent = repeatText;
+  document.getElementById('sidebar-no-book').textContent = noBookText;
+
+  document.getElementById('sys-mode').textContent = modeText;
+  document.getElementById('sys-scope').textContent = scopeText;
+  document.getElementById('sys-discovery').textContent = discoveryText;
+  document.getElementById('sys-budget').textContent = config.dry_run
+    ? `纸面预算 ${fmtMoney(config.paper_daily_risk_budget)} · 资本门控 ${config.paper_ignore_capital_gates ? '关闭' : '开启'}`
+    : `实盘资金 ${fmtMoney(config.bankroll)}`;
+  document.getElementById('sys-experiments').textContent = `repeat-entry ${repeatText}；空簿延迟复查 ${noBookText}`;
+
+  const bankrollNote = document.getElementById('s-bankroll-note');
+  if (config.dry_run) {
+    const bankrollText = config.live_bankroll !== config.bankroll
+      ? `研究资金 ${fmtMoney(config.bankroll)} / live ${fmtMoney(config.live_bankroll)}`
+      : `研究资金 ${fmtMoney(config.bankroll)}`;
+    bankrollNote.textContent = `${bankrollText} · stake ${config.stake_pct}% · ${scopeText}`;
+  } else {
+    bankrollNote.textContent = `实盘 stake ${config.stake_pct}% · ${scopeText}`;
+  }
+
+  document.getElementById('s-signals').textContent = stats.signal_count;
+  document.getElementById('s-buys').textContent = stats.buy_count;
+  document.getElementById('s-sells').textContent = stats.sell_count;
+
+  document.getElementById('sidebar-footnote').textContent =
+    `当前只看 ${scopeText}。Repeat-entry ${repeatText}，空簿延迟复查 ${noBookText}。指标口径保持 executed / shadow / experiment 分层。`;
+}
+
+function highlightSections() {
+  const links = Array.from(document.querySelectorAll('.nav-link'));
+  const sections = links
+    .map(link => document.getElementById(link.dataset.target))
+    .filter(Boolean);
+
+  if (!sections.length || !('IntersectionObserver' in window)) {
+    return;
+  }
+
+  const observer = new IntersectionObserver((entries) => {
+    const visible = entries
+      .filter(entry => entry.isIntersecting)
+      .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (!visible) return;
+    const currentId = visible.target.id;
+    links.forEach(link => {
+      link.classList.toggle('active', link.dataset.target === currentId);
+    });
+  }, {
+    rootMargin: '-25% 0px -55% 0px',
+    threshold: [0.15, 0.3, 0.6]
+  });
+
+  sections.forEach(section => observer.observe(section));
+}
+
+function render(data) {
+  const config = data.config || {};
+  const stats = data.stats || {};
+  const performance = data.performance || {};
+
+  pollInterval = config.poll_interval || 15;
+  document.getElementById('cycle-num').textContent = data.cycle || 0;
+  document.getElementById('update-time').textContent = (data.timestamp || '').split(' ')[1] || '--:--:--';
+  document.getElementById('s-bankroll').textContent = fmtMoney(config.bankroll || 0);
+
+  renderSystem(config, stats, performance);
+  renderPerformance(performance);
+  renderTraders(data.traders || []);
+  renderBlockedReasons(data.blocked_reasons || []);
+  renderExperimentWatch([
+    {
+      name: 'Repeat Entry（已暂停）',
+      enabled: !!config.stage2_repeat_entry_experiment_enabled,
+      row: data.repeat_entry_experiment || {}
+    },
+    {
+      name: '空簿延迟复查',
+      enabled: !!config.stage2_no_book_recheck_experiment_enabled,
+      row: data.no_book_recheck_experiment || {}
+    }
+  ]);
+  renderSignals(data.trades || []);
+  renderRiskLogs(data.risk_logs || []);
 
   startCountdown();
   resetFallback();
 }
 
 socket.on('connect', () => {
-  document.getElementById('conn-dot').style.background = 'var(--green)';
-  document.getElementById('conn-dot').style.boxShadow = '0 0 0 6px rgba(45, 212, 191, 0.18)';
-  document.getElementById('conn-text').textContent = 'Connected';
+  setConnectionState(true);
   socket.emit('request_update');
   resetFallback();
 });
 
 socket.on('disconnect', () => {
-  document.getElementById('conn-dot').style.background = 'var(--red)';
-  document.getElementById('conn-dot').style.boxShadow = '0 0 0 6px rgba(251, 113, 133, 0.18)';
-  document.getElementById('conn-text').textContent = 'Disconnected';
+  setConnectionState(false);
 });
 
 socket.on('update', render);
+
+highlightSections();
 </script>
 </body>
 </html>

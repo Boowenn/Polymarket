@@ -103,26 +103,35 @@ def render_dashboard(traders=None, cycle_count=0):
     # ── Stats + Risk side by side ──
     pnl = models.get_latest_pnl()
     performance = models.get_performance_snapshot()
+    sample_metrics = performance.get("sample_metrics", {})
+    executed = sample_metrics.get("executed", {})
+    shadow = sample_metrics.get("shadow", {})
+    experiment = sample_metrics.get("experiment", {})
     realized = performance.get("realized_pnl", 0)
     unrealized = pnl.get("unrealized_pnl", 0)
-    resolved = performance.get("closed_entries", 0) or 0
-    open_entries = performance.get("open_entries", 0) or 0
-    simulated = performance.get("simulated_entries", 0) or 0
-    wins = performance.get("wins", 0) or 0
-    losses = performance.get("losses", 0) or 0
-    flats = performance.get("flat_count", 0) or 0
-    decided = performance.get("decision_count", 0) or 0
-    shadow_entries = performance.get("shadow_entries", 0) or 0
-    shadow_open = performance.get("shadow_open_entries", 0) or 0
-    shadow_closed = performance.get("shadow_closed_entries", 0) or 0
-    stage2_entries = performance.get("repeat_entry_experiment_entries", 0) or 0
-    stage2_open = performance.get("repeat_entry_experiment_open_entries", 0) or 0
-    stage2_closed = performance.get("repeat_entry_experiment_closed_entries", 0) or 0
-    wr = (
-        f"{performance.get('win_rate', 0):.0f}%"
-        if performance.get("win_rate") is not None
-        else "N/A"
-    )
+    executed_total = int(executed.get("total_entries", 0) or 0)
+    executed_open = int(executed.get("open_entries", 0) or 0)
+    executed_closed = int(executed.get("closed_entries", 0) or 0)
+    executed_wins = int(executed.get("wins", 0) or 0)
+    executed_losses = int(executed.get("losses", 0) or 0)
+    executed_flats = int(executed.get("flat_count", 0) or 0)
+    executed_decisions = int(executed.get("decision_count", 0) or 0)
+    executed_wr = f"{executed.get('win_rate', 0):.1f}%" if executed.get("win_rate") is not None else "N/A"
+    executed_cr = float(executed.get("close_rate", 0) or 0)
+    shadow_total = int(shadow.get("total_entries", 0) or 0)
+    shadow_open = int(shadow.get("open_entries", 0) or 0)
+    shadow_closed = int(shadow.get("closed_entries", 0) or 0)
+    shadow_decisions = int(shadow.get("decision_count", 0) or 0)
+    shadow_wr = f"{shadow.get('win_rate', 0):.1f}%" if shadow.get("win_rate") is not None else "N/A"
+    experiment_total = int(experiment.get("total_entries", 0) or 0)
+    experiment_open = int(experiment.get("open_entries", 0) or 0)
+    experiment_closed = int(experiment.get("closed_entries", 0) or 0)
+    experiment_decisions = int(experiment.get("decision_count", 0) or 0)
+    experiment_wr = f"{experiment.get('win_rate', 0):.1f}%" if experiment.get("win_rate") is not None else "N/A"
+    repeat_status = performance.get("repeat_entry_experiment_status", "idle")
+    repeat_entries = int(performance.get("repeat_entry_experiment_entries", 0) or 0)
+    no_book_status = performance.get("no_book_recheck_experiment_status", "idle")
+    no_book_entries = int(performance.get("no_book_recheck_experiment_entries", 0) or 0)
 
     stats_lines = [
         f"  Bankroll     [cyan]${config.effective_bankroll():,.0f}[/cyan]",
@@ -133,15 +142,15 @@ def render_dashboard(traders=None, cycle_count=0):
         f"  Workers      {config.MONITOR_FETCH_WORKERS} parallel fetchers",
         f"  Score Gate   [cyan]>={config.MIN_TRADER_SCORE:.0f}[/cyan]",
         f"  Confirm      [cyan]{config.MIN_SIGNAL_CONFIRM_SEC}s[/cyan] delay",
-        f"  Simulated    {simulated} entries",
-        f"  Shadow       {shadow_entries} blocked samples ({shadow_open} open / {shadow_closed} closed)",
-        (
-            f"  Stage2       {stage2_entries} repeat-entry experiment "
-            f"({stage2_open} open / {stage2_closed} closed)"
-        ),
-        f"  Closed       {resolved}  ([green]{wins}W[/green] / [red]{losses}L[/red] / {flats} flat)",
-        f"  Win Rate     {wr}  on {decided} decided trades",
-        f"  Open         {open_entries}",
+        f"  Executed     {executed_total} entries ({executed_open} open / {executed_closed} closed)",
+        f"  Executed WR  {executed_wr}  on {executed_decisions} decided trades",
+        f"  Executed CR  {executed_cr:.1f}%  ([green]{executed_wins}W[/green] / [red]{executed_losses}L[/red] / {executed_flats} flat)",
+        f"  Shadow       {shadow_total} entries ({shadow_open} open / {shadow_closed} closed)",
+        f"  Shadow WR    {shadow_wr}  on {shadow_decisions} decided trades",
+        f"  Experiment   {experiment_total} entries ({experiment_open} open / {experiment_closed} closed)",
+        f"  Experiment WR {experiment_wr}  on {experiment_decisions} decided trades",
+        f"  Repeat Exp   {repeat_status} ({repeat_entries} entries, {'on' if config.stage2_repeat_entry_experiment_enabled() else 'off'})",
+        f"  No-Book Exp  {no_book_status} ({no_book_entries} entries, {'on' if config.stage2_no_book_delayed_recheck_experiment_enabled() else 'off'})",
         (
             f"  Research     budget ${config.effective_daily_risk_budget():,.0f}, "
             f"capital gates {'off' if config.PAPER_IGNORE_CAPITAL_GATES else 'on'}"
@@ -149,9 +158,8 @@ def render_dashboard(traders=None, cycle_count=0):
             else "  Research     live execution"
         ),
         f"  Journal PnL  {'[green]' if realized >= 0 else '[red]'}${realized:,.2f}[/]",
-        f"  Entry Drift  {performance.get('avg_entry_drift', 0):.3f}",
-        f"  Basis        win rate uses executed fills; shadow samples tracked separately",
-        f"  Realized     {'[green]' if realized >= 0 else '[red]'}${realized:,.2f}[/]",
+        f"  Entry Drift  {float(executed.get('avg_entry_drift', 0) or 0):.3f}",
+        f"  Basis        decision_count = wins + losses; win_rate uses decided rows only",
         f"  Unrealized   {'[green]' if unrealized >= 0 else '[red]'}${unrealized:,.2f}[/]",
     ]
     stats_panel = Panel("\n".join(stats_lines), title="Stats", border_style="magenta", expand=True)

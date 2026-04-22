@@ -1,0 +1,4 @@
+interface:
+  display_name: "Polymarket Research Governance"
+  short_description: "Govern copy-trading research, metrics, and experiment rollout."
+  default_prompt: "Use $polymarket-research-governance to review metrics, govern experiments, or update this repo's research governance."
