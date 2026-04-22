@@ -1064,6 +1064,55 @@ def get_trade_journal_summary(since_ts=None, sample_types=None, experiment_key=N
     )
 
 
+def _active_executed_status_clause():
+    if config.DRY_RUN:
+        return "LOWER(COALESCE(entry_status, '')) = 'dry_run'"
+    return "LOWER(COALESCE(entry_status, '')) NOT IN ('', 'dry_run')"
+
+
+def get_live_execution_summary(since_ts=None):
+    sql = """
+        SELECT
+            COUNT(*) AS total_entries,
+            SUM(CASE WHEN exit_timestamp IS NULL THEN 1 ELSE 0 END) AS open_entries,
+            SUM(CASE WHEN exit_timestamp IS NOT NULL THEN 1 ELSE 0 END) AS closed_entries,
+            COALESCE(SUM(realized_pnl), 0) AS realized_pnl,
+            COALESCE(AVG(ABS(COALESCE(tradable_price, signal_price) - signal_price)), 0) AS avg_entry_drift,
+            SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins,
+            SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) AS losses,
+            SUM(
+                CASE
+                    WHEN exit_timestamp IS NOT NULL AND ABS(COALESCE(realized_pnl, 0)) <= 0.000001 THEN 1
+                    ELSE 0
+                END
+            ) AS flat_count
+        FROM trade_journal
+        WHERE COALESCE(sample_type, 'executed') = 'executed'
+          AND LOWER(COALESCE(entry_status, '')) NOT IN ('', 'dry_run')
+    """
+    params = []
+    if since_ts is not None:
+        sql += " AND entry_timestamp >= ?"
+        params.append(float(since_ts))
+
+    with db() as conn:
+        row = conn.execute(sql, params).fetchone()
+    if row:
+        return _summary_with_derived_metrics(dict(row))
+    return _summary_with_derived_metrics(
+        {
+            "total_entries": 0,
+            "open_entries": 0,
+            "closed_entries": 0,
+            "realized_pnl": 0,
+            "avg_entry_drift": 0,
+            "wins": 0,
+            "losses": 0,
+            "flat_count": 0,
+        }
+    )
+
+
 def get_experiment_entry_count(experiment_key, trader_wallet, condition_id, outcome, lookback_sec=86400):
     cutoff = time.time() - lookback_sec
     with db() as conn:
@@ -1428,13 +1477,15 @@ def get_latest_pnl():
 
 
 def get_daily_deployed_value():
+    status_clause = _active_executed_status_clause()
     with db() as conn:
         row = conn.execute(
-            """
+            f"""
             SELECT COALESCE(SUM(COALESCE(entry_value, entry_size * COALESCE(protected_price, tradable_price, signal_price), 0)), 0) AS spent
             FROM trade_journal
             WHERE COALESCE(sample_type, 'executed') = 'executed'
               AND exit_timestamp IS NULL
+              AND {status_clause}
             """
         ).fetchone()
     return row["spent"] if row else 0
@@ -1445,14 +1496,16 @@ def get_daily_pnl():
 
 
 def get_exposure_by_trader(wallet, lookback_sec=86400):
+    status_clause = _active_executed_status_clause()
     with db() as conn:
         row = conn.execute(
-            """
+            f"""
             SELECT COALESCE(SUM(COALESCE(entry_value, entry_size * COALESCE(protected_price, tradable_price, signal_price), 0)), 0) AS exposure
             FROM trade_journal
             WHERE COALESCE(sample_type, 'executed') = 'executed'
               AND exit_timestamp IS NULL
               AND trader_wallet = ?
+              AND {status_clause}
             """,
             (wallet,),
         ).fetchone()
@@ -1460,12 +1513,14 @@ def get_exposure_by_trader(wallet, lookback_sec=86400):
 
 
 def get_exposure_by_market(condition_id, outcome=None, lookback_sec=86400):
-    sql = """
+    status_clause = _active_executed_status_clause()
+    sql = f"""
         SELECT COALESCE(SUM(COALESCE(entry_value, entry_size * COALESCE(protected_price, tradable_price, signal_price), 0)), 0) AS exposure
         FROM trade_journal
         WHERE COALESCE(sample_type, 'executed') = 'executed'
           AND exit_timestamp IS NULL
           AND condition_id = ?
+          AND {status_clause}
     """
     params = [condition_id]
     if outcome is not None:
@@ -1499,13 +1554,15 @@ def get_recent_risk_logs(limit=10):
 # --- Position operations ---
 
 def get_open_position_count():
+    status_clause = _active_executed_status_clause()
     with db() as conn:
         row = conn.execute(
-            """
+            f"""
             SELECT COUNT(DISTINCT condition_id || '|' || outcome) AS cnt
             FROM trade_journal
             WHERE COALESCE(sample_type, 'executed') = 'executed'
               AND exit_timestamp IS NULL
+              AND {status_clause}
             """
         ).fetchone()
     return row["cnt"] if row else 0

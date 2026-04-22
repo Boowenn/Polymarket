@@ -69,6 +69,9 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - keep `repeat-entry` paused
 - prefer `MAX_POSITIONS=1` or `2`
 - use a tight daily loss limit and daily risk budget
+- keep the real `.env` local-only; do not commit private keys or live wallet settings
+- read the dashboard as two layers: live account cash and current live guardrails on top, historical `executed` research baseline below
+- when switching from dry run to live, old `dry_run` positions should not consume the live bankroll, open-position count, or deployed-risk view
 - remember that many Polymarket markets require a `min_order_size` of `5` shares, so tiny bankrolls will naturally skip many higher-priced contracts rather than force larger size
 
 This repository intentionally blocks orders below the market minimum instead of auto-inflating them beyond the copy-sizing plan.

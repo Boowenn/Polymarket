@@ -25,7 +25,9 @@ Use this skill as the repo's governance entrypoint for research and execution ch
    For Polymarket proxy wallets, require the correct `POLY_SIGNATURE_TYPE` and `POLY_FUNDER` from the account settings page before any live canary.
 7. For tiny live bankrolls, prefer a smoke-test mindset over a sizing mindset.
    Surface real guardrails in the dashboard, keep `.env` local-only, and block sub-minimum market sizes instead of auto-inflating order size.
-8. When governance changes land, update this skill and the repo README in the same change.
+8. In live mode, keep actual wallet state separate from historical dry-run research state.
+   Show real account cash separately from strategy bankroll, and make sure old `dry_run` positions do not consume live deployed-risk, exposure, or max-position views.
+9. When governance changes land, update this skill and the repo README in the same change.
 
 ## Guardrails
 
@@ -34,6 +36,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never widen live or paper experiments just because blocked-shadow PnL looks positive.
 - Never treat a locally initialized client as proof of live readiness unless a read-only authenticated CLOB call also succeeds.
 - Never force a tiny live bankroll to trade by silently overriding the market `min_order_size`.
+- Never let historical `dry_run` executed positions contaminate live capital gates or live dashboard totals.
 - Never update governance text without checking whether the baseline date and numbers are still current.
 
 ## References

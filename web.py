@@ -73,6 +73,8 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 _cycle = 0
 _last_leaderboard_ts = 0
 LEADERBOARD_INTERVAL = 300  # refresh leaderboard every 5 min
+_account_snapshot = {"ts": 0.0, "data": None}
+_account_snapshot_lock = threading.Lock()
 
 
 def ts_fmt(ts):
@@ -88,11 +90,78 @@ def mask_address(address):
     return f"{raw[:6]}...{raw[-4:]}"
 
 
+def _empty_account_snapshot(auth_state, error=""):
+    return {
+        "auth_state": auth_state,
+        "auth_ok": False,
+        "account_cash": None,
+        "allowance_count": 0,
+        "open_order_count": 0,
+        "cash_vs_budget": None,
+        "error": error,
+    }
+
+
+def get_live_account_snapshot(force=False):
+    if config.DRY_RUN:
+        return _empty_account_snapshot("dry_run")
+    if not config.live_auth_ready():
+        return _empty_account_snapshot("missing_credentials", "missing live credentials")
+
+    ttl_sec = max(int(config.POLL_INTERVAL or 15), 10)
+    now = time.time()
+    with _account_snapshot_lock:
+        cached = _account_snapshot.get("data")
+        cached_ts = float(_account_snapshot.get("ts", 0) or 0)
+        if not force and cached and now - cached_ts < ttl_sec:
+            return dict(cached)
+
+    try:
+        from py_clob_client.clob_types import BalanceAllowanceParams
+
+        client = executor._get_clob_client()
+        balance_payload = client.get_balance_allowance(
+            BalanceAllowanceParams(
+                asset_type="COLLATERAL",
+                signature_type=config.poly_signature_type(),
+            )
+        )
+        raw_balance = balance_payload.get("balance", 0)
+        account_cash = float(raw_balance or 0) / 1_000_000
+        allowances = balance_payload.get("allowances") or {}
+        orders = client.get_orders()
+        if isinstance(orders, list):
+            open_order_count = len(orders)
+        elif isinstance(orders, dict):
+            open_order_count = int(orders.get("count") or len(orders.get("data") or []))
+        else:
+            open_order_count = 0
+
+        snapshot = {
+            "auth_state": "read_only_ok",
+            "auth_ok": True,
+            "account_cash": account_cash,
+            "allowance_count": len(allowances),
+            "open_order_count": open_order_count,
+            "cash_vs_budget": account_cash - float(config.BANKROLL or 0),
+            "error": "",
+        }
+    except Exception as exc:
+        logger.warning("Live account snapshot failed: %s", exc)
+        snapshot = _empty_account_snapshot("auth_error", str(exc))
+
+    with _account_snapshot_lock:
+        _account_snapshot["ts"] = now
+        _account_snapshot["data"] = dict(snapshot)
+    return snapshot
+
+
 def get_dashboard_data():
     traders = models.get_tracked_traders(limit=config.monitored_trader_limit())
     recent = models.get_recent_trades(80)
     pnl = models.get_latest_pnl()
     performance = models.get_performance_snapshot()
+    live_execution = models.get_live_execution_summary()
     blocked_reasons = models.get_block_reason_analysis(sample_types=("shadow",), limit=6)
     repeat_entry_experiment = models.get_experiment_analysis(config.REPEAT_ENTRY_EXPERIMENT_KEY)
     no_book_recheck_experiment = models.get_experiment_analysis(config.NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY)
@@ -100,8 +169,9 @@ def get_dashboard_data():
     mirrored = models.get_mirrored_trades()
     effective_bankroll = config.effective_bankroll()
     daily_risk_budget = config.effective_daily_risk_budget()
-    deployed_value = float(performance.get("daily_deployed_value", 0) or 0)
-    open_position_count = int(performance.get("open_position_count", 0) or 0)
+    deployed_value = float(models.get_daily_deployed_value() or 0)
+    open_position_count = int(models.get_open_position_count() or 0)
+    account_snapshot = get_live_account_snapshot()
 
     buy_count = sum(1 for t in recent if t["side"] == "BUY")
     sell_count = len(recent) - buy_count
@@ -127,6 +197,7 @@ def get_dashboard_data():
             "close_rate_label": f"{float(performance.get('close_rate', 0) or 0):.1f}%",
             "unrealized_pnl": pnl.get("unrealized_pnl", 0),
         },
+        "live_execution": live_execution,
         "blocked_reasons": blocked_reasons,
         "repeat_entry_experiment": repeat_entry_experiment,
         "no_book_recheck_experiment": no_book_recheck_experiment,
@@ -134,6 +205,7 @@ def get_dashboard_data():
         "config": {
             "dry_run": config.DRY_RUN,
             "bankroll": effective_bankroll,
+            "strategy_bankroll": effective_bankroll,
             "live_bankroll": config.BANKROLL,
             "stake_pct": config.STAKE_PCT * 100,
             "poll_interval": config.POLL_INTERVAL,
@@ -167,6 +239,13 @@ def get_dashboard_data():
             "poly_signature_type_label": config.poly_signature_type_label(),
             "funder_short": mask_address(config.POLY_FUNDER),
             "live_auth_ready": config.live_auth_ready(),
+            "account_auth_state": account_snapshot["auth_state"],
+            "account_auth_ok": account_snapshot["auth_ok"],
+            "account_cash": account_snapshot["account_cash"],
+            "account_cash_delta": account_snapshot["cash_vs_budget"],
+            "account_allowance_count": account_snapshot["allowance_count"],
+            "open_order_count": account_snapshot["open_order_count"],
+            "account_snapshot_error": account_snapshot["error"],
             "small_bankroll_canary": (not config.DRY_RUN) and config.BANKROLL <= 25,
             "dry_run_record_blocked_samples": config.DRY_RUN_RECORD_BLOCKED_SAMPLES,
             "stage2_repeat_entry_experiment_enabled": config.stage2_repeat_entry_experiment_enabled(),

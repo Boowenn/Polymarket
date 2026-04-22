@@ -85,6 +85,8 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
 - keep scope narrowed to the intended live segment, such as `sports,esports`
 - keep repeat-entry paused and avoid widening experiments
 - show live guardrails clearly in the dashboard: bankroll, deployed notional, remaining daily budget, max trade size, max positions, wallet type, and funder summary
+- show real account cash separately from the strategy bankroll cap; the wallet balance is not the same thing as the bot budget
+- when live mode is enabled, exclude historical `dry_run` executed positions from live deployed-risk, exposure, and max-position views
 - block orders that fall below the market `min_order_size` instead of automatically increasing size to force a fill
 
 This avoids disguising a sizing problem as successful live execution.
