@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Analyze recent paper-trading observations and highlight what to improve next."""
+"""Analyze recent copy-trading results and highlight what to improve next."""
 
 import argparse
 import sys
@@ -39,6 +39,10 @@ def _sample_type(row):
 
 def _sample_order(sample_type):
     return {"executed": 0, "shadow": 1, "experiment": 2}.get(sample_type, 9)
+
+
+def _is_live_journal_row(row):
+    return _sample_type(row) == "executed" and (row.get("entry_status") or "").strip().lower() not in ("", "dry_run")
 
 
 def load_window_data(since_ts):
@@ -493,11 +497,50 @@ def build_no_book_recheck_recommendations(experiment_row):
     return recommendations[:2]
 
 
-def print_source_table(rows):
+def build_live_recommendations(journal_summary, risk_counts, trader_rows, source_rows):
+    recommendations = []
+    total_entries = int(journal_summary.get("total_entries", 0) or 0)
+    closed_entries = int(journal_summary.get("closed_entries", 0) or 0)
+    decision_count = int(journal_summary.get("decision_count", 0) or 0)
+
+    if total_entries == 0:
+        recommendations.append("切到实盘后当前还没有真实 executed 成交。先观察首批 live fills 和记账链路，不要立刻放宽参数。")
+    elif closed_entries < 5:
+        recommendations.append("真实已平仓样本还很少。先继续累积 live closed 样本，再决定是否调整资金或风控。")
+    elif decision_count < 20:
+        recommendations.append("真实已判定样本还不够多。当前阶段先以稳为主，不要扩大单笔上限或持仓上限。")
+
+    avg_drift = float(journal_summary.get("avg_entry_drift", 0) or 0)
+    if avg_drift > config.MAX_BOOK_PRICE_DRIFT * 0.7:
+        recommendations.append(
+            f"真实入场漂移 {avg_drift:.3f} 已接近阈值 {config.MAX_BOOK_PRICE_DRIFT:.3f}。优先降 size，不要为了多成交去放宽滑点。"
+        )
+
+    if risk_counts.get("capital_gate", 0) >= max(3, total_entries):
+        recommendations.append("实盘信号里有不少被资金/单笔上限拦住。若后面要提成交数，优先小幅提高 bankroll 或日预算，不要先放宽流动性门槛。")
+
+    if risk_counts.get("liquidity_gate", 0) >= max(3, total_entries):
+        recommendations.append("实盘里流动性/价差拦截依然很多。继续接受跳单，不要为了出手率去追薄簿。")
+
+    live_copy_source = next((row for row in source_rows if row["source"] == "copy/executed"), None)
+    if live_copy_source and live_copy_source["closed_entries"] >= 3 and live_copy_source["realized_pnl"] < 0:
+        recommendations.append("当前真实 copy/executed 已平仓样本为负。先缩小交易员名单或继续观察，不要扩大仓位。")
+
+    top_trader = next((row for row in trader_rows if row["decision_count"] >= 2), None)
+    if top_trader and top_trader["blocked_share"] >= 0.30:
+        recommendations.append("实盘样本主要还是落在状态不稳定的交易员上。优先收紧名单，只保留更稳定的 approved 交易员。")
+
+    if not recommendations:
+        recommendations.append("当前实盘口径没有暴露出新的硬伤。先保持参数不动，继续累积真实已平仓和已判定样本。")
+
+    return recommendations[:6]
+
+
+def print_source_table(rows, title="Source performance:", empty_label="No entries yet."):
     if not rows:
-        print("No simulated entries yet.")
+        print(empty_label)
         return
-    print("Source performance:")
+    print(title)
     print("source              entries  closed  decs  close%  win_rate  pnl        avg_drift")
     for row in rows:
         win_rate = f"{row['win_rate']:.1f}%" if row["win_rate"] is not None else "N/A"
@@ -596,49 +639,14 @@ def main():
     since_ts = now - max(args.days, 1) * 86400
 
     trades, journal_rows, history_rows, risk_rows = load_window_data(since_ts)
-    journal_summary = models.get_trade_journal_summary(since_ts=since_ts)
-    executed_summary = models.get_trade_journal_summary(since_ts=since_ts, sample_types=("executed",))
-    shadow_summary = models.get_trade_journal_summary(since_ts=since_ts, sample_types=("shadow",))
-    experiment_summary = models.get_trade_journal_summary(since_ts=since_ts, sample_types=("experiment",))
-    repeat_entry_experiment = models.get_experiment_analysis(config.REPEAT_ENTRY_EXPERIMENT_KEY, since_ts=since_ts)
-    no_book_recheck_experiment = models.get_experiment_analysis(
-        config.NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY,
-        since_ts=since_ts,
-    )
-    experiment_watch_rows = build_experiment_watch_rows(
-        [
-            ("repeat-entry", config.stage2_repeat_entry_experiment_enabled(), repeat_entry_experiment),
-            ("no-book delayed recheck", config.stage2_no_book_delayed_recheck_experiment_enabled(), no_book_recheck_experiment),
-        ]
-    )
-    blocked_reason_rows = models.get_block_reason_analysis(since_ts=since_ts, sample_types=("shadow",), limit=8)
-    source_rows = summarize_sources(journal_rows)
-    trader_rows = summarize_traders(journal_rows, history_rows)
-    executed_trader_rows = filter_traders_by_sample(trader_rows, "executed")
-    shadow_trader_rows = filter_traders_by_sample(trader_rows, "shadow")
-    experiment_trader_rows = filter_traders_by_sample(trader_rows, "experiment")
-    risk_counts, raw_reasons = categorize_risk_logs(risk_rows)
-    candidates = select_candidate_traders(executed_trader_rows)
-    review = select_review_traders(executed_trader_rows)
-    recommendations = build_recommendations(executed_summary, risk_counts, executed_trader_rows, source_rows)
-    recommendations = (
-        build_repeat_entry_recommendations(repeat_entry_experiment)
-        + build_no_book_recheck_recommendations(no_book_recheck_experiment)
-        + build_block_reason_recommendations(blocked_reason_rows)
-        + recommendations
-    )[:6]
-
     total_signals = len(trades)
     copy_signals = sum(1 for row in trades if (row.get("signal_source") or "copy") == "copy")
     consensus_signals = sum(1 for row in trades if (row.get("signal_source") or "copy") == "consensus")
     mirrored_signals = sum(1 for row in trades if int(row.get("mirrored", 0) or 0) == 1)
-    closed_entries = int(executed_summary.get("closed_entries", 0) or 0)
-    decision_count = int(executed_summary.get("decision_count", 0) or 0)
-    win_rate = executed_summary.get("win_rate")
-    win_rate_label = f"{win_rate:.1f}%" if win_rate is not None else "N/A"
 
     print()
-    print("Polymarket Copybot Observation Report")
+    report_title = "Polymarket Copybot Observation Report" if config.DRY_RUN else "Polymarket Copybot Live Execution Report"
+    print(report_title)
     print(f"Window: {_fmt_ts(since_ts)} -> {_fmt_ts(now)}  ({max(args.days, 1)} day(s))")
     mode_label = "DRY_RUN" if config.DRY_RUN else "LIVE"
     if config.DRY_RUN:
@@ -651,49 +659,128 @@ def main():
         print(f"Mode: {mode_label}")
     print()
 
-    print("Overview:")
-    print(
-        f"signals={total_signals}  copy={copy_signals}  consensus={consensus_signals}  "
-        f"research_entries={int(journal_summary.get('total_entries', 0) or 0)}  "
-        f"executed_entries={int(executed_summary.get('total_entries', 0) or 0)}  "
-        f"shadow_entries={int(shadow_summary.get('total_entries', 0) or 0)}  "
-        f"experiment_entries={int(experiment_summary.get('total_entries', 0) or 0)}  "
-        f"stage2_repeat_entries={int(repeat_entry_experiment.get('total_entries', 0) or 0)}  "
-        f"stage2_no_book_entries={int(no_book_recheck_experiment.get('total_entries', 0) or 0)}  "
-        f"mirrored={mirrored_signals}"
-    )
-    print(
-        f"executed_closed={closed_entries}  executed_open={int(executed_summary.get('open_entries', 0) or 0)}  "
-        f"executed_decision_count={decision_count}  executed_close_rate={float(executed_summary.get('close_rate', 0) or 0):.1f}%  "
-        f"shadow_closed={int(shadow_summary.get('closed_entries', 0) or 0)}  shadow_open={int(shadow_summary.get('open_entries', 0) or 0)}  "
-        f"stage2_repeat_closed={int(repeat_entry_experiment.get('closed_entries', 0) or 0)}  "
-        f"stage2_no_book_closed={int(no_book_recheck_experiment.get('closed_entries', 0) or 0)}  "
-        f"win_rate={win_rate_label}  realized_pnl={_fmt_money(executed_summary.get('realized_pnl', 0))}  "
-        f"avg_entry_drift={float(executed_summary.get('avg_entry_drift', 0) or 0):.3f}"
-    )
-    print(
-        f"profile_snapshots={len(history_rows)}  tracked_traders={len({row.get('wallet') for row in history_rows if row.get('wallet')})}  "
-        f"risk_events={len(risk_rows)}"
-    )
-    print()
+    if config.DRY_RUN:
+        journal_summary = models.get_trade_journal_summary(since_ts=since_ts)
+        executed_summary = models.get_trade_journal_summary(since_ts=since_ts, sample_types=("executed",))
+        shadow_summary = models.get_trade_journal_summary(since_ts=since_ts, sample_types=("shadow",))
+        experiment_summary = models.get_trade_journal_summary(since_ts=since_ts, sample_types=("experiment",))
+        repeat_entry_experiment = models.get_experiment_analysis(config.REPEAT_ENTRY_EXPERIMENT_KEY, since_ts=since_ts)
+        no_book_recheck_experiment = models.get_experiment_analysis(
+            config.NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY,
+            since_ts=since_ts,
+        )
+        experiment_watch_rows = build_experiment_watch_rows(
+            [
+                ("repeat-entry", config.stage2_repeat_entry_experiment_enabled(), repeat_entry_experiment),
+                ("no-book delayed recheck", config.stage2_no_book_delayed_recheck_experiment_enabled(), no_book_recheck_experiment),
+            ]
+        )
+        blocked_reason_rows = models.get_block_reason_analysis(since_ts=since_ts, sample_types=("shadow",), limit=8)
+        source_rows = summarize_sources(journal_rows)
+        trader_rows = summarize_traders(journal_rows, history_rows)
+        executed_trader_rows = filter_traders_by_sample(trader_rows, "executed")
+        shadow_trader_rows = filter_traders_by_sample(trader_rows, "shadow")
+        experiment_trader_rows = filter_traders_by_sample(trader_rows, "experiment")
+        risk_counts, raw_reasons = categorize_risk_logs(risk_rows)
+        candidates = select_candidate_traders(executed_trader_rows)
+        review = select_review_traders(executed_trader_rows)
+        recommendations = build_recommendations(executed_summary, risk_counts, executed_trader_rows, source_rows)
+        recommendations = (
+            build_repeat_entry_recommendations(repeat_entry_experiment)
+            + build_no_book_recheck_recommendations(no_book_recheck_experiment)
+            + build_block_reason_recommendations(blocked_reason_rows)
+            + recommendations
+        )[:6]
 
-    print_source_table(source_rows)
-    print()
+        closed_entries = int(executed_summary.get("closed_entries", 0) or 0)
+        decision_count = int(executed_summary.get("decision_count", 0) or 0)
+        win_rate = executed_summary.get("win_rate")
+        win_rate_label = f"{win_rate:.1f}%" if win_rate is not None else "N/A"
 
-    print_block_reason_table(blocked_reason_rows, limit=8)
-    print()
+        print("Overview:")
+        print(
+            f"signals={total_signals}  copy={copy_signals}  consensus={consensus_signals}  "
+            f"research_entries={int(journal_summary.get('total_entries', 0) or 0)}  "
+            f"executed_entries={int(executed_summary.get('total_entries', 0) or 0)}  "
+            f"shadow_entries={int(shadow_summary.get('total_entries', 0) or 0)}  "
+            f"experiment_entries={int(experiment_summary.get('total_entries', 0) or 0)}  "
+            f"stage2_repeat_entries={int(repeat_entry_experiment.get('total_entries', 0) or 0)}  "
+            f"stage2_no_book_entries={int(no_book_recheck_experiment.get('total_entries', 0) or 0)}  "
+            f"mirrored={mirrored_signals}"
+        )
+        print(
+            f"executed_closed={closed_entries}  executed_open={int(executed_summary.get('open_entries', 0) or 0)}  "
+            f"executed_decision_count={decision_count}  executed_close_rate={float(executed_summary.get('close_rate', 0) or 0):.1f}%  "
+            f"shadow_closed={int(shadow_summary.get('closed_entries', 0) or 0)}  shadow_open={int(shadow_summary.get('open_entries', 0) or 0)}  "
+            f"stage2_repeat_closed={int(repeat_entry_experiment.get('closed_entries', 0) or 0)}  "
+            f"stage2_no_book_closed={int(no_book_recheck_experiment.get('closed_entries', 0) or 0)}  "
+            f"win_rate={win_rate_label}  realized_pnl={_fmt_money(executed_summary.get('realized_pnl', 0))}  "
+            f"avg_entry_drift={float(executed_summary.get('avg_entry_drift', 0) or 0):.3f}"
+        )
+        print(
+            f"profile_snapshots={len(history_rows)}  tracked_traders={len({row.get('wallet') for row in history_rows if row.get('wallet')})}  "
+            f"risk_events={len(risk_rows)}"
+        )
+        print()
 
-    print_experiment_watch_table(experiment_watch_rows)
-    print()
+        print_source_table(source_rows)
+        print()
 
-    print_trader_table("Best executed traders:", candidates, limit=args.top)
-    print()
-    print_trader_table("Executed traders to review or avoid:", review, limit=args.top)
-    print()
-    print_trader_table("Shadow trader outcomes (kept separate):", shadow_trader_rows, limit=args.top)
-    print()
-    print_trader_table("Experiment trader outcomes (kept separate):", experiment_trader_rows, limit=args.top)
-    print()
+        print_block_reason_table(blocked_reason_rows, limit=8)
+        print()
+
+        print_experiment_watch_table(experiment_watch_rows)
+        print()
+
+        print_trader_table("Best executed traders:", candidates, limit=args.top)
+        print()
+        print_trader_table("Executed traders to review or avoid:", review, limit=args.top)
+        print()
+        print_trader_table("Shadow trader outcomes (kept separate):", shadow_trader_rows, limit=args.top)
+        print()
+        print_trader_table("Experiment trader outcomes (kept separate):", experiment_trader_rows, limit=args.top)
+        print()
+    else:
+        live_journal_rows = [row for row in journal_rows if _is_live_journal_row(row)]
+        live_summary = models.get_live_execution_summary(since_ts=since_ts)
+        source_rows = [row for row in summarize_sources(live_journal_rows) if row.get("sample_type") == "executed"]
+        trader_rows = summarize_traders(live_journal_rows, history_rows)
+        executed_trader_rows = filter_traders_by_sample(trader_rows, "executed")
+        risk_counts, raw_reasons = categorize_risk_logs(risk_rows)
+        candidates = select_candidate_traders(executed_trader_rows)
+        review = select_review_traders(executed_trader_rows)
+        recommendations = build_live_recommendations(live_summary, risk_counts, executed_trader_rows, source_rows)
+
+        closed_entries = int(live_summary.get("closed_entries", 0) or 0)
+        decision_count = int(live_summary.get("decision_count", 0) or 0)
+        win_rate = live_summary.get("win_rate")
+        win_rate_label = f"{win_rate:.1f}%" if win_rate is not None else "N/A"
+
+        print("Overview:")
+        print(
+            f"signals={total_signals}  copy={copy_signals}  consensus={consensus_signals}  "
+            f"live_entries={int(live_summary.get('total_entries', 0) or 0)}  "
+            f"live_closed={closed_entries}  live_open={int(live_summary.get('open_entries', 0) or 0)}  "
+            f"mirrored={mirrored_signals}"
+        )
+        print(
+            f"live_decision_count={decision_count}  live_close_rate={float(live_summary.get('close_rate', 0) or 0):.1f}%  "
+            f"live_win_rate={win_rate_label}  live_realized_pnl={_fmt_money(live_summary.get('realized_pnl', 0))}  "
+            f"avg_entry_drift={float(live_summary.get('avg_entry_drift', 0) or 0):.3f}"
+        )
+        print(
+            f"profile_snapshots={len(history_rows)}  tracked_traders={len({row.get('wallet') for row in history_rows if row.get('wallet')})}  "
+            f"risk_events={len(risk_rows)}"
+        )
+        print()
+
+        print_source_table(source_rows, title="Live source performance:", empty_label="No live executed entries yet.")
+        print()
+
+        print_trader_table("Best live traders:", candidates, limit=args.top)
+        print()
+        print_trader_table("Live traders to review or avoid:", review, limit=args.top)
+        print()
 
     print("Risk categories:")
     if risk_counts:

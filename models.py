@@ -192,6 +192,13 @@ def _ensure_column(conn, table_name, column_name, ddl):
                 raise
 
 
+def _scalar(conn, query, params=()):
+    row = conn.execute(query, params).fetchone()
+    if row is None:
+        return 0
+    return row[0]
+
+
 def init_db():
     with db() as conn:
         conn.executescript(
@@ -351,6 +358,137 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_journal_sample_experiment ON trade_journal(sample_type, experiment_key, entry_timestamp DESC);
             """
         )
+
+
+def get_non_live_data_counts():
+    with db() as conn:
+        return {
+            "journal_shadow": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE COALESCE(sample_type, 'executed') = 'shadow'",
+                )
+                or 0
+            ),
+            "journal_experiment": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE COALESCE(sample_type, 'executed') = 'experiment'",
+                )
+                or 0
+            ),
+            "journal_dry_run": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE LOWER(COALESCE(entry_status, '')) = 'dry_run'",
+                )
+                or 0
+            ),
+            "trade_dry_run_mirrors": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trades WHERE LOWER(COALESCE(our_status, '')) = 'dry_run'",
+                )
+                or 0
+            ),
+            "risk_log_rows": int(_scalar(conn, "SELECT COUNT(*) FROM risk_log") or 0),
+            "pnl_log_rows": int(_scalar(conn, "SELECT COUNT(*) FROM pnl_log") or 0),
+        }
+
+
+def purge_non_live_state(clear_risk_logs=True, clear_pnl_logs=True):
+    with db() as conn:
+        before = {
+            "journal_shadow": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE COALESCE(sample_type, 'executed') = 'shadow'",
+                )
+                or 0
+            ),
+            "journal_experiment": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE COALESCE(sample_type, 'executed') = 'experiment'",
+                )
+                or 0
+            ),
+            "journal_dry_run": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE LOWER(COALESCE(entry_status, '')) = 'dry_run'",
+                )
+                or 0
+            ),
+            "trade_dry_run_mirrors": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trades WHERE LOWER(COALESCE(our_status, '')) = 'dry_run'",
+                )
+                or 0
+            ),
+            "risk_log_rows": int(_scalar(conn, "SELECT COUNT(*) FROM risk_log") or 0),
+            "pnl_log_rows": int(_scalar(conn, "SELECT COUNT(*) FROM pnl_log") or 0),
+        }
+
+        conn.execute(
+            """
+            DELETE FROM trade_journal
+            WHERE COALESCE(sample_type, 'executed') != 'executed'
+               OR LOWER(COALESCE(entry_status, '')) = 'dry_run'
+            """
+        )
+        conn.execute(
+            """
+            UPDATE trades
+            SET mirrored = 0,
+                our_order_id = NULL,
+                our_side = NULL,
+                our_size = NULL,
+                our_price = NULL,
+                our_status = NULL
+            WHERE LOWER(COALESCE(our_status, '')) = 'dry_run'
+            """
+        )
+        if clear_risk_logs:
+            conn.execute("DELETE FROM risk_log")
+        if clear_pnl_logs:
+            conn.execute("DELETE FROM pnl_log")
+
+        after = {
+            "journal_shadow": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE COALESCE(sample_type, 'executed') = 'shadow'",
+                )
+                or 0
+            ),
+            "journal_experiment": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE COALESCE(sample_type, 'executed') = 'experiment'",
+                )
+                or 0
+            ),
+            "journal_dry_run": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trade_journal WHERE LOWER(COALESCE(entry_status, '')) = 'dry_run'",
+                )
+                or 0
+            ),
+            "trade_dry_run_mirrors": int(
+                _scalar(
+                    conn,
+                    "SELECT COUNT(*) FROM trades WHERE LOWER(COALESCE(our_status, '')) = 'dry_run'",
+                )
+                or 0
+            ),
+            "risk_log_rows": int(_scalar(conn, "SELECT COUNT(*) FROM risk_log") or 0),
+            "pnl_log_rows": int(_scalar(conn, "SELECT COUNT(*) FROM pnl_log") or 0),
+        }
+
+    return {"before": before, "after": after}
 
 
 # --- Trader operations ---

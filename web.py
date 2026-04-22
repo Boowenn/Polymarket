@@ -162,9 +162,14 @@ def get_dashboard_data():
     pnl = models.get_latest_pnl()
     performance = models.get_performance_snapshot()
     live_execution = models.get_live_execution_summary()
-    blocked_reasons = models.get_block_reason_analysis(sample_types=("shadow",), limit=6)
-    repeat_entry_experiment = models.get_experiment_analysis(config.REPEAT_ENTRY_EXPERIMENT_KEY)
-    no_book_recheck_experiment = models.get_experiment_analysis(config.NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY)
+    if config.DRY_RUN:
+        blocked_reasons = models.get_block_reason_analysis(sample_types=("shadow",), limit=6)
+        repeat_entry_experiment = models.get_experiment_analysis(config.REPEAT_ENTRY_EXPERIMENT_KEY)
+        no_book_recheck_experiment = models.get_experiment_analysis(config.NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY)
+    else:
+        blocked_reasons = []
+        repeat_entry_experiment = {}
+        no_book_recheck_experiment = {}
     risk = models.get_recent_risk_logs(20)
     mirrored = models.get_mirrored_trades()
     effective_bankroll = config.effective_bankroll()
@@ -246,6 +251,7 @@ def get_dashboard_data():
             "account_allowance_count": account_snapshot["allowance_count"],
             "open_order_count": account_snapshot["open_order_count"],
             "account_snapshot_error": account_snapshot["error"],
+            "show_research_panels": config.DRY_RUN,
             "small_bankroll_canary": (not config.DRY_RUN) and config.BANKROLL <= 25,
             "dry_run_record_blocked_samples": config.DRY_RUN_RECORD_BLOCKED_SAMPLES,
             "stage2_repeat_entry_experiment_enabled": config.stage2_repeat_entry_experiment_enabled(),
@@ -270,7 +276,7 @@ def get_dashboard_data():
 # ── routes ──
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", dry_run=config.DRY_RUN)
 
 
 @socketio.on("connect")

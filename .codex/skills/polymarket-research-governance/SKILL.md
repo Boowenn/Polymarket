@@ -27,7 +27,8 @@ Use this skill as the repo's governance entrypoint for research and execution ch
    Surface real guardrails in the dashboard, keep `.env` local-only, and block sub-minimum market sizes instead of auto-inflating order size.
 8. In live mode, keep actual wallet state separate from historical dry-run research state.
    Show real account cash separately from strategy bankroll, and make sure old `dry_run` positions do not consume live deployed-risk, exposure, or max-position views.
-9. When governance changes land, update this skill and the repo README in the same change.
+9. When you intentionally cut over from research to live-only operation, archive the old DB snapshot locally and purge active `dry_run` / `shadow` / `experiment` rows from the runtime DB.
+10. When governance changes land, update this skill and the repo README in the same change.
 
 ## Guardrails
 
@@ -37,6 +38,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never treat a locally initialized client as proof of live readiness unless a read-only authenticated CLOB call also succeeds.
 - Never force a tiny live bankroll to trade by silently overriding the market `min_order_size`.
 - Never let historical `dry_run` executed positions contaminate live capital gates or live dashboard totals.
+- Never leave archived dry-run / shadow / experiment rows in the active live DB after an explicit live cutover.
 - Never update governance text without checking whether the baseline date and numbers are still current.
 
 ## References

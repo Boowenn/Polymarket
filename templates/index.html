@@ -760,11 +760,15 @@
 <div class="app-shell">
   <aside class="sidebar">
     <section class="brand-card">
-      <div class="brand-kicker">Polymarket Research Console</div>
-      <div class="brand-title">体育 / 电竞<br>研究看板</div>
-      <div class="brand-subtitle">
-        只观察体育与电竞两个 market，把执行样本、shadow 样本和实验样本分开看，
-        避免把研究结论和可执行结论混在一起。
+      <div class="brand-kicker">Polymarket Live Console</div>
+      <div class="brand-title" id="brand-title">体育 / 电竞<br>实盘看板</div>
+      <div class="brand-subtitle" id="brand-subtitle">
+        {% if dry_run %}
+        当前页面按 executed / shadow / experiment 分层观察研究样本。
+        {% else %}
+        当前页面只保留真钱账户、真实 executed 成交和实盘风控。
+        模拟盘、shadow 和实验样本会在切实盘时归档，不再混进当前运行视图。
+        {% endif %}
       </div>
     </section>
 
@@ -779,10 +783,12 @@
           <div class="nav-title">交易员</div>
           <div class="nav-note">当前跟踪对象、状态和质量评分</div>
         </a>
-        <a class="nav-link" href="#section-experiments" data-target="section-experiments">
+        {% if dry_run %}
+        <a class="nav-link" href="#section-experiments" data-target="section-experiments" id="nav-experiments">
           <div class="nav-title">实验</div>
           <div class="nav-note">阻断理由、repeat-entry、空簿延迟复查</div>
         </a>
+        {% endif %}
         <a class="nav-link" href="#section-signals" data-target="section-signals">
           <div class="nav-title">信号与风险</div>
           <div class="nav-note">最新信号、风险日志和执行状态</div>
@@ -806,17 +812,19 @@
       </div>
     </section>
 
-    <section class="side-card">
-      <div class="side-card-title">研究提醒</div>
+    {% if dry_run %}
+    <section class="side-card" id="side-research-card">
+      <div class="side-card-title" id="side-research-title">研究提醒</div>
       <div class="side-stack">
-        <div class="side-row"><span>repeat-entry</span><strong id="sidebar-repeat">已暂停</strong></div>
-        <div class="side-row"><span>空簿复查</span><strong id="sidebar-no-book">待收样本</strong></div>
-        <div class="side-row"><span>样本分层</span><strong>executed / shadow / experiment</strong></div>
+        <div class="side-row"><span id="sidebar-row1-label">repeat-entry</span><strong id="sidebar-repeat">已暂停</strong></div>
+        <div class="side-row"><span id="sidebar-row2-label">空簿复查</span><strong id="sidebar-no-book">待收样本</strong></div>
+        <div class="side-row"><span id="sidebar-row3-label">样本分层</span><strong id="sidebar-row3-value">executed / shadow / experiment</strong></div>
       </div>
-      <div class="side-footnote">
+      <div class="side-footnote" id="side-research-note">
         当前页面只服务体育和电竞范围；即便改实验，也不放大到其他市场。
       </div>
     </section>
+    {% endif %}
   </aside>
 
   <main class="content">
@@ -824,9 +832,9 @@
       <div class="hero-top">
         <div>
           <div class="hero-title">Polymarket 体育与电竞实盘控制台</div>
-          <div class="hero-subtitle">
-            先看账户现金、策略预算和实盘护栏，再看 executed 研究基线、交易员、实验与信号。
-            页面默认只关注体育与电竞，并把真钱账户状态和历史研究统计明确拆开。
+          <div class="hero-subtitle" id="hero-subtitle">
+            先看账户现金、策略预算和实盘护栏，再看真实 executed 表现、交易员、信号与风险。
+            模拟盘和实验样本在切到实盘后会归档，不再混进当前页面。
           </div>
         </div>
         <div class="hero-badges">
@@ -867,7 +875,7 @@
       <div class="section-head">
         <div>
           <div class="section-title">账户与研究总览</div>
-          <div class="section-note" id="overview-note">上排先看账户与风控，下排再看 executed 研究基线；不要把历史研究收益当成账户实时盈亏。</div>
+          <div class="section-note" id="overview-note">上排先看账户与风控，下排再看真实 executed 成交；模拟和实验样本不会再进入当前视图。</div>
         </div>
         <div class="section-tag">只看体育 / 电竞</div>
       </div>
@@ -928,8 +936,8 @@
       <div class="overview-grid">
         <article class="panel">
           <div class="panel-header">
-            <div class="panel-title">研究执行基线</div>
-            <div class="panel-badge">历史 executed</div>
+            <div class="panel-title">真实执行表现</div>
+            <div class="panel-badge">live executed</div>
           </div>
           <div class="panel-body">
             <div class="performance-layout">
@@ -1021,6 +1029,7 @@
       </article>
     </section>
 
+    {% if dry_run %}
     <section class="section" id="section-experiments">
       <div class="section-head">
         <div>
@@ -1079,6 +1088,7 @@
         </div>
       </article>
     </section>
+    {% endif %}
 
     <section class="section" id="section-signals">
       <div class="section-head">
@@ -1322,36 +1332,26 @@ function renderPerformance(perf, config, liveExecution) {
       : `${Number(executedWinRate).toFixed(1)}%`;
   const executedCloseRate = Number(executed.close_rate ?? perf.close_rate ?? 0);
 
-  const shadowEntries = Number(shadow.total_entries ?? perf.shadow_entries ?? 0);
-  const shadowClosedEntries = Number(shadow.closed_entries ?? perf.shadow_closed_entries ?? 0);
-  const shadowDecisionCount = Number(shadow.decision_count ?? perf.shadow_decision_count ?? 0);
-  const shadowWinRate = shadow.win_rate ?? perf.shadow_win_rate;
-
-  const experimentEntries = Number(experiment.total_entries ?? perf.experiment_entries ?? 0);
-  const experimentClosedEntries = Number(experiment.closed_entries ?? perf.experiment_closed_entries ?? 0);
-  const experimentDecisionCount = Number(experiment.decision_count ?? perf.experiment_decision_count ?? 0);
-  const experimentWinRate = experiment.win_rate ?? perf.experiment_win_rate;
-
-  const repeatEntries = Number(perf.repeat_entry_experiment_entries || 0);
-  const repeatClosedEntries = Number(perf.repeat_entry_experiment_closed_entries || 0);
-  const repeatStatus = perf.repeat_entry_experiment_status || 'idle';
-  const noBookEntries = Number(perf.no_book_recheck_experiment_entries || 0);
-  const noBookClosedEntries = Number(perf.no_book_recheck_experiment_closed_entries || 0);
-  const noBookStatus = perf.no_book_recheck_experiment_status || 'idle';
   const liveEntries = Number((liveExecution && liveExecution.total_entries) || 0);
   const liveClosedEntries = Number((liveExecution && liveExecution.closed_entries) || 0);
+  const liveOpenEntries = Number((liveExecution && liveExecution.open_entries) || 0);
+  const liveWins = Number((liveExecution && liveExecution.wins) || 0);
+  const liveLosses = Number((liveExecution && liveExecution.losses) || 0);
+  const liveFlats = Number((liveExecution && liveExecution.flat_count) || 0);
   const liveDecisionCount = Number((liveExecution && liveExecution.decision_count) || 0);
   const liveWinRate = liveExecution ? liveExecution.win_rate : null;
 
   if (config.dry_run) {
+    const shadowEntries = Number(shadow.total_entries ?? perf.shadow_entries ?? 0);
+    const experimentEntries = Number(experiment.total_entries ?? perf.experiment_entries ?? 0);
     document.getElementById('s-simulated').textContent = executedEntries;
     document.getElementById('s-closed').textContent = executedClosedEntries;
     document.getElementById('s-simulated').className = 'stat-value';
     document.getElementById('s-closed').className = 'stat-value';
     document.getElementById('s-simulated-note').textContent =
-      `已执行 ${executedEntries} 笔 · shadow ${shadowEntries} 笔 · experiment ${experimentEntries} 笔`;
+      `已执行 ${executedEntries} 笔 · shadow ${Number(shadow.total_entries ?? perf.shadow_entries ?? 0)} 笔 · experiment ${Number(experiment.total_entries ?? perf.experiment_entries ?? 0)} 笔`;
     document.getElementById('s-closed-note').textContent =
-      `执行平仓率 ${executedCloseRate.toFixed(1)}% · shadow ${shadowClosedEntries}/${shadowEntries} · experiment ${experimentClosedEntries}/${experimentEntries}`;
+      `执行平仓率 ${executedCloseRate.toFixed(1)}% · shadow ${Number(shadow.closed_entries ?? perf.shadow_closed_entries ?? 0)}/${Number(shadow.total_entries ?? perf.shadow_entries ?? 0)} · experiment ${Number(experiment.closed_entries ?? perf.experiment_closed_entries ?? 0)}/${Number(experiment.total_entries ?? perf.experiment_entries ?? 0)}`;
     document.getElementById('s-winrate').textContent = executedWinRateLabel;
     document.getElementById('s-winrate').className = `stat-value ${executedWinRate === null || executedWinRate === undefined ? '' : (executedWinRate >= 50 ? 'green' : 'red')}`;
     document.getElementById('s-winrate-note').textContent =
@@ -1382,9 +1382,21 @@ function renderPerformance(perf, config, liveExecution) {
     ringLabel.textContent = `${Number(executedWinRate).toFixed(0)}%`;
   }
 
-  const shadowWinRateLabel = shadowWinRate === null || shadowWinRate === undefined ? 'N/A' : `${Number(shadowWinRate).toFixed(1)}%`;
-  const experimentWinRateLabel = experimentWinRate === null || experimentWinRate === undefined ? 'N/A' : `${Number(experimentWinRate).toFixed(1)}%`;
   if (config.dry_run) {
+    const shadowWinRate = shadow.win_rate ?? perf.shadow_win_rate;
+    const experimentWinRate = experiment.win_rate ?? perf.experiment_win_rate;
+    const shadowEntries = Number(shadow.total_entries ?? perf.shadow_entries ?? 0);
+    const experimentEntries = Number(experiment.total_entries ?? perf.experiment_entries ?? 0);
+    const repeatEntries = Number(perf.repeat_entry_experiment_entries || 0);
+    const repeatClosedEntries = Number(perf.repeat_entry_experiment_closed_entries || 0);
+    const repeatStatus = perf.repeat_entry_experiment_status || 'idle';
+    const noBookEntries = Number(perf.no_book_recheck_experiment_entries || 0);
+    const noBookClosedEntries = Number(perf.no_book_recheck_experiment_closed_entries || 0);
+    const noBookStatus = perf.no_book_recheck_experiment_status || 'idle';
+    const shadowDecisionCount = Number(shadow.decision_count ?? perf.shadow_decision_count ?? 0);
+    const shadowWinRateLabel = shadowWinRate === null || shadowWinRate === undefined ? 'N/A' : `${Number(shadowWinRate).toFixed(1)}%`;
+    const experimentDecisionCount = Number(experiment.decision_count ?? perf.experiment_decision_count ?? 0);
+    const experimentWinRateLabel = experimentWinRate === null || experimentWinRate === undefined ? 'N/A' : `${Number(experimentWinRate).toFixed(1)}%`;
     document.getElementById('performance-note').textContent =
       executedClosedEntries > 0
         ? `Executed 已平仓 ${executedClosedEntries} 笔，其中 ${executedDecisionCount} 笔已经明确胜负，胜率 ${executedWinRateLabel}。Shadow 单独统计为 ${shadowEntries} 笔（已判定 ${shadowDecisionCount} 笔，胜率 ${shadowWinRateLabel}），Experiment 单独统计为 ${experimentEntries} 笔（已判定 ${experimentDecisionCount} 笔，胜率 ${experimentWinRateLabel}）。repeat-entry 当前 ${repeatEntries} 笔 / ${repeatClosedEntries} 笔已结算，状态 ${translateExperimentStatus(repeatStatus, true)}；空簿延迟复查当前 ${noBookEntries} 笔 / ${noBookClosedEntries} 笔已结算，状态 ${translateExperimentStatus(noBookStatus, true)}。`
@@ -1393,16 +1405,36 @@ function renderPerformance(perf, config, liveExecution) {
   }
 
   const liveWinRateLabel = liveWinRate === null || liveWinRate === undefined ? 'N/A' : `${Number(liveWinRate).toFixed(1)}%`;
+  const ringWinRate = liveWinRate === null || liveWinRate === undefined ? null : Number(liveWinRate);
+  document.getElementById('ring-wins').textContent = liveWins;
+  document.getElementById('ring-losses').textContent = liveLosses;
+  document.getElementById('ring-flats').textContent = liveFlats;
+  document.getElementById('ring-closed').textContent = liveClosedEntries;
+  document.getElementById('ring-decided').textContent = liveDecisionCount;
+  document.getElementById('ring-open').textContent = liveOpenEntries;
+  if (ringWinRate === null) {
+    ring.setAttribute('stroke-dashoffset', circleLength);
+    ring.setAttribute('stroke', 'rgba(22, 53, 76, 0.18)');
+    ringLabel.textContent = 'N/A';
+  } else {
+    ring.setAttribute('stroke-dashoffset', circleLength * (1 - ringWinRate / 100));
+    ring.setAttribute('stroke', ringWinRate >= 50 ? 'var(--green)' : 'var(--red)');
+    ringLabel.textContent = `${ringWinRate.toFixed(0)}%`;
+  }
   document.getElementById('performance-note').textContent =
     liveEntries > 0
-      ? `当前账户已有 ${liveEntries} 笔真实 executed 成交，其中 ${liveClosedEntries} 笔已平仓、${liveDecisionCount} 笔已判定，live 胜率 ${liveWinRateLabel}。下方环形图仍展示历史 executed 研究基线，用来对照 live 是否偏离；Shadow 与 experiment 依旧只用于研究。`
-      : `当前账户还没有真实 executed 成交。下面环形图展示的是历史 executed 研究基线，不代表账户已经实现这些收益；Shadow 和 experiment 仍只用于研究。`;
+      ? `当前账户已有 ${liveEntries} 笔真实 executed 成交，其中 ${liveClosedEntries} 笔已平仓、${liveDecisionCount} 笔已判定，live 胜率 ${liveWinRateLabel}。模拟盘、shadow 和 experiment 样本已经归档，不再进入当前页面。`
+      : `当前账户还没有真实 executed 成交。页面已经切成实盘口径，模拟盘、shadow 和 experiment 样本已归档，不再参与当前统计。`;
 }
 
 function renderBlockedReasons(rows) {
   const blockedRows = rows || [];
-  document.getElementById('blocked-count').textContent = blockedRows.length;
   const tbody = document.getElementById('blocked-body');
+  const count = document.getElementById('blocked-count');
+  if (!tbody || !count) {
+    return;
+  }
+  count.textContent = blockedRows.length;
 
   if (!blockedRows.length) {
     tbody.innerHTML = `
@@ -1433,8 +1465,12 @@ function renderBlockedReasons(rows) {
 function renderExperimentWatch(rows) {
   const experimentRows = rows || [];
   const tbody = document.getElementById('stage2-body');
+  const count = document.getElementById('stage2-count');
+  if (!tbody || !count) {
+    return;
+  }
   const totalEntries = experimentRows.reduce((sum, item) => sum + Number((item.row && item.row.total_entries) || 0), 0);
-  document.getElementById('stage2-count').textContent = totalEntries;
+  count.textContent = totalEntries;
 
   if (!experimentRows.length) {
     tbody.innerHTML = `
@@ -1588,22 +1624,42 @@ function renderSystem(config, stats, performance, liveExecution) {
   const liveDecisionCount = Number((liveExecution && liveExecution.decision_count) || 0);
   const liveWinRate = liveExecution ? liveExecution.win_rate : null;
   const liveWinRateLabel = liveWinRate === null || liveWinRate === undefined ? 'N/A' : `${Number(liveWinRate).toFixed(1)}%`;
-  const researchRealizedPnl = Number(performance.realized_pnl || 0);
-  const researchDrift = Number(performance.avg_entry_drift || 0).toFixed(3);
+  const liveRealizedPnl = Number((liveExecution && liveExecution.realized_pnl) || 0);
+  const liveDrift = Number((liveExecution && liveExecution.avg_entry_drift) || 0).toFixed(3);
   const liveAlert = document.getElementById('live-alert');
+  const navExperiments = document.getElementById('nav-experiments');
+  const experimentsSection = document.getElementById('section-experiments');
+  const sideResearchCard = document.getElementById('side-research-card');
 
   document.getElementById('overview-note').textContent = config.dry_run
     ? '上排先看研究预算与执行护栏，下排再看 executed 研究基线；不要把 shadow 或 experiment 当成默认策略。'
-    : '上排只显示真钱账户与当前 live 风控，下排环形图和研究收益仍是历史 executed 基线，不等于账户实时盈亏。';
+    : '上排只显示真钱账户与当前 live 风控，下排只显示真实 executed 成交；模拟盘、shadow 和实验样本已经归档。';
+  document.getElementById('hero-subtitle').textContent = config.dry_run
+    ? '先看研究预算、实验和样本分层，再看 executed 研究基线、交易员、实验与信号。'
+    : '先看账户现金、策略预算和实盘护栏，再看真实 executed 表现、交易员、信号与风险。模拟盘和实验样本已经归档，不再混进当前页面。';
+  document.getElementById('brand-title').innerHTML = config.dry_run ? '体育 / 电竞<br>研究看板' : '体育 / 电竞<br>实盘看板';
+  document.getElementById('brand-subtitle').textContent = config.dry_run
+    ? '当前页面按 executed / shadow / experiment 分层观察研究样本。'
+    : '当前页面只保留真钱账户、真实 executed 成交和实盘风控；模拟盘、shadow 和实验样本已经归档。';
+
+  if (navExperiments) {
+    navExperiments.style.display = config.dry_run ? '' : 'none';
+  }
+  if (experimentsSection) {
+    experimentsSection.style.display = config.dry_run ? '' : 'none';
+  }
+  if (sideResearchCard) {
+    sideResearchCard.style.display = config.dry_run ? '' : 'none';
+  }
 
   document.getElementById('hero-scope').textContent = scopeText;
   document.getElementById('hero-experiment').textContent = config.dry_run
     ? `${repeatText} · 空簿复查${config.stage2_no_book_recheck_experiment_enabled ? '开启' : '关闭'}`
-    : canaryText;
+    : 'live-only';
   document.getElementById('hero-experiment-note').textContent = config.dry_run
     ? '空簿延迟复查会继续收样本，先验证是否值得放宽。'
     : liveEntries > 0
-      ? `只做体育 / 电竞；当前已有 ${liveEntries} 笔真实成交，先继续验证记账与风控是否稳定。`
+      ? `只做体育 / 电竞；当前已有 ${liveEntries} 笔真实成交，继续积累纯实盘样本。`
       : `只做体育 / 电竞；当前还没有真实成交，先验证账户读取、挂单和最小单量拦截是否正常。`;
   document.getElementById('hero-guardrail').textContent = `${fmtMoney(maxTradeValue)} / ${maxPositions || 0} 仓`;
   document.getElementById('hero-guardrail-note').textContent = config.dry_run
@@ -1618,8 +1674,8 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('sidebar-scope').textContent = scopeText;
   document.getElementById('sidebar-discovery').textContent = discoveryText;
   document.getElementById('sidebar-monitor').textContent = `${config.monitored_trader_limit || 0} 名交易员`;
-  document.getElementById('sidebar-repeat').textContent = repeatText;
-  document.getElementById('sidebar-no-book').textContent = noBookText;
+  if (document.getElementById('sidebar-repeat')) document.getElementById('sidebar-repeat').textContent = repeatText;
+  if (document.getElementById('sidebar-no-book')) document.getElementById('sidebar-no-book').textContent = noBookText;
 
   if (config.dry_run) {
     liveAlert.classList.add('hidden');
@@ -1644,7 +1700,9 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('sys-guards').textContent = config.dry_run
     ? `单笔上限 ${fmtMoney(maxTradeValue)} · 确认 ${config.min_signal_confirm_sec || 0}s`
     : `单笔 ${fmtMoney(maxTradeValue)} · 已部署 ${fmtMoney(deployedValue)} · 挂单 ${openOrderCount} · 持仓 ${openPositionCount}/${maxPositions}`;
-  document.getElementById('sys-experiments').textContent = `repeat-entry ${repeatText}；空簿延迟复查 ${noBookText}`;
+  document.getElementById('sys-experiments').textContent = config.dry_run
+    ? `repeat-entry ${repeatText}；空簿延迟复查 ${noBookText}`
+    : '模拟盘 / shadow / experiment 已归档，不再进入当前实盘视图';
 
   if (config.dry_run) {
     document.getElementById('label-bankroll').textContent = '研究资金';
@@ -1686,7 +1744,7 @@ function renderSystem(config, stats, performance, liveExecution) {
     document.getElementById('label-samples').textContent = '单笔上限';
     document.getElementById('label-closed').textContent = '挂单数量';
     document.getElementById('label-winrate').textContent = '真实成交';
-    document.getElementById('label-realized').textContent = '研究基线收益';
+    document.getElementById('label-realized').textContent = '真实已实现收益';
     document.getElementById('label-signals').textContent = '最新信号';
     document.getElementById('label-open-positions').textContent = '当前 live 持仓';
 
@@ -1722,11 +1780,11 @@ function renderSystem(config, stats, performance, liveExecution) {
     document.getElementById('s-winrate-note').textContent =
       liveEntries > 0
         ? `已平仓 ${liveClosedEntries} · 已判定 ${liveDecisionCount} · live 胜率 ${liveWinRateLabel}`
-        : '当前尚无真实 executed 成交；还不能把研究胜率当成 live 成绩';
+        : '当前尚无真实 executed 成交；当前页面只会等待真实样本，不再混入模拟成绩';
 
-    document.getElementById('s-realized').textContent = fmtSignedMoney(researchRealizedPnl);
-    document.getElementById('s-realized').className = `stat-value ${researchRealizedPnl >= 0 ? 'green' : 'red'}`;
-    document.getElementById('s-realized-note').innerHTML = `历史 executed 基线，不是账户盈亏 · 平均入场偏移 <span id="s-drift">${researchDrift}</span>`;
+    document.getElementById('s-realized').textContent = fmtSignedMoney(liveRealizedPnl);
+    document.getElementById('s-realized').className = `stat-value ${liveRealizedPnl >= 0 ? 'green' : 'red'}`;
+    document.getElementById('s-realized-note').innerHTML = `真实 executed 已实现收益 · 平均入场偏移 <span id="s-drift">${liveDrift}</span>`;
 
     document.getElementById('s-signals').textContent = stats.signal_count;
     document.getElementById('s-signals').className = 'stat-value';
@@ -1743,7 +1801,7 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('sidebar-footnote').textContent =
     config.dry_run
       ? `当前只看 ${scopeText}。Repeat-entry ${repeatText}，空簿延迟复查 ${noBookText}。指标口径保持 executed / shadow / experiment 分层。`
-      : `当前是真实资金 ${canaryText}：账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，只看 ${scopeText}。若订单低于市场最小单量，会直接跳过而不是强行放大仓位；当前真实成交 ${liveEntries} 笔。`;
+      : `当前是真实资金 ${canaryText}：账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，只看 ${scopeText}。模拟盘、shadow 和 experiment 已归档；若订单低于市场最小单量，会直接跳过而不是强行放大仓位。`;
 }
 
 function highlightSections() {
@@ -1786,19 +1844,21 @@ function render(data) {
   renderSystem(config, stats, performance, liveExecution);
   renderPerformance(performance, config, liveExecution);
   renderTraders(data.traders || []);
-  renderBlockedReasons(data.blocked_reasons || []);
-  renderExperimentWatch([
-    {
-      name: 'Repeat Entry（已暂停）',
-      enabled: !!config.stage2_repeat_entry_experiment_enabled,
-      row: data.repeat_entry_experiment || {}
-    },
-    {
-      name: '空簿延迟复查',
-      enabled: !!config.stage2_no_book_recheck_experiment_enabled,
-      row: data.no_book_recheck_experiment || {}
-    }
-  ]);
+  if (config.show_research_panels) {
+    renderBlockedReasons(data.blocked_reasons || []);
+    renderExperimentWatch([
+      {
+        name: 'Repeat Entry（已暂停）',
+        enabled: !!config.stage2_repeat_entry_experiment_enabled,
+        row: data.repeat_entry_experiment || {}
+      },
+      {
+        name: '空簿延迟复查',
+        enabled: !!config.stage2_no_book_recheck_experiment_enabled,
+        row: data.no_book_recheck_experiment || {}
+      }
+    ]);
+  }
   renderSignals(data.trades || []);
   renderRiskLogs(data.risk_logs || []);
 

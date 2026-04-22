@@ -90,3 +90,13 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
 - block orders that fall below the market `min_order_size` instead of automatically increasing size to force a fill
 
 This avoids disguising a sizing problem as successful live execution.
+
+### Live Cutover Hygiene
+
+When the operator decides that dry-run research is finished and the active system should become live-only:
+
+- archive the current DB locally before deleting anything
+- clear active `trade_journal` rows where `sample_type != executed` or `entry_status = dry_run`
+- reset `trades` rows that were only mirrored in `dry_run` so signal history stays but fake mirror metadata does not
+- clear old `risk_log` / `pnl_log` rows if they only represent pre-live research state
+- after cutover, dashboard and CLI reports should describe only real executed behavior
