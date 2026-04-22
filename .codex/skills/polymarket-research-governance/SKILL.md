@@ -27,8 +27,10 @@ Use this skill as the repo's governance entrypoint for research and execution ch
    Surface real guardrails in the dashboard, keep `.env` local-only, block sub-minimum market sizes instead of auto-inflating order size, explicitly alert on live orders that stay `delayed` beyond the configured threshold, and auto-reconcile those delayed orders back to their final CLOB status before drawing conclusions.
 8. In live mode, keep actual wallet state separate from historical dry-run research state.
    Show real account cash separately from strategy bankroll, and make sure old `dry_run` positions do not consume live deployed-risk, exposure, or max-position views.
-9. When you intentionally cut over from research to live-only operation, archive the old DB snapshot locally and purge active `dry_run` / `shadow` / `experiment` rows from the runtime DB.
-10. When governance changes land, update this skill and the repo README in the same change.
+9. Only close `opposite_signal` journal entries after the bot books its own opposite-side fill.
+   A copied trader's raw reversal should not flatten live executed exposure unless the mirrored exit order also filled.
+10. When you intentionally cut over from research to live-only operation, archive the old DB snapshot locally and purge active `dry_run` / `shadow` / `experiment` rows from the runtime DB.
+11. When governance changes land, update this skill and the repo README in the same change.
 
 ## Guardrails
 

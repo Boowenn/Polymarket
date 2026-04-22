@@ -73,6 +73,7 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - read the dashboard as a live-only view: real account cash, current guardrails, and true executed fills
 - if a live order stays in local `delayed` state beyond the alert threshold, surface it clearly in the dashboard before changing sizing or execution rules
 - automatically re-query delayed live orders and write them back as matched / canceled / expired before treating them as unresolved execution failures
+- only mark `opposite_signal` exits after your own mirrored opposite-side fill is actually booked; a raw trader sell signal alone should not close your live journal
 - when switching from dry run to live, old `dry_run` positions should not consume the live bankroll, open-position count, or deployed-risk view
 - remember that many Polymarket markets require a `min_order_size` of `5` shares, so tiny bankrolls will naturally skip many higher-priced contracts rather than force larger size
 

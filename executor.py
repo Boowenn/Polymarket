@@ -112,6 +112,29 @@ def _signal_from_trade_row(trade):
     }
 
 
+def _record_executed_fill(signal, size, value, status, tradable_price, protected_price, fill_ts=None):
+    fill_signal = dict(signal)
+    fill_signal["timestamp"] = float(
+        fill_ts if fill_ts is not None else signal.get("timestamp", time.time()) or time.time()
+    )
+    models.upsert_trade_journal(
+        fill_signal,
+        size=size,
+        value=value,
+        status=status,
+        tradable_price=tradable_price,
+        protected_price=protected_price,
+        sample_type="executed",
+    )
+    return models.close_open_journal_entries(
+        fill_signal,
+        exit_price=protected_price,
+        exit_ts=fill_signal["timestamp"],
+        close_trade_id=fill_signal.get("id", ""),
+        exit_reason="opposite_signal",
+    )
+
+
 def reconcile_delayed_orders(limit=None, min_age_sec=None):
     if config.DRY_RUN:
         return {"checked": 0, "updated": 0, "matched": 0, "closed": 0}
@@ -169,19 +192,20 @@ def reconcile_delayed_orders(limit=None, min_age_sec=None):
 
         if booked_size > 0:
             signal = _signal_from_trade_row(trade)
-            models.upsert_trade_journal(
+            closed_count = _record_executed_fill(
                 signal,
                 size=booked_size,
                 value=booked_value,
                 status=status,
                 tradable_price=float(trade.get("price", 0) or 0),
                 protected_price=booked_price,
-                sample_type="executed",
+                fill_ts=time.time(),
             )
             summary["matched"] += 1
             logger.info(
                 f"[LIVE RECONCILE] order {order_id} delayed -> {status} "
-                f"filled={booked_size:.4f} booked=${booked_price:.3f}"
+                f"filled={booked_size:.4f} booked=${booked_price:.3f} "
+                f"closed_opposites={closed_count}"
             )
             continue
 
@@ -450,15 +474,19 @@ def execute_trade(signal):
             protected_price,
             "dry_run",
         )
-        models.upsert_trade_journal(
+        closed_count = _record_executed_fill(
             signal,
             size=our_size,
             value=our_value,
             status="dry_run",
             tradable_price=tradable_price,
             protected_price=protected_price,
-            sample_type="executed",
+            fill_ts=float(signal.get("timestamp", time.time()) or time.time()),
         )
+        if closed_count:
+            logger.info(
+                f"[DRY RUN] opposite journal entries closed after simulated fill: {closed_count}"
+            )
         return {"status": "dry_run", "size": our_size, "value": our_value}
 
     client = _get_clob_client()
@@ -502,15 +530,19 @@ def execute_trade(signal):
             status,
         )
         if booked_size > 0:
-            models.upsert_trade_journal(
+            closed_count = _record_executed_fill(
                 signal,
                 size=booked_size,
                 value=booked_value,
                 status=status,
                 tradable_price=tradable_price,
                 protected_price=booked_price,
-                sample_type="executed",
+                fill_ts=time.time(),
             )
+            if closed_count:
+                logger.info(
+                    f"[LIVE] opposite journal entries closed after filled {signal['side']}: {closed_count}"
+                )
 
         logger.info(
             f"[LIVE] {source} {trader_name}: {signal['side']} planned={our_size:.4f} "

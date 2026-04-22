@@ -92,7 +92,6 @@ def ingest_trades(trades):
             continue
 
         models.insert_trade(trade)
-        models.close_open_journal_entries(trade)
         inserted.append(trade)
 
         if trade.get("signal_source") == "scope_skip":

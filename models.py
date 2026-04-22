@@ -921,7 +921,7 @@ def upsert_trade_journal(
         )
 
 
-def close_open_journal_entries(signal):
+def close_open_journal_entries(signal, exit_price=None, exit_ts=None, close_trade_id=None, exit_reason="opposite_signal"):
     with db() as conn:
         rows = conn.execute(
             """
@@ -942,10 +942,22 @@ def close_open_journal_entries(signal):
             ),
         ).fetchall()
 
-        exit_price = float(signal.get("price", 0) or 0)
-        exit_ts = float(signal.get("timestamp", time.time()) or time.time())
-        close_trade_id = signal.get("id", "")
-        exit_reason = "opposite_signal"
+        exit_price = float(
+            exit_price
+            if exit_price is not None
+            else (signal.get("price", 0) or 0)
+        )
+        exit_ts = float(
+            exit_ts
+            if exit_ts is not None
+            else (signal.get("timestamp", time.time()) or time.time())
+        )
+        close_trade_id = str(
+            close_trade_id
+            if close_trade_id is not None
+            else signal.get("id", "")
+        )
+        updated = 0
 
         for row in rows:
             entry_basis = float(row["protected_price"] or row["tradable_price"] or row["signal_price"] or 0)
@@ -974,6 +986,9 @@ def close_open_journal_entries(signal):
                     row["trade_id"],
                 ),
             )
+            updated += 1
+
+    return updated
 
 
 def get_recent_trade_journal(limit=10):
