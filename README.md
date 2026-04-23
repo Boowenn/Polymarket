@@ -6,7 +6,7 @@ A defensive Polymarket sports and esports trading bot focused on real-money exec
 
 - Scans Polymarket sports and esports markets directly through the public Gamma and CLOB APIs.
 - Builds autonomous entry candidates from real `moneyline` match markets inside your allowed scope, using Gamma's sports-market filter instead of broad tag dumps.
-- Keeps the default autonomous engine inside a conservative moderate-underdog band instead of chasing near-0 / near-1 contracts.
+- Keeps the default autonomous engine inside a conservative balanced executable band instead of chasing pure longshots, thin near-even favorites, or near-0 / near-1 contracts.
 - Requires esports entries to be series-style matches such as `BO3` or `BO5`, and excludes `game1/game2/game3` child markets from new autonomous entries.
 - Blocks suspicious flow such as micro-order spam, burst trading, same-second bursts, and fast flip scalping when copy research is enabled.
 - Uses order book checks before entry to avoid wide spread, drift, and impact traps.
@@ -76,13 +76,13 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - keep `repeat-entry` paused
 - for a `$15-$20` canary, prefer `MAX_POSITIONS=2` once auth/execution are stable enough to collect live samples
 - use a tight daily loss limit and daily risk budget
-- prefer an absolute single-trade cap such as `MAX_TRADE_VALUE_USDC=0.6` to `1.2` instead of relying only on `MAX_TRADE_PCT`; with Polymarket's `min_order_size=5`, cent-level caps like `$0.02-$0.08` are usually non-executable
+- prefer an absolute single-trade cap such as `MAX_TRADE_VALUE_USDC=1.2` to `1.5` instead of relying only on `MAX_TRADE_PCT`; with Polymarket's `min_order_size=5`, cent-level caps like `$0.02-$0.08` are usually non-executable, and a `0.30`-priced market often needs about `$1.50` just to clear the minimum
 - allow blocked or failed autonomous candidates to retry after a short cooldown such as `10-30` minutes instead of suppressing them forever; keep dedupe only for still-open positions, unresolved live orders, and recent successful fills
 - remember that marketable `BUY` orders can still be rejected below roughly `$1` notional even when the displayed `min_order_size` is only `5` shares; keep a conservative `MARKETABLE_BUY_MIN_VALUE_USDC` floor in the live canary
 - enable the live session stop so realized + marked unrealized drawdown can pause new entries before a tiny bankroll spirals
 - prefer `SESSION_STOP_MODE=calendar_day` with `SESSION_STOP_TIMEZONE=Asia/Tokyo`, so one bad day pauses the bot for the rest of that JST day without blocking the next day’s live sample collection
 - keep `SESSION_STOP_LOOKBACK_SEC` available only for explicit `trailing` mode
-- for autonomous `Match Winner` positions, keep proactive take-profit enabled so a sharply improving underdog price can be monetized before final settlement instead of forcing every good entry to ride to the end
+- for autonomous `Match Winner` positions, keep proactive take-profit enabled so a sharply improving price can be monetized before final settlement instead of forcing every good entry to ride to the end
 - keep the real `.env` local-only; do not commit private keys or live wallet settings
 - read the dashboard as a live-only view: real account cash, current guardrails, and true executed fills
 - if a live order stays in local `delayed` state beyond the alert threshold, surface it clearly in the dashboard before changing sizing or execution rules
@@ -108,7 +108,7 @@ The default autonomous live path is intentionally narrow:
 - for esports, expect `groupItemTitle` to read `Match Winner`; for traditional sports, allow the title to be blank when the market is still a moneyline match
 - skip `game1/game2/game3` child markets
 - for esports, require `BO3` or `BO5` in the match question
-- probe only a moderate underdog band, not pure longshots
+- probe a balanced executable band such as `0.18-0.45`, and aim near the middle of that band instead of blindly chasing the cheapest side
 - size inside a small executable band rather than a pure percentage of bankroll
 - for live autonomous `Match Winner` entries, allow a proactive take-profit once the mark reprices to a clearly better level and the locked-in PnL is meaningful on a tiny bankroll
 - do not permanently dedupe blocked autonomous candidates by market/outcome alone; use a short retry cooldown instead so improved capital or position settings can unlock the same candidate later in the day
@@ -170,7 +170,8 @@ Relevant scope controls:
 - `MARKET_SCOPE=esports` to focus only on esports.
 - `ENABLE_COPY_STRATEGY=false` and `ENABLE_AUTONOMOUS_STRATEGY=true` to keep the live path market-first instead of trader-first.
 - `AUTONOMOUS_SPORT_CODES=...` to control which sports and esports tags are scanned.
-- `AUTONOMOUS_MIN_PRICE` / `AUTONOMOUS_MAX_PRICE` to keep entries inside the moderate-underdog band.
+- `AUTONOMOUS_MIN_PRICE` / `AUTONOMOUS_MAX_PRICE` to keep entries inside the balanced executable band.
+- `AUTONOMOUS_TARGET_PRICE` to prefer the middle of that band instead of mechanically choosing the lowest price.
 - `AUTONOMOUS_MIN_TRADE_VALUE_USDC` / `AUTONOMOUS_MAX_TRADE_VALUE_USDC` to keep autonomous sizing executable but small.
 - `AUTONOMOUS_REQUIRE_ESPORTS_SERIES=true` to avoid single-map or child-game entry markets.
 - `LEADERBOARD_CANDIDATE_MULTIPLIER` to widen the sports leaderboard candidate pool before trader-quality filtering.

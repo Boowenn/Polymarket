@@ -6,14 +6,14 @@ Verified local baseline:
 
 - Date: `2026-04-23` JST
 - Command: `python report.py --days 3 --top 5`
-- `live_entries = 3`
+- `live_entries = 4`
 - `live_closed = 2`
-- `live_open = 1`
+- `live_open = 2`
 - `live_decision_count = 2`
 - `live_close_rate = 66.7%`
 - `live_win_rate = 0.0%`
 - `live_realized_pnl = -7.08`
-- `autonomous_live_entries = 1`
+- `autonomous_live_entries = 2`
 - `autonomous_live_closed = 0`
 - `copy_live_entries = 2`
 - `copy_live_closed = 2`
@@ -79,7 +79,8 @@ When copy-trading is not trusted enough for live capital, default to a narrow ma
 - exclude `game1/game2/game3` child markets from new autonomous entries
 - for esports, require `BO3` or `BO5` style match questions
 - keep the autonomous discovery horizon wide enough to see the next trading day; around `48h` is a better live default than `6h`
-- keep entries inside a moderate-underdog band such as `0.12-0.30`
+- keep entries inside a balanced executable band such as `0.18-0.45`
+- keep a preferred target near the middle of that band, for example around `0.32`, so the selector does not mechanically reward the cheapest side
 - keep autonomous sizing inside an executable small-bankroll band such as `$0.6-$1.2`
 - for autonomous non-single-game `Match Winner` live positions, allow a separate take-profit rule once the mark has moved materially in your favor and the locked PnL is meaningful on a tiny bankroll
 - if an autonomous candidate was only blocked, unmirrored, or execution-error'd, allow it to retry after a short cooldown such as `10-30` minutes instead of treating the first row in `trades` as a permanent ban
@@ -106,8 +107,8 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
 - keep scope narrowed to the intended live segment, such as `sports,esports`
 - keep repeat-entry paused and avoid widening experiments
 - show live guardrails clearly in the dashboard: bankroll, deployed notional, remaining daily budget, max trade size, max positions, wallet type, and funder summary
-- for bankrolls around `$15-$20`, prefer a real absolute single-trade cap such as `$0.6-$1.2`; cent-level caps like `$0.02-$0.08` are usually not executable once `min_order_size=5` is applied
-- keep a separate marketable-`BUY` notional floor near `$1.00`; on tiny underdog contracts the exchange can reject `$0.65-$0.80` orders even when the visible `min_order_size` is already satisfied
+- for bankrolls around `$15-$20`, prefer a real absolute single-trade cap such as `$1.2-$1.5`; cent-level caps like `$0.02-$0.08` are usually not executable once `min_order_size=5` is applied, and `0.30`-priced markets commonly need about `$1.50` just to clear the minimum
+- keep a separate marketable-`BUY` notional floor near `$1.00`; on tiny sports/esports contracts the exchange can reject `$0.65-$0.80` orders even when the visible `min_order_size` is already satisfied
 - if live sample collection stays too slow while execution quality is otherwise acceptable, prefer raising `MAX_POSITIONS` from `1` to `2` before increasing the single-trade cap
 - once `MAX_POSITIONS` or bankroll settings change, make sure previously blocked autonomous candidates can re-enter the funnel after cooldown instead of staying permanently hidden behind stale dedupe
 - prefer calendar-day session-stop enforcement in the repo's operating timezone (currently `Asia/Tokyo`), so a single bad live stretch pauses new entries for the rest of that JST day without permanently freezing the engine forever

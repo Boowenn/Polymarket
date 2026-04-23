@@ -65,7 +65,8 @@ if not os.path.exists(env_path):
         f.write("MIN_CONSENSUS_TRADERS=2\nMIN_CONSENSUS_SCORE=72\nCONSENSUS_TRADE_PCT=0.015\n")
         f.write("AUTONOMOUS_SPORT_CODES=dota2,cs2,lol,val,nfl,nba,mlb,nhl,epl,cfb,ncaab\n")
         f.write("AUTONOMOUS_MIN_TRADE_VALUE_USDC=0.60\nAUTONOMOUS_MAX_TRADE_VALUE_USDC=1.50\n")
-        f.write("AUTONOMOUS_MIN_PRICE=0.12\nAUTONOMOUS_MAX_PRICE=0.30\n")
+        f.write("AUTONOMOUS_MIN_PRICE=0.18\nAUTONOMOUS_MAX_PRICE=0.45\n")
+        f.write("AUTONOMOUS_TARGET_PRICE=0.32\n")
         f.write("AUTONOMOUS_MIN_MARKET_LIQUIDITY=750\n")
         f.write("AUTONOMOUS_MIN_EVENT_LEAD_SEC=900\nAUTONOMOUS_MAX_EVENT_LEAD_SEC=172800\n")
         f.write("AUTONOMOUS_MAX_CANDIDATES_PER_TAG=80\nAUTONOMOUS_MAX_SIGNALS_PER_CYCLE=3\n")
@@ -361,6 +362,7 @@ def get_dashboard_data():
             "entry_engine_label": config.entry_engine_label(),
             "autonomous_price_min": config.AUTONOMOUS_MIN_PRICE,
             "autonomous_price_max": config.AUTONOMOUS_MAX_PRICE,
+            "autonomous_price_target": config.autonomous_price_target(),
             "autonomous_trade_floor": config.effective_autonomous_trade_floor(),
             "autonomous_trade_ceiling": config.effective_autonomous_trade_ceiling(),
             "autonomous_max_signals_per_cycle": config.AUTONOMOUS_MAX_SIGNALS_PER_CYCLE,

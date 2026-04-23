@@ -97,8 +97,9 @@ AUTONOMOUS_SPORT_CODES = tuple(
 )
 AUTONOMOUS_MIN_TRADE_VALUE_USDC = float(os.getenv("AUTONOMOUS_MIN_TRADE_VALUE_USDC", "0.60"))
 AUTONOMOUS_MAX_TRADE_VALUE_USDC = float(os.getenv("AUTONOMOUS_MAX_TRADE_VALUE_USDC", "1.50"))
-AUTONOMOUS_MIN_PRICE = float(os.getenv("AUTONOMOUS_MIN_PRICE", "0.12"))
-AUTONOMOUS_MAX_PRICE = float(os.getenv("AUTONOMOUS_MAX_PRICE", "0.30"))
+AUTONOMOUS_MIN_PRICE = float(os.getenv("AUTONOMOUS_MIN_PRICE", "0.18"))
+AUTONOMOUS_MAX_PRICE = float(os.getenv("AUTONOMOUS_MAX_PRICE", "0.45"))
+AUTONOMOUS_TARGET_PRICE = float(os.getenv("AUTONOMOUS_TARGET_PRICE", "0.32"))
 AUTONOMOUS_MIN_MARKET_LIQUIDITY = float(os.getenv("AUTONOMOUS_MIN_MARKET_LIQUIDITY", "750"))
 AUTONOMOUS_MIN_EVENT_LEAD_SEC = int(os.getenv("AUTONOMOUS_MIN_EVENT_LEAD_SEC", "900"))
 AUTONOMOUS_MAX_EVENT_LEAD_SEC = int(os.getenv("AUTONOMOUS_MAX_EVENT_LEAD_SEC", "172800"))
@@ -197,6 +198,13 @@ def effective_autonomous_trade_ceiling():
     if AUTONOMOUS_MAX_TRADE_VALUE_USDC > 0:
         ceiling = min(ceiling, AUTONOMOUS_MAX_TRADE_VALUE_USDC)
     return max(0.0, ceiling)
+
+
+def autonomous_price_target():
+    target = float(AUTONOMOUS_TARGET_PRICE or 0)
+    if target <= 0:
+        target = (AUTONOMOUS_MIN_PRICE + AUTONOMOUS_MAX_PRICE) / 2
+    return min(max(target, AUTONOMOUS_MIN_PRICE), AUTONOMOUS_MAX_PRICE)
 
 
 def capital_gates_enabled():

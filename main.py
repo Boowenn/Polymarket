@@ -128,8 +128,9 @@ def first_run_setup():
         f.write(f"AUTONOMOUS_SPORT_CODES=dota2,cs2,lol,val,nfl,nba,mlb,nhl,epl,cfb,ncaab\n")
         f.write(f"AUTONOMOUS_MIN_TRADE_VALUE_USDC=0.60\n")
         f.write(f"AUTONOMOUS_MAX_TRADE_VALUE_USDC=1.50\n")
-        f.write(f"AUTONOMOUS_MIN_PRICE=0.12\n")
-        f.write(f"AUTONOMOUS_MAX_PRICE=0.30\n")
+        f.write(f"AUTONOMOUS_MIN_PRICE=0.18\n")
+        f.write(f"AUTONOMOUS_MAX_PRICE=0.45\n")
+        f.write(f"AUTONOMOUS_TARGET_PRICE=0.32\n")
         f.write(f"AUTONOMOUS_MIN_MARKET_LIQUIDITY=750\n")
         f.write(f"AUTONOMOUS_MIN_EVENT_LEAD_SEC=900\n")
         f.write(f"AUTONOMOUS_MAX_EVENT_LEAD_SEC=172800\n")
@@ -211,7 +212,8 @@ def show_banner():
     console.print(f"  Strategy:  {'  '.join(strategy_bits)}")
     if config.autonomous_strategy_enabled():
         console.print(
-            f"  Auto Plan: underdog band [cyan]{config.AUTONOMOUS_MIN_PRICE:.2f}-{config.AUTONOMOUS_MAX_PRICE:.2f}[/cyan], "
+            f"  Auto Plan: balanced band [cyan]{config.AUTONOMOUS_MIN_PRICE:.2f}-{config.AUTONOMOUS_MAX_PRICE:.2f}[/cyan], "
+            f"target [cyan]{config.autonomous_price_target():.2f}[/cyan], "
             f"event lead [cyan]{config.AUTONOMOUS_MIN_EVENT_LEAD_SEC//60}min-{config.AUTONOMOUS_MAX_EVENT_LEAD_SEC//3600}h[/cyan], "
             f"trade range [cyan]${config.effective_autonomous_trade_floor():.2f}-${config.effective_autonomous_trade_ceiling():.2f}[/cyan], "
             f"retry cooldown [cyan]{int(config.AUTONOMOUS_RETRY_COOLDOWN_SEC or 0)//60}m[/cyan]"

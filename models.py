@@ -45,7 +45,7 @@ BLOCK_REASON_META = {
     "price_band": {
         "label": "Price Band",
         "default_action": "keep",
-        "note": "Do not loosen longshot price bands on a thin sample.",
+        "note": "Keep the autonomous band centered on balanced executable prices; do not drift back into pure longshots or overpriced favorites on a thin sample.",
     },
     "capital_gate": {
         "label": "Capital Gate",

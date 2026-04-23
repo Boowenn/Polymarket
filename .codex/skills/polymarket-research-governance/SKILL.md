@@ -37,7 +37,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
    A copied trader's raw reversal should not flatten live executed exposure unless the mirrored exit order also filled.
 12. When you intentionally cut over from research to live-only operation, archive the old DB snapshot locally and purge active `dry_run` / `shadow` / `experiment` rows from the runtime DB.
 13. Default to a market-first autonomous engine before trusting trader-first copy engines on a tiny bankroll.
-   For sports and esports, discover candidates directly from Gamma `markets` using `sports_market_types=moneyline`, exclude `game1/game2/game3` child markets, keep esports entries to `BO3` / `BO5` style series matches, and use a moderate-underdog price band instead of chasing very high-probability favorites or pure lottery longshots.
+   For sports and esports, discover candidates directly from Gamma `markets` using `sports_market_types=moneyline`, exclude `game1/game2/game3` child markets, keep esports entries to `BO3` / `BO5` style series matches, and use a balanced executable price band with a target near the middle instead of mechanically chasing the cheapest side, very high-probability favorites, or pure lottery longshots.
    On live scanning, prefer a forward window closer to `48h` than `6h`, otherwise the bot can easily spend whole evenings with zero viable candidates.
    Do not permanently suppress a candidate just because one earlier attempt was blocked or failed; allow the same autonomous market/outcome to retry after a short cooldown once capital, position count, or execution conditions improve.
 14. On tiny live bankrolls, do not force every good autonomous entry to ride all the way to settlement.

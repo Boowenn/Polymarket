@@ -230,6 +230,9 @@ def _score_candidate(row, price_value, min_order_value, assessment):
     liquidity_usdc = float(row.get("liquidity") or 0)
     lead_sec = (_market_start_ts(row) or time.time()) - time.time()
     spread = float(assessment.get("spread", 1) or 1)
+    price_target = config.autonomous_price_target()
+    band_half_width = max((config.AUTONOMOUS_MAX_PRICE - config.AUTONOMOUS_MIN_PRICE) / 2, 0.01)
+    price_distance = abs(price_value - price_target)
 
     if liquidity_usdc >= 5000:
         score += 10
@@ -241,10 +244,9 @@ def _score_candidate(row, price_value, min_order_value, assessment):
     elif lead_sec >= config.AUTONOMOUS_MIN_EVENT_LEAD_SEC:
         score += 4
 
-    if 0.14 <= price_value <= 0.24:
-        score += 8
-    elif config.AUTONOMOUS_MIN_PRICE <= price_value <= config.AUTONOMOUS_MAX_PRICE:
-        score += 4
+    score += round(max(0.0, 1.0 - min(price_distance / band_half_width, 1.0)) * 8, 1)
+    if price_value >= price_target:
+        score += 1
 
     if spread <= max(config.MAX_BOOK_SPREAD / 2, 0.01):
         score += 6
@@ -297,18 +299,33 @@ def _can_retry_candidate(condition_id, outcome, side):
     return True, ""
 
 
+def _candidate_preference_key(pair):
+    price_value = float(pair.get("price") or 0)
+    price_target = config.autonomous_price_target()
+    return (
+        abs(price_value - price_target),
+        -price_value,
+        str(pair.get("outcome") or ""),
+    )
+
+
 def _build_signal_from_market(row):
     pairs = _candidate_pairs(row)
     if len(pairs) != 2:
         return None, "not binary"
 
-    underdog = min(pairs, key=lambda item: item["price"])
-    price_value = float(underdog["price"] or 0)
-    if price_value < config.AUTONOMOUS_MIN_PRICE or price_value > config.AUTONOMOUS_MAX_PRICE:
+    banded_pairs = [
+        pair
+        for pair in pairs
+        if config.AUTONOMOUS_MIN_PRICE <= float(pair.get("price") or 0) <= config.AUTONOMOUS_MAX_PRICE
+    ]
+    if not banded_pairs:
         return None, "price outside autonomous band"
+    selected_pair = min(banded_pairs, key=_candidate_preference_key)
+    price_value = float(selected_pair["price"] or 0)
 
     try:
-        book = liquidity.get_order_book(underdog["token_id"])
+        book = liquidity.get_order_book(selected_pair["token_id"])
     except Exception as exc:
         return None, f"book unavailable: {exc}"
 
@@ -331,15 +348,16 @@ def _build_signal_from_market(row):
         target_value = round(planned_size * price_value, 4)
 
     condition_id = row.get("conditionId", "")
-    outcome = underdog["outcome"]
+    outcome = selected_pair["outcome"]
     signal_ts = time.time()
+    event_start_ts = _market_start_ts(row) or signal_ts
     signal = {
         "id": _attempt_trade_id(condition_id, outcome, signal_ts),
         "candidate_key": _candidate_key(condition_id, outcome),
         "trader_wallet": "system_autonomous",
         "trader_username": "Autonomy",
         "condition_id": condition_id,
-        "token_id": underdog["token_id"],
+        "token_id": selected_pair["token_id"],
         "market_slug": row.get("slug", ""),
         "market_scope": _scope_for_code(str(row.get("_autonomous_sport_code") or "").strip().lower()),
         "outcome": outcome,
@@ -351,6 +369,7 @@ def _build_signal_from_market(row):
         "signal_score": 0,
         "signal_note": "",
         "target_value": target_value,
+        "_event_start_ts": event_start_ts,
     }
 
     assessment = liquidity.assess_execution(signal, planned_size)
@@ -362,10 +381,9 @@ def _build_signal_from_market(row):
     if signal["signal_score"] < config.MIN_AUTONOMOUS_SCORE:
         return None, f"autonomous score too low ({signal['signal_score']:.1f})"
 
-    event_start_ts = _market_start_ts(row) or time.time()
     lead_min = max(int((event_start_ts - time.time()) // 60), 0)
     signal["signal_note"] = (
-        f"binary moneyline underdog probe; start in {lead_min}m; "
+        f"binary moneyline balanced probe; target~{config.autonomous_price_target():.2f}; start in {lead_min}m; "
         f"market_liquidity=${float(row.get('liquidity') or 0):.0f}; "
         f"min_order=${min_order_value:.2f}; score={signal['signal_score']:.0f}"
     )
@@ -417,7 +435,9 @@ def build_autonomous_signals():
     built.sort(
         key=lambda signal: (
             -float(signal.get("signal_score", 0) or 0),
-            float(signal.get("price", 0) or 0),
+            abs(float(signal.get("price", 0) or 0) - config.autonomous_price_target()),
+            float(signal.get("_event_start_ts", 0) or 0),
+            -float(signal.get("price", 0) or 0),
             signal.get("market_slug", ""),
         )
     )
