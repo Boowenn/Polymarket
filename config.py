@@ -86,6 +86,7 @@ DELAYED_ORDER_RECHECK_LIMIT = max(
 )
 ENABLE_SESSION_STOP_LOSS = os.getenv("ENABLE_SESSION_STOP_LOSS", "true").lower() == "true"
 ENABLE_GAME_MARKET_ACTIVE_EXIT = os.getenv("ENABLE_GAME_MARKET_ACTIVE_EXIT", "true").lower() == "true"
+ENABLE_AUTONOMOUS_PROTECTIVE_EXIT = os.getenv("ENABLE_AUTONOMOUS_PROTECTIVE_EXIT", "true").lower() == "true"
 ENABLE_AUTONOMOUS_TAKE_PROFIT = os.getenv("ENABLE_AUTONOMOUS_TAKE_PROFIT", "true").lower() == "true"
 AUTONOMOUS_SPORT_CODES = tuple(
     _csv_list(
@@ -120,6 +121,9 @@ SESSION_STOP_TIMEZONE = os.getenv("SESSION_STOP_TIMEZONE", "Asia/Tokyo").strip()
 GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO = float(os.getenv("GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO", "0.70"))
 GAME_MARKET_ACTIVE_EXIT_ABS_DROP = float(os.getenv("GAME_MARKET_ACTIVE_EXIT_ABS_DROP", "0.15"))
 GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC = int(os.getenv("GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC", "60"))
+AUTONOMOUS_PROTECTIVE_EXIT_PRICE_RATIO = float(os.getenv("AUTONOMOUS_PROTECTIVE_EXIT_PRICE_RATIO", "0.82"))
+AUTONOMOUS_PROTECTIVE_EXIT_ABS_DROP = float(os.getenv("AUTONOMOUS_PROTECTIVE_EXIT_ABS_DROP", "0.08"))
+AUTONOMOUS_PROTECTIVE_EXIT_MIN_LOSS_USDC = float(os.getenv("AUTONOMOUS_PROTECTIVE_EXIT_MIN_LOSS_USDC", "0.18"))
 AUTONOMOUS_TAKE_PROFIT_PRICE_RATIO = float(os.getenv("AUTONOMOUS_TAKE_PROFIT_PRICE_RATIO", "1.60"))
 AUTONOMOUS_TAKE_PROFIT_ABS_GAIN = float(os.getenv("AUTONOMOUS_TAKE_PROFIT_ABS_GAIN", "0.12"))
 AUTONOMOUS_TAKE_PROFIT_MIN_PNL_USDC = float(os.getenv("AUTONOMOUS_TAKE_PROFIT_MIN_PNL_USDC", "0.35"))
@@ -279,12 +283,20 @@ def game_market_active_exit_enabled():
     return (not DRY_RUN) and ENABLE_GAME_MARKET_ACTIVE_EXIT
 
 
+def autonomous_protective_exit_enabled():
+    return (not DRY_RUN) and ENABLE_AUTONOMOUS_PROTECTIVE_EXIT
+
+
 def autonomous_take_profit_enabled():
     return (not DRY_RUN) and ENABLE_AUTONOMOUS_TAKE_PROFIT
 
 
 def active_exit_cycle_enabled():
-    return game_market_active_exit_enabled() or autonomous_take_profit_enabled()
+    return (
+        game_market_active_exit_enabled()
+        or autonomous_protective_exit_enabled()
+        or autonomous_take_profit_enabled()
+    )
 
 
 def stage2_repeat_entry_experiment_enabled():

@@ -83,6 +83,10 @@ def first_run_setup():
         f.write(f"GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO=0.70\n")
         f.write(f"GAME_MARKET_ACTIVE_EXIT_ABS_DROP=0.15\n")
         f.write(f"GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC=60\n")
+        f.write(f"ENABLE_AUTONOMOUS_PROTECTIVE_EXIT=true\n")
+        f.write(f"AUTONOMOUS_PROTECTIVE_EXIT_PRICE_RATIO=0.82\n")
+        f.write(f"AUTONOMOUS_PROTECTIVE_EXIT_ABS_DROP=0.08\n")
+        f.write(f"AUTONOMOUS_PROTECTIVE_EXIT_MIN_LOSS_USDC=0.18\n")
         f.write(f"ENABLE_AUTONOMOUS_TAKE_PROFIT=true\n")
         f.write(f"AUTONOMOUS_TAKE_PROFIT_PRICE_RATIO=1.60\n")
         f.write(f"AUTONOMOUS_TAKE_PROFIT_ABS_GAIN=0.12\n")
@@ -218,6 +222,12 @@ def show_banner():
             f"trade range [cyan]${config.effective_autonomous_trade_floor():.2f}-${config.effective_autonomous_trade_ceiling():.2f}[/cyan], "
             f"retry cooldown [cyan]{int(config.AUTONOMOUS_RETRY_COOLDOWN_SEC or 0)//60}m[/cyan]"
         )
+        if config.autonomous_protective_exit_enabled():
+            console.print(
+                f"  Auto Exit: protective at [cyan]x{config.AUTONOMOUS_PROTECTIVE_EXIT_PRICE_RATIO:.2f}[/cyan] "
+                f"or [cyan]-${config.AUTONOMOUS_PROTECTIVE_EXIT_ABS_DROP:.2f}[/cyan], "
+                f"min loss [cyan]${config.AUTONOMOUS_PROTECTIVE_EXIT_MIN_LOSS_USDC:.2f}[/cyan]"
+            )
         if config.autonomous_take_profit_enabled():
             console.print(
                 f"  Auto Exit: take profit at [cyan]x{config.AUTONOMOUS_TAKE_PROFIT_PRICE_RATIO:.2f}[/cyan] "

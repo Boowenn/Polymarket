@@ -43,6 +43,10 @@ if not os.path.exists(env_path):
         f.write("GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO=0.70\n")
         f.write("GAME_MARKET_ACTIVE_EXIT_ABS_DROP=0.15\n")
         f.write("GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC=60\n")
+        f.write("ENABLE_AUTONOMOUS_PROTECTIVE_EXIT=true\n")
+        f.write("AUTONOMOUS_PROTECTIVE_EXIT_PRICE_RATIO=0.82\n")
+        f.write("AUTONOMOUS_PROTECTIVE_EXIT_ABS_DROP=0.08\n")
+        f.write("AUTONOMOUS_PROTECTIVE_EXIT_MIN_LOSS_USDC=0.18\n")
         f.write("ENABLE_AUTONOMOUS_TAKE_PROFIT=true\n")
         f.write("AUTONOMOUS_TAKE_PROFIT_PRICE_RATIO=1.60\n")
         f.write("AUTONOMOUS_TAKE_PROFIT_ABS_GAIN=0.12\n")
@@ -390,6 +394,10 @@ def get_dashboard_data():
             "game_market_active_exit_enabled": config.game_market_active_exit_enabled(),
             "game_market_active_exit_price_ratio": config.GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO,
             "game_market_active_exit_abs_drop": config.GAME_MARKET_ACTIVE_EXIT_ABS_DROP,
+            "autonomous_protective_exit_enabled": config.autonomous_protective_exit_enabled(),
+            "autonomous_protective_exit_price_ratio": config.AUTONOMOUS_PROTECTIVE_EXIT_PRICE_RATIO,
+            "autonomous_protective_exit_abs_drop": config.AUTONOMOUS_PROTECTIVE_EXIT_ABS_DROP,
+            "autonomous_protective_exit_min_loss_usdc": config.AUTONOMOUS_PROTECTIVE_EXIT_MIN_LOSS_USDC,
             "autonomous_take_profit_enabled": config.autonomous_take_profit_enabled(),
             "autonomous_take_profit_price_ratio": config.AUTONOMOUS_TAKE_PROFIT_PRICE_RATIO,
             "autonomous_take_profit_abs_gain": config.AUTONOMOUS_TAKE_PROFIT_ABS_GAIN,

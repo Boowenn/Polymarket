@@ -47,6 +47,24 @@ def _autonomous_take_profit_trigger_price(position):
     return round(min(max(threshold, entry_price), 0.99), 4)
 
 
+def _autonomous_protective_exit_trigger_price(position):
+    entry_price = float(position.get("avg_entry_price", 0) or 0)
+    if entry_price <= 0:
+        return 0.0
+    ratio_price = entry_price * min(max(float(config.AUTONOMOUS_PROTECTIVE_EXIT_PRICE_RATIO or 0), 0.01), 1.0)
+    abs_price = entry_price - max(float(config.AUTONOMOUS_PROTECTIVE_EXIT_ABS_DROP or 0), 0.0)
+    threshold = max(ratio_price, abs_price)
+    return round(max(min(threshold, entry_price), 0.01), 4)
+
+
+def _is_autonomous_match_winner_position(position):
+    signal_source = str(position.get("signal_source") or "").strip().lower()
+    trader_wallet = str(position.get("trader_wallet") or "").strip().lower()
+    if position.get("is_single_game_market"):
+        return False
+    return signal_source == "autonomous" or trader_wallet == "system_autonomous"
+
+
 def _build_exit_signal(position, reason):
     now_ts = time.time()
     trade_id = (
@@ -94,16 +112,22 @@ def _should_trigger(position):
         if market_end_ts and time.time() > market_end_ts and mark_price < float(position.get("avg_entry_price", 0) or 0):
             return True, f"game_market_expired {mark_price:.4f} after scheduled end"
 
-    signal_source = str(position.get("signal_source") or "").strip().lower()
-    trader_wallet = str(position.get("trader_wallet") or "").strip().lower()
-    if not config.autonomous_take_profit_enabled():
-        return False, ""
-    if position.get("is_single_game_market"):
-        return False, ""
-    if signal_source != "autonomous" and trader_wallet != "system_autonomous":
+    if not _is_autonomous_match_winner_position(position):
         return False, ""
 
     unrealized_pnl = float(position.get("unrealized_pnl", 0) or 0)
+    if config.autonomous_protective_exit_enabled():
+        max_loss = max(float(config.AUTONOMOUS_PROTECTIVE_EXIT_MIN_LOSS_USDC or 0), 0.0)
+        threshold = _autonomous_protective_exit_trigger_price(position)
+        if threshold > 0 and unrealized_pnl <= -max_loss and mark_price <= threshold:
+            return True, (
+                f"autonomous_protective_exit {mark_price:.4f} <= {threshold:.4f} "
+                f"pnl={unrealized_pnl:.4f}"
+            )
+
+    if not config.autonomous_take_profit_enabled():
+        return False, ""
+
     min_pnl = max(float(config.AUTONOMOUS_TAKE_PROFIT_MIN_PNL_USDC or 0), 0.0)
     if unrealized_pnl + 1e-9 < min_pnl:
         return False, ""

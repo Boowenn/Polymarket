@@ -40,8 +40,9 @@ Use this skill as the repo's governance entrypoint for research and execution ch
    For sports and esports, discover candidates directly from Gamma `markets` using `sports_market_types=moneyline`, exclude `game1/game2/game3` child markets, keep esports entries to `BO3` / `BO5` style series matches, and use a balanced executable price band with a target near the middle instead of mechanically chasing the cheapest side, very high-probability favorites, or pure lottery longshots.
    On live scanning, prefer a forward window closer to `48h` than `6h`, otherwise the bot can easily spend whole evenings with zero viable candidates.
    Do not permanently suppress a candidate just because one earlier attempt was blocked or failed; allow the same autonomous market/outcome to retry after a short cooldown once capital, position count, or execution conditions improve.
-14. On tiny live bankrolls, do not force every good autonomous entry to ride all the way to settlement.
-   Keep session stop-loss as the first hard guard, but allow a separate proactive take-profit for autonomous non-single-game `Match Winner` positions once the mark has repriced materially in your favor and the locked PnL is meaningful in dollar terms.
+14. On tiny live bankrolls, do not force every autonomous entry to ride all the way to settlement.
+   Keep session stop-loss as the first hard guard, but add two softer autonomous `Match Winner` exits for non-single-game markets:
+   a gentle protective exit once the marked loss is both meaningful in dollars and materially worse than entry, and a separate proactive take-profit once the mark has repriced materially in your favor and the locked PnL is meaningful.
 15. When governance changes land, update this skill and the repo README in the same change.
 
 ## Guardrails

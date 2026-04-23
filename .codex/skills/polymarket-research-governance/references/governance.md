@@ -82,7 +82,8 @@ When copy-trading is not trusted enough for live capital, default to a narrow ma
 - keep entries inside a balanced executable band such as `0.18-0.45`
 - keep a preferred target near the middle of that band, for example around `0.32`, so the selector does not mechanically reward the cheapest side
 - keep autonomous sizing inside an executable small-bankroll band such as `$0.6-$1.2`
-- for autonomous non-single-game `Match Winner` live positions, allow a separate take-profit rule once the mark has moved materially in your favor and the locked PnL is meaningful on a tiny bankroll
+- for autonomous non-single-game `Match Winner` live positions, keep two softer exits:
+  a gentle protective exit once the marked loss is both meaningful in dollars and materially worse than entry, and a separate take-profit rule once the mark has moved materially in your favor and the locked PnL is meaningful on a tiny bankroll
 - if an autonomous candidate was only blocked, unmirrored, or execution-error'd, allow it to retry after a short cooldown such as `10-30` minutes instead of treating the first row in `trades` as a permanent ban
 
 This is a rollout policy, not proof of edge. Promotion still requires executed evidence.
@@ -128,6 +129,8 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
   Polymarket has no native stop order, and sports/esports books can gap or thin out enough to false-trigger a brittle price-based exit
 - when autonomous `Match Winner` entries reprice sharply in your favor:
   allow a proactive take-profit so a tiny bankroll can lock a meaningful gain without forcing every winner to ride to settlement
+- when autonomous non-single-game `Match Winner` entries deteriorate materially:
+  allow a gentle protective exit so the bot can defend a tiny bankroll before a weakening position has to wait for final settlement
 - for `Game 1 / Game 2 / Game 3 Winner` style markets:
   keep a dedicated active-exit rule enabled so the bot can try to flatten on a sharp adverse move before waiting for mirrored SELLs or final settlement
 - when a proactive active exit only fills part of the position:
