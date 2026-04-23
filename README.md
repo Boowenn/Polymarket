@@ -87,6 +87,7 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - for autonomous `Match Winner` positions, keep proactive take-profit enabled so a sharply improving price can be monetized before final settlement instead of forcing every good entry to ride to the end
 - for autonomous non-single-game `Match Winner` positions, keep a separate gentle protective exit so a small live bankroll does not have to hold every weakening position all the way to settlement
 - when an active exit prepares a live SELL, clip it to real conditional-token balance / allowance first; if only part of the position is sellable, close only the matched size instead of repeatedly failing the whole exit
+- if you manually trade from the same live wallet in the Polymarket UI, reconcile that wallet activity back into `trade_journal` before reading open positions or realized PnL; manual sells should shrink or close the bot journal instead of leaving ghost live exposure behind
 - keep the real `.env` local-only; do not commit private keys or live wallet settings
 - read the dashboard as a live-only view: real account cash, current guardrails, and true executed fills
 - keep only one active execution loop writing to the live DB; if you need another browser/view process, let it attach in dashboard-only mode instead of starting a second trader loop
@@ -120,6 +121,7 @@ The default autonomous live path is intentionally narrow:
 - for live autonomous `Match Winner` entries, allow a proactive take-profit once the mark reprices to a clearly better level and the locked-in PnL is meaningful on a tiny bankroll
 - for live autonomous non-single-game `Match Winner` entries, allow a separate protective exit once the mark has deteriorated enough to matter in dollars, so the bot can defend capital without turning into a hyperactive stop bot
 - when a live active exit is smaller than the journal entry because wallet holdings are lower than expected, sell the real available size and let the journal remainder stay open instead of retrying an impossible full-size order
+- if the operator manually buys or sells from the same live wallet, pull that wallet's activity and reconcile the open journal by token so the dashboard reflects true remaining size instead of stale bot-only bookkeeping
 - do not permanently dedupe blocked autonomous candidates by market/outcome alone; use a short retry cooldown instead so improved capital or position settings can unlock the same candidate later in the day
 
 This setup was chosen because Polymarket exposes enough public sports metadata and market data to build a market-first strategy without relying on trader activity, while official order book endpoints expose `min_order_size`, making sub-dollar sizing infeasible for many contracts on tiny bankrolls.

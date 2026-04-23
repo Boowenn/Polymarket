@@ -1101,135 +1101,240 @@ def close_open_journal_entries(
     exit_reason="opposite_signal",
     exit_size=None,
 ):
-    with db() as conn:
-        rows = conn.execute(
-            """
-            SELECT *
-            FROM trade_journal
-            WHERE trader_wallet = ?
-              AND condition_id = ?
-              AND outcome = ?
-              AND exit_timestamp IS NULL
-              AND entry_side != ?
-            ORDER BY entry_timestamp ASC
-            """,
-            (
-                signal.get("trader_wallet", ""),
-                signal.get("condition_id", ""),
-                signal.get("outcome", ""),
-                signal.get("side", "BUY"),
-            ),
-        ).fetchall()
-
-        exit_price = float(
-            exit_price
-            if exit_price is not None
-            else (signal.get("price", 0) or 0)
-        )
-        exit_ts = float(
-            exit_ts
-            if exit_ts is not None
-            else (signal.get("timestamp", time.time()) or time.time())
-        )
-        close_trade_id = str(
-            close_trade_id
-            if close_trade_id is not None
-            else signal.get("id", "")
-        )
-        remaining_exit_size = None if exit_size is None else max(float(exit_size or 0), 0.0)
-        updated = 0
-
-        for row in rows:
-            if remaining_exit_size is not None and remaining_exit_size <= 0:
-                break
-
-            entry_basis = float(row["protected_price"] or row["tradable_price"] or row["signal_price"] or 0)
-            entry_size = float(row["entry_size"] or 0)
-            if entry_size <= 0:
-                continue
-
-            closed_size = entry_size if remaining_exit_size is None else min(entry_size, remaining_exit_size)
-            if closed_size <= 0:
-                continue
-
-            if remaining_exit_size is not None:
-                remaining_exit_size = max(remaining_exit_size - closed_size, 0.0)
-
-            size_ratio = min(max(closed_size / entry_size, 0.0), 1.0)
-            closed_entry_value = round(float(row["entry_value"] or entry_size * entry_basis or 0) * size_ratio, 4)
-
-            if row["entry_side"] == "BUY":
-                realized_pnl = (exit_price - entry_basis) * closed_size
-            else:
-                realized_pnl = (entry_basis - exit_price) * closed_size
-
-            if closed_size + 1e-9 < entry_size:
-                remainder_size = round(entry_size - closed_size, 4)
-                remainder_value = round(
-                    float(row["entry_value"] or entry_size * entry_basis or 0) - closed_entry_value,
-                    4,
-                )
-                remainder_trade_id = f"{row['trade_id']}::rem::{int(exit_ts * 1000)}::{updated}"
-                conn.execute(
-                    """
-                    INSERT INTO trade_journal (
-                        trade_id, trader_wallet, trader_username, condition_id, token_id,
-                        market_slug, market_scope, outcome, entry_side, signal_source, signal_price,
-                        tradable_price, protected_price, entry_size, entry_value,
-                        entry_timestamp, entry_status, sample_type, experiment_key, entry_reason
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        remainder_trade_id,
-                        row["trader_wallet"],
-                        row["trader_username"],
-                        row["condition_id"],
-                        row["token_id"],
-                        row["market_slug"],
-                        row["market_scope"],
-                        row["outcome"],
-                        row["entry_side"],
-                        row["signal_source"],
-                        row["signal_price"],
-                        row["tradable_price"],
-                        row["protected_price"],
-                        remainder_size,
-                        remainder_value,
-                        row["entry_timestamp"],
-                        row["entry_status"],
-                        row["sample_type"],
-                        row["experiment_key"],
-                        row["entry_reason"],
-                    ),
-                )
-
-            conn.execute(
+    def _writer():
+        with db() as conn:
+            rows = conn.execute(
                 """
-                UPDATE trade_journal
-                SET entry_size = ?,
-                    entry_value = ?,
-                    exit_price = ?,
-                    exit_timestamp = ?,
-                    exit_reason = ?,
-                    close_trade_id = ?,
-                    realized_pnl = ?
-                WHERE trade_id = ?
+                SELECT *
+                FROM trade_journal
+                WHERE trader_wallet = ?
+                  AND condition_id = ?
+                  AND outcome = ?
+                  AND exit_timestamp IS NULL
+                  AND entry_side != ?
+                ORDER BY entry_timestamp ASC
                 """,
                 (
-                    round(closed_size, 4),
-                    closed_entry_value,
-                    exit_price,
-                    exit_ts,
-                    exit_reason,
-                    close_trade_id,
-                    round(realized_pnl, 4),
-                    row["trade_id"],
+                    signal.get("trader_wallet", ""),
+                    signal.get("condition_id", ""),
+                    signal.get("outcome", ""),
+                    signal.get("side", "BUY"),
+                ),
+            ).fetchall()
+            return _close_trade_journal_rows(
+                conn,
+                rows,
+                exit_price=exit_price
+                if exit_price is not None
+                else (signal.get("price", 0) or 0),
+                exit_ts=exit_ts
+                if exit_ts is not None
+                else (signal.get("timestamp", time.time()) or time.time()),
+                close_trade_id=close_trade_id
+                if close_trade_id is not None
+                else signal.get("id", ""),
+                exit_reason=exit_reason,
+                exit_size=exit_size,
+            )
+
+    return _run_write_with_retry(_writer)
+
+
+def _close_trade_journal_rows(conn, rows, exit_price, exit_ts, close_trade_id, exit_reason, exit_size=None):
+    exit_price = float(exit_price or 0)
+    exit_ts = float(exit_ts or time.time())
+    close_trade_id = str(close_trade_id or "")
+    remaining_exit_size = None if exit_size is None else max(float(exit_size or 0), 0.0)
+    updated = 0
+
+    for row in rows:
+        if remaining_exit_size is not None and remaining_exit_size <= 0:
+            break
+
+        entry_basis = float(row["protected_price"] or row["tradable_price"] or row["signal_price"] or 0)
+        entry_size = float(row["entry_size"] or 0)
+        if entry_size <= 0:
+            continue
+
+        closed_size = entry_size if remaining_exit_size is None else min(entry_size, remaining_exit_size)
+        if closed_size <= 0:
+            continue
+
+        if remaining_exit_size is not None:
+            remaining_exit_size = max(remaining_exit_size - closed_size, 0.0)
+
+        size_ratio = min(max(closed_size / entry_size, 0.0), 1.0)
+        closed_entry_value = round(float(row["entry_value"] or entry_size * entry_basis or 0) * size_ratio, 4)
+
+        if row["entry_side"] == "BUY":
+            realized_pnl = (exit_price - entry_basis) * closed_size
+        else:
+            realized_pnl = (entry_basis - exit_price) * closed_size
+
+        if closed_size + 1e-9 < entry_size:
+            remainder_size = round(entry_size - closed_size, 4)
+            remainder_value = round(
+                float(row["entry_value"] or entry_size * entry_basis or 0) - closed_entry_value,
+                4,
+            )
+            remainder_trade_id = f"{row['trade_id']}::rem::{int(exit_ts * 1000)}::{updated}"
+            conn.execute(
+                """
+                INSERT INTO trade_journal (
+                    trade_id, trader_wallet, trader_username, condition_id, token_id,
+                    market_slug, market_scope, outcome, entry_side, signal_source, signal_price,
+                    tradable_price, protected_price, entry_size, entry_value,
+                    entry_timestamp, entry_status, sample_type, experiment_key, entry_reason
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    remainder_trade_id,
+                    row["trader_wallet"],
+                    row["trader_username"],
+                    row["condition_id"],
+                    row["token_id"],
+                    row["market_slug"],
+                    row["market_scope"],
+                    row["outcome"],
+                    row["entry_side"],
+                    row["signal_source"],
+                    row["signal_price"],
+                    row["tradable_price"],
+                    row["protected_price"],
+                    remainder_size,
+                    remainder_value,
+                    row["entry_timestamp"],
+                    row["entry_status"],
+                    row["sample_type"],
+                    row["experiment_key"],
+                    row["entry_reason"],
                 ),
             )
-            updated += 1
+
+        conn.execute(
+            """
+            UPDATE trade_journal
+            SET entry_size = ?,
+                entry_value = ?,
+                exit_price = ?,
+                exit_timestamp = ?,
+                exit_reason = ?,
+                close_trade_id = ?,
+                realized_pnl = ?
+            WHERE trade_id = ?
+            """,
+            (
+                round(closed_size, 4),
+                closed_entry_value,
+                exit_price,
+                exit_ts,
+                exit_reason,
+                close_trade_id,
+                round(realized_pnl, 4),
+                row["trade_id"],
+            ),
+        )
+        updated += 1
 
     return updated
+
+
+def close_open_journal_entries_by_token(
+    token_id,
+    exit_price,
+    exit_ts=None,
+    close_trade_id="",
+    exit_reason="manual_wallet_reconcile",
+    exit_size=None,
+):
+    def _writer():
+        with db() as conn:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM trade_journal
+                WHERE token_id = ?
+                  AND exit_timestamp IS NULL
+                  AND COALESCE(sample_type, 'executed') = 'executed'
+                  AND LOWER(COALESCE(entry_status, '')) NOT IN ('', 'dry_run')
+                ORDER BY entry_timestamp ASC
+                """,
+                (token_id,),
+            ).fetchall()
+            return _close_trade_journal_rows(
+                conn,
+                rows,
+                exit_price=exit_price,
+                exit_ts=exit_ts if exit_ts is not None else time.time(),
+                close_trade_id=close_trade_id,
+                exit_reason=exit_reason,
+                exit_size=exit_size,
+            )
+
+    return _run_write_with_retry(_writer)
+
+
+def resize_open_journal_entries_by_token(token_id, target_total_size):
+    result = {"trimmed_size": 0.0, "remaining_size": 0.0, "updated": 0, "deleted": 0}
+
+    def _writer():
+        with db() as conn:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM trade_journal
+                WHERE token_id = ?
+                  AND exit_timestamp IS NULL
+                  AND COALESCE(sample_type, 'executed') = 'executed'
+                  AND LOWER(COALESCE(entry_status, '')) NOT IN ('', 'dry_run')
+                ORDER BY entry_timestamp DESC
+                """,
+                (token_id,),
+            ).fetchall()
+
+            current_total = sum(float(row["entry_size"] or 0) for row in rows)
+            desired_total = max(float(target_total_size or 0), 0.0)
+            trim_size = max(current_total - desired_total, 0.0)
+            result["remaining_size"] = round(max(current_total - trim_size, 0.0), 4)
+            if trim_size <= 1e-9:
+                return result
+
+            remaining_trim = trim_size
+            for row in rows:
+                if remaining_trim <= 1e-9:
+                    break
+                entry_size = float(row["entry_size"] or 0)
+                if entry_size <= 0:
+                    continue
+                entry_basis = float(row["protected_price"] or row["tradable_price"] or row["signal_price"] or 0)
+                if remaining_trim + 1e-9 >= entry_size:
+                    conn.execute("DELETE FROM trade_journal WHERE trade_id = ?", (row["trade_id"],))
+                    result["trimmed_size"] += entry_size
+                    result["deleted"] += 1
+                    remaining_trim = max(remaining_trim - entry_size, 0.0)
+                    continue
+
+                new_size = round(entry_size - remaining_trim, 4)
+                new_value = round(new_size * entry_basis, 4)
+                conn.execute(
+                    """
+                    UPDATE trade_journal
+                    SET entry_size = ?,
+                        entry_value = ?
+                    WHERE trade_id = ?
+                    """,
+                    (new_size, new_value, row["trade_id"]),
+                )
+                result["trimmed_size"] += remaining_trim
+                result["updated"] += 1
+                remaining_trim = 0.0
+
+            result["trimmed_size"] = round(result["trimmed_size"], 4)
+            result["remaining_size"] = round(desired_total, 4)
+            return result
+
+    return _run_write_with_retry(_writer)
 
 
 def get_recent_trade_journal(limit=10):

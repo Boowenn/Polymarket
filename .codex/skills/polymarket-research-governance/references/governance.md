@@ -141,6 +141,8 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
   close only the matched journal size and leave the remainder open
 - when a proactive exit is preparing a SELL:
   clip the requested size to real conditional-token balance / allowance first, otherwise a tiny balance mismatch can create repeated live exit failures while the journal still looks fully open
+- when the operator manually trades from the same live wallet:
+  reconcile those wallet fills back into `trade_journal` by token, so manual sells close or shrink the bot position instead of leaving stale open exposure on the dashboard
 
 This avoids disguising a sizing problem as successful live execution.
 

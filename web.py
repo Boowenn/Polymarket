@@ -89,6 +89,7 @@ import runtime_control
 import strategy
 import autonomous_strategy
 import settlement
+import wallet_reconcile
 
 logging.basicConfig(
     level=logging.INFO,
@@ -581,6 +582,14 @@ def bot_loop():
         except Exception as e:
             logger.error(f"Settlement: {e}")
             models.log_risk_event("SETTLEMENT_ERROR", str(e), "skipped")
+
+        try:
+            manual_summary = wallet_reconcile.reconcile_manual_wallet_activity()
+            if manual_summary.get("closed_rows", 0) or manual_summary.get("trimmed_size", 0):
+                logger.warning("Manual wallet reconcile: %s", manual_summary)
+        except Exception as e:
+            logger.error(f"Manual reconcile: {e}")
+            models.log_risk_event("MANUAL_RECONCILE_ERROR", str(e), "skipped")
 
         try:
             reconcile_summary = executor.reconcile_delayed_orders()
