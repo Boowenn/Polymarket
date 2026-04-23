@@ -127,7 +127,7 @@ def first_run_setup():
         f.write(f"AUTONOMOUS_MAX_PRICE=0.30\n")
         f.write(f"AUTONOMOUS_MIN_MARKET_LIQUIDITY=750\n")
         f.write(f"AUTONOMOUS_MIN_EVENT_LEAD_SEC=900\n")
-        f.write(f"AUTONOMOUS_MAX_EVENT_LEAD_SEC=21600\n")
+        f.write(f"AUTONOMOUS_MAX_EVENT_LEAD_SEC=172800\n")
         f.write(f"AUTONOMOUS_MAX_CANDIDATES_PER_TAG=80\n")
         f.write(f"AUTONOMOUS_MAX_SIGNALS_PER_CYCLE=3\n")
         f.write(f"AUTONOMOUS_REQUIRE_ESPORTS_SERIES=true\n")
@@ -206,7 +206,7 @@ def show_banner():
     if config.autonomous_strategy_enabled():
         console.print(
             f"  Auto Plan: underdog band [cyan]{config.AUTONOMOUS_MIN_PRICE:.2f}-{config.AUTONOMOUS_MAX_PRICE:.2f}[/cyan], "
-            f"event lead [cyan]{config.AUTONOMOUS_MIN_EVENT_LEAD_SEC//60}-{config.AUTONOMOUS_MAX_EVENT_LEAD_SEC//3600 * 60}min[/cyan], "
+            f"event lead [cyan]{config.AUTONOMOUS_MIN_EVENT_LEAD_SEC//60}min-{config.AUTONOMOUS_MAX_EVENT_LEAD_SEC//3600}h[/cyan], "
             f"trade range [cyan]${config.effective_autonomous_trade_floor():.2f}-${config.effective_autonomous_trade_ceiling():.2f}[/cyan]"
         )
     if config.DRY_RUN:

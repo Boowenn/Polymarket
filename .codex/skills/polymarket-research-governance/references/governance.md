@@ -72,10 +72,12 @@ When copy-trading is not trusted enough for live capital, default to a narrow ma
 - keep `ENABLE_COPY_STRATEGY=false` by default
 - keep `ENABLE_AUTONOMOUS_STRATEGY=true` by default
 - scan only the configured sports and esports tags
+- fetch Gamma `markets` with `sports_market_types=moneyline`
 - require `sportsMarketType = moneyline`
-- require `groupItemTitle = Match Winner`
+- for esports, expect `groupItemTitle = Match Winner`; for traditional sports, allow the title to be blank if the market is still a moneyline matchup
 - exclude `game1/game2/game3` child markets from new autonomous entries
 - for esports, require `BO3` or `BO5` style match questions
+- keep the autonomous discovery horizon wide enough to see the next trading day; around `48h` is a better live default than `6h`
 - keep entries inside a moderate-underdog band such as `0.12-0.30`
 - keep autonomous sizing inside an executable small-bankroll band such as `$0.6-$1.5`
 

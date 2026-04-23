@@ -86,12 +86,14 @@ def _specific_tag_for_code(code):
     return None
 
 
-def _markets_for_tag(tag_id):
+def _markets_for_code(code):
+    tag_id = _specific_tag_for_code(code)
     if not tag_id:
         return []
 
     now = time.time()
-    cached = _MARKET_CACHE.get(tag_id)
+    cache_key = f"{code}:{tag_id}"
+    cached = _MARKET_CACHE.get(cache_key)
     if cached and cached["expires_at"] > now:
         return cached["rows"]
 
@@ -101,6 +103,9 @@ def _markets_for_tag(tag_id):
             "tag_id": tag_id,
             "active": "true",
             "closed": "false",
+            "sports_market_types": "moneyline",
+            "order": "start_date",
+            "ascending": "true",
             "limit": config.AUTONOMOUS_MAX_CANDIDATES_PER_TAG,
         },
         timeout=25,
@@ -108,21 +113,43 @@ def _markets_for_tag(tag_id):
     resp.raise_for_status()
     rows = resp.json()
     rows = rows if isinstance(rows, list) else []
-    _MARKET_CACHE[tag_id] = {
+    _MARKET_CACHE[cache_key] = {
         "rows": rows,
         "expires_at": now + max(config.POLL_INTERVAL, 15),
     }
     return rows
 
 
+def _scope_for_code(sport_code):
+    if not sport_code:
+        return "sports"
+    return "esports" if sport_code in market_scope.get_esports_codes() else "sports"
+
+
+def _market_start_ts(row):
+    return (
+        _parse_iso_ts(row.get("eventStartTime"))
+        or _parse_iso_ts(row.get("startDate"))
+        or _parse_iso_ts(row.get("endDate"))
+    )
+
+
 def _is_allowed_market(row):
+    sport_code = str(row.get("_autonomous_sport_code") or "").strip().lower()
     slug = str(row.get("slug") or "").strip().lower()
     if not slug:
         return False, "missing slug"
 
-    scope_info = market_scope.evaluate_trade_scope({"market_slug": slug})
-    if not scope_info["allowed"]:
-        return False, scope_info["scope_reason"]
+    if not sport_code:
+        scope_info = market_scope.evaluate_trade_scope({"market_slug": slug})
+        if not scope_info["allowed"]:
+            return False, scope_info["scope_reason"]
+        sport_code = scope_info.get("sport_code", "")
+    else:
+        allowed_scope = config.market_scope_set()
+        scope_bucket = _scope_for_code(sport_code)
+        if scope_bucket not in allowed_scope and "all" not in allowed_scope:
+            return False, f"{scope_bucket}_disabled"
 
     if not row.get("active") or row.get("closed"):
         return False, "market inactive"
@@ -130,13 +157,14 @@ def _is_allowed_market(row):
     if str(row.get("sportsMarketType") or "").strip().lower() != "moneyline":
         return False, "not match moneyline"
 
-    if "match winner" not in str(row.get("groupItemTitle") or "").strip().lower():
+    group_title = str(row.get("groupItemTitle") or "").strip().lower()
+    if group_title and "match winner" not in group_title:
         return False, "not match-winner group"
 
     if re.search(r"-game\d+\b", slug):
         return False, "single-game child market"
 
-    event_start_ts = _parse_iso_ts(row.get("eventStartTime"))
+    event_start_ts = _market_start_ts(row)
     if not event_start_ts:
         return False, "missing event start"
 
@@ -150,7 +178,6 @@ def _is_allowed_market(row):
     if liquidity_usdc < config.AUTONOMOUS_MIN_MARKET_LIQUIDITY:
         return False, "market liquidity too low"
 
-    sport_code = market_scope.classify_market_slug(slug).get("sport_code", "")
     if config.AUTONOMOUS_REQUIRE_ESPORTS_SERIES and sport_code in market_scope.get_esports_codes():
         question = str(row.get("question") or "").lower()
         if "(bo3)" not in question and "(bo5)" not in question:
@@ -187,7 +214,7 @@ def _candidate_pairs(row):
 def _score_candidate(row, price_value, min_order_value, assessment):
     score = 62.0
     liquidity_usdc = float(row.get("liquidity") or 0)
-    lead_sec = (_parse_iso_ts(row.get("eventStartTime")) or time.time()) - time.time()
+    lead_sec = (_market_start_ts(row) or time.time()) - time.time()
     spread = float(assessment.get("spread", 1) or 1)
 
     if liquidity_usdc >= 5000:
@@ -255,7 +282,7 @@ def _build_signal_from_market(row):
         "condition_id": row.get("conditionId", ""),
         "token_id": underdog["token_id"],
         "market_slug": row.get("slug", ""),
-        "market_scope": market_scope.classify_market_slug(row.get("slug", "")).get("market_scope", ""),
+        "market_scope": _scope_for_code(str(row.get("_autonomous_sport_code") or "").strip().lower()),
         "outcome": underdog["outcome"],
         "side": "BUY",
         "size": planned_size,
@@ -276,7 +303,7 @@ def _build_signal_from_market(row):
     if signal["signal_score"] < config.MIN_AUTONOMOUS_SCORE:
         return None, f"autonomous score too low ({signal['signal_score']:.1f})"
 
-    event_start_ts = _parse_iso_ts(row.get("eventStartTime")) or time.time()
+    event_start_ts = _market_start_ts(row) or time.time()
     lead_min = max(int((event_start_ts - time.time()) // 60), 0)
     signal["signal_note"] = (
         f"binary moneyline underdog probe; start in {lead_min}m; "
@@ -290,31 +317,21 @@ def build_autonomous_signals():
     if not config.autonomous_strategy_enabled():
         return []
 
-    tag_ids = []
-    for code in _allowed_autonomous_codes():
-        tag_id = _specific_tag_for_code(code)
-        if tag_id:
-            tag_ids.append(tag_id)
-
-    seen_tags = set()
-    ordered_tags = []
-    for tag_id in tag_ids:
-        if tag_id in seen_tags:
-            continue
-        seen_tags.add(tag_id)
-        ordered_tags.append(tag_id)
+    ordered_codes = _allowed_autonomous_codes()
 
     candidates = {}
-    for tag_id in ordered_tags:
+    for code in ordered_codes:
         try:
-            rows = _markets_for_tag(tag_id)
+            rows = _markets_for_code(code)
         except Exception as exc:
-            logger.warning("Autonomous market fetch failed for tag %s: %s", tag_id, exc)
+            logger.warning("Autonomous market fetch failed for code %s: %s", code, exc)
             continue
         for row in rows:
             condition_id = str(row.get("conditionId") or "")
             if not condition_id or condition_id in candidates:
                 continue
+            row = dict(row)
+            row["_autonomous_sport_code"] = code
             allowed, _reason = _is_allowed_market(row)
             if not allowed:
                 continue

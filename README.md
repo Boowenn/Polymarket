@@ -5,7 +5,7 @@ A defensive Polymarket sports and esports trading bot focused on real-money exec
 ## What it does
 
 - Scans Polymarket sports and esports markets directly through the public Gamma and CLOB APIs.
-- Builds autonomous entry candidates from `Match Winner` / `moneyline` markets inside your allowed scope.
+- Builds autonomous entry candidates from real `moneyline` match markets inside your allowed scope, using Gamma's sports-market filter instead of broad tag dumps.
 - Keeps the default autonomous engine inside a conservative moderate-underdog band instead of chasing near-0 / near-1 contracts.
 - Requires esports entries to be series-style matches such as `BO3` or `BO5`, and excludes `game1/game2/game3` child markets from new autonomous entries.
 - Blocks suspicious flow such as micro-order spam, burst trading, same-second bursts, and fast flip scalping when copy research is enabled.
@@ -71,7 +71,7 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 
 - keep the market scope limited to `sports,esports`
 - keep the default engine autonomous and keep copy mode disabled unless you are explicitly researching traders
-- keep new autonomous entries inside `Match Winner` / `moneyline` markets
+- keep new autonomous entries inside real `moneyline` match markets discovered with `sports_market_types=moneyline`
 - keep esports entries restricted to `BO3` / `BO5` style series markets
 - keep `repeat-entry` paused
 - prefer `MAX_POSITIONS=1` or `2`
@@ -99,9 +99,10 @@ The default autonomous live path is intentionally narrow:
 
 - scope only `sports`, `esports`, or `sports,esports`
 - fetch sport-specific tags from `GET /sports`
-- scan active Gamma `markets`
+- scan active Gamma `markets` with `sports_market_types=moneyline`
+- prefer the nearest playable window first, but allow the scan horizon out to roughly `48h` so tomorrow's matches can enter the candidate set
 - require `sportsMarketType == moneyline`
-- require `groupItemTitle` to be `Match Winner`
+- for esports, expect `groupItemTitle` to read `Match Winner`; for traditional sports, allow the title to be blank when the market is still a moneyline match
 - skip `game1/game2/game3` child markets
 - for esports, require `BO3` or `BO5` in the match question
 - probe only a moderate underdog band, not pure longshots
