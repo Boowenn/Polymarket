@@ -79,6 +79,7 @@ def _empty_execution_estimate(reason="", reference_price=0.0):
         "levels_used": 0,
         "tick_size": 0.0,
         "min_order_size": 0.0,
+        "exit_safe_min_order_size": 0.0,
         "min_order_value": 0.0,
         "book_age_sec": 0.0,
     }
@@ -135,6 +136,7 @@ def _estimate_execution_from_book(book, side, order_size, reference_price):
     book_age_sec = max(time.time() - book_ts, 0.0) if book_ts else 0.0
     tick_size = float(book.tick_size or 0.01)
     min_order_size = float(getattr(book, "min_order_size", 0) or 0)
+    exit_safe_min_order_size = config.live_exit_safe_min_order_size(min_order_size)
     min_order_value = min_order_size * best_price if min_order_size > 0 else 0.0
     if side == "BUY":
         min_order_value = max(min_order_value, float(config.MARKETABLE_BUY_MIN_VALUE_USDC or 0))
@@ -160,6 +162,7 @@ def _estimate_execution_from_book(book, side, order_size, reference_price):
         "levels_used": levels_used,
         "tick_size": tick_size,
         "min_order_size": round(min_order_size, 4),
+        "exit_safe_min_order_size": round(exit_safe_min_order_size, 4),
         "min_order_value": round(min_order_value, 4),
         "book_age_sec": round(book_age_sec, 3),
     }
@@ -207,6 +210,7 @@ def assess_execution(signal, order_size):
         return assessment
 
     min_order_size = float(assessment.get("min_order_size", 0) or 0)
+    exit_safe_min_order_size = float(assessment.get("exit_safe_min_order_size", 0) or 0)
     spread = float(assessment.get("spread", 0) or 0)
     top_level_value = float(assessment.get("top_level_value", 0) or 0)
     fill_ratio = float(assessment.get("fill_ratio", 0) or 0)
@@ -214,11 +218,18 @@ def assess_execution(signal, order_size):
     reference_price = float(assessment.get("reference_price", 0) or 0)
     best_price = float(assessment.get("best_price", 0) or 0)
     worst_price = float(assessment.get("worst_price", 0) or 0)
+    side = str(signal.get("side", "BUY") or "BUY").upper()
 
     if min_order_size > 0 and float(order_size) + 1e-9 < min_order_size:
         assessment["ok"] = False
         assessment["reason"] = (
             f"order size below market minimum ({float(order_size):.4f} < {min_order_size:.4f})"
+        )
+    elif side == "BUY" and exit_safe_min_order_size > 0 and float(order_size) + 1e-9 < exit_safe_min_order_size:
+        assessment["ok"] = False
+        assessment["reason"] = (
+            f"entry size below exit-safe minimum "
+            f"({float(order_size):.4f} < {exit_safe_min_order_size:.4f})"
         )
     elif spread > config.MAX_BOOK_SPREAD:
         assessment["ok"] = False

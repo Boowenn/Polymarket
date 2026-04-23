@@ -196,6 +196,39 @@ def _record_executed_fill(signal, size, value, status, tradable_price, protected
     )
 
 
+def _log_exit_safety_breach(signal, booked_size, assessment):
+    min_order_size = float((assessment or {}).get("min_order_size", 0) or 0)
+    exit_safe_min_order_size = float((assessment or {}).get("exit_safe_min_order_size", 0) or 0)
+    if min_order_size <= 0:
+        return
+    if booked_size + 1e-9 >= exit_safe_min_order_size:
+        return
+
+    market_slug = signal.get("market_slug", "")
+    outcome = signal.get("outcome", "")
+    if booked_size + 1e-9 < min_order_size:
+        reason = (
+            f"filled below market minimum ({booked_size:.4f} < {min_order_size:.4f}); "
+            f"exit-safe target {exit_safe_min_order_size:.4f}"
+        )
+    else:
+        reason = (
+            f"filled below exit-safe minimum ({booked_size:.4f} < {exit_safe_min_order_size:.4f})"
+        )
+
+    logger.warning(
+        "[LIVE EXIT BUFFER] %s %s %s",
+        market_slug,
+        outcome,
+        reason,
+    )
+    models.log_risk_event(
+        "EXIT_SAFE_MIN_BREACH",
+        f"{market_slug[:42]} {outcome[:24]} filled={booked_size:.4f}",
+        reason,
+    )
+
+
 def reconcile_delayed_orders(limit=None, min_age_sec=None):
     if config.DRY_RUN:
         return {"checked": 0, "updated": 0, "matched": 0, "closed": 0}
@@ -613,6 +646,12 @@ def execute_trade(signal):
             if closed_count:
                 logger.info(
                     f"[LIVE] opposite journal entries closed after filled {signal['side']}: {closed_count}"
+                )
+            if str(signal.get("side", "BUY") or "BUY").upper() == "BUY":
+                _log_exit_safety_breach(
+                    signal,
+                    booked_size,
+                    signal.get("_execution_assessment") or {},
                 )
 
         logger.info(

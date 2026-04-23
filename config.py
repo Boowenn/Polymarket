@@ -146,6 +146,7 @@ MAX_ORDERBOOK_AGE_SEC = int(os.getenv("MAX_ORDERBOOK_AGE_SEC", "15"))
 MAX_BOOK_SPREAD = float(os.getenv("MAX_BOOK_SPREAD", "0.03"))
 MIN_TOP_LEVEL_LIQUIDITY_USDC = float(os.getenv("MIN_TOP_LEVEL_LIQUIDITY_USDC", "25"))
 MARKETABLE_BUY_MIN_VALUE_USDC = float(os.getenv("MARKETABLE_BUY_MIN_VALUE_USDC", "1.0"))
+LIVE_EXIT_SAFE_MIN_ORDER_BUFFER_SHARES = float(os.getenv("LIVE_EXIT_SAFE_MIN_ORDER_BUFFER_SHARES", "0.25"))
 DUST_POSITION_MAX_SIZE = float(os.getenv("DUST_POSITION_MAX_SIZE", "0.01"))
 DUST_POSITION_MAX_VALUE_USDC = float(os.getenv("DUST_POSITION_MAX_VALUE_USDC", "0.01"))
 MAX_BOOK_PRICE_DRIFT = float(os.getenv("MAX_BOOK_PRICE_DRIFT", "0.02"))
@@ -154,6 +155,9 @@ SETTLEMENT_POLL_SEC = int(os.getenv("SETTLEMENT_POLL_SEC", "120"))
 SETTLEMENT_CACHE_SEC = float(os.getenv("SETTLEMENT_CACHE_SEC", "30"))
 SETTLEMENT_CANONICAL_EPS = float(os.getenv("SETTLEMENT_CANONICAL_EPS", "0.02"))
 SETTLEMENT_PROPOSED_EARLY_BUFFER_SEC = int(os.getenv("SETTLEMENT_PROPOSED_EARLY_BUFFER_SEC", "3600"))
+ACTIVE_EXIT_MIN_SIZE_PENDING_RECHECK_SEC = int(
+    os.getenv("ACTIVE_EXIT_MIN_SIZE_PENDING_RECHECK_SEC", "900")
+)
 
 # Trader quality filters
 PROFILE_REFRESH_SEC = int(os.getenv("PROFILE_REFRESH_SEC", "900"))
@@ -375,3 +379,11 @@ def live_auth_ready():
     if poly_signature_type() in {1, 2} and not POLY_FUNDER:
         return False
     return True
+
+
+def live_exit_safe_min_order_size(min_order_size):
+    min_size = max(float(min_order_size or 0), 0.0)
+    if DRY_RUN or min_size <= 0:
+        return round(min_size, 4)
+    buffer_shares = max(float(LIVE_EXIT_SAFE_MIN_ORDER_BUFFER_SHARES or 0), 0.0)
+    return round(min_size + buffer_shares, 4)

@@ -216,11 +216,26 @@ def _should_trigger(position):
 def _cooldown_allows(position):
     key = _position_key(position)
     now_ts = time.time()
-    last_ts = float(_last_exit_attempts.get(key, 0) or 0)
-    if now_ts - last_ts < max(int(config.GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC or 0), 0):
+    next_allowed_ts = float(_last_exit_attempts.get(key, 0) or 0)
+    if next_allowed_ts > now_ts:
         return False
-    _last_exit_attempts[key] = now_ts
+    _last_exit_attempts[key] = now_ts + max(int(config.GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC or 0), 0)
     return True
+
+
+def _set_cooldown(position, seconds):
+    key = _position_key(position)
+    _last_exit_attempts[key] = time.time() + max(int(seconds or 0), 0)
+
+
+def _pending_recheck_sec(pending_reason):
+    text = str(pending_reason or "").lower()
+    if "below market minimum" in text:
+        return max(
+            int(config.ACTIVE_EXIT_MIN_SIZE_PENDING_RECHECK_SEC or 0),
+            int(config.GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC or 0),
+        )
+    return max(int(config.GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC or 0), 0)
 
 
 def _record_pending(position, reason):
@@ -255,7 +270,9 @@ def _execute_exit(position, reason):
 
     plan = _exit_size_plan(position, force_balance_refresh=True)
     if not plan.get("ok"):
-        _record_pending(position, f"{reason}; {plan.get('pending_reason', 'exit plan unavailable')}")
+        pending_reason = f"{reason}; {plan.get('pending_reason', 'exit plan unavailable')}"
+        _set_cooldown(position, _pending_recheck_sec(pending_reason))
+        _record_pending(position, pending_reason)
         return {"attempted": 0, "filled": 0, "closed": 0, "pending": 1}
 
     signal_reason = reason

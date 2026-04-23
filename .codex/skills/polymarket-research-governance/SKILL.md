@@ -45,6 +45,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
    Keep session stop-loss as the first hard guard, but add two softer autonomous `Match Winner` exits for non-single-game markets:
    a gentle protective exit once the marked loss is both meaningful in dollars and materially worse than entry, and a separate proactive take-profit once the mark has repriced materially in your favor and the locked PnL is meaningful.
    When a proactive exit fires, size the exit from real conditional-token balance and allowance, not just the journal entry size; if the wallet can only sell part of the position, close only that matched size and keep the remainder open.
+   For live `BUY` entries, require a small exit-safe share buffer above the exchange `min_order_size`; a contract that is only barely buyable can become impossible to SELL back out once the true filled size lands below the later sell minimum.
    If the operator manually trades from the same live wallet, reconcile that wallet activity back into the open journal by token before trusting open-position counts, realized PnL, or active-exit decisions.
    If that reconciliation leaves only sub-cent / sub-share dust, keep the dust row for auditability but exclude it from primary live exposure, deployed-value, and open-position metrics.
 15. When governance changes land, update this skill and the repo README in the same change.
@@ -69,6 +70,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never claim that autonomous live positions have a take-profit policy unless the exit logic, dashboard copy, and `.env.example` all expose the same thresholds.
 - Never re-apply `PRAGMA journal_mode=WAL` on every SQLite connection in the live runtime; initialize WAL once and let later connections use busy timeouts instead of turning read paths into extra write-lock attempts.
 - Never let a temporary orderbook fetch blip zero-out live drawdown back to `entry_basis` when a cached/stale market mark is still available; keep execution gating strict, but preserve the best recent live mark for risk visibility.
+- Never approve a live `BUY` that only barely clears the raw `min_order_size` if that leaves no buffer for a later executable SELL; tiny live fills must stay exitable, not just buyable.
 
 ## References
 
