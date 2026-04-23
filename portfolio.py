@@ -203,12 +203,16 @@ def get_live_open_position_marks(limit=500):
         if not token_id:
             continue
 
-        key = (token_id, entry_side)
+        signal_source = str(row.get("signal_source") or "copy").strip().lower() or "copy"
+        trader_wallet = str(row.get("trader_wallet") or "")
+        key = (signal_source, trader_wallet, token_id, entry_side)
         bucket = grouped.setdefault(
             key,
             {
-                "trader_wallet": row.get("trader_wallet", ""),
+                "trader_wallet": trader_wallet,
                 "trader_username": row.get("trader_username", ""),
+                "signal_source": signal_source,
+                "market_scope": row.get("market_scope", ""),
                 "token_id": token_id,
                 "condition_id": row.get("condition_id", ""),
                 "market_slug": row.get("market_slug", ""),

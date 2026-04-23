@@ -83,6 +83,10 @@ def first_run_setup():
         f.write(f"GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO=0.70\n")
         f.write(f"GAME_MARKET_ACTIVE_EXIT_ABS_DROP=0.15\n")
         f.write(f"GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC=60\n")
+        f.write(f"ENABLE_AUTONOMOUS_TAKE_PROFIT=true\n")
+        f.write(f"AUTONOMOUS_TAKE_PROFIT_PRICE_RATIO=1.60\n")
+        f.write(f"AUTONOMOUS_TAKE_PROFIT_ABS_GAIN=0.12\n")
+        f.write(f"AUTONOMOUS_TAKE_PROFIT_MIN_PNL_USDC=0.35\n")
         f.write(f"MAX_POSITIONS=10\n")
         f.write(f"DAILY_RISK_BUDGET=50\n")
         f.write(f"PAPER_BANKROLL=250\n")
@@ -209,6 +213,12 @@ def show_banner():
             f"event lead [cyan]{config.AUTONOMOUS_MIN_EVENT_LEAD_SEC//60}min-{config.AUTONOMOUS_MAX_EVENT_LEAD_SEC//3600}h[/cyan], "
             f"trade range [cyan]${config.effective_autonomous_trade_floor():.2f}-${config.effective_autonomous_trade_ceiling():.2f}[/cyan]"
         )
+        if config.autonomous_take_profit_enabled():
+            console.print(
+                f"  Auto Exit: take profit at [cyan]x{config.AUTONOMOUS_TAKE_PROFIT_PRICE_RATIO:.2f}[/cyan] "
+                f"or [cyan]+${config.AUTONOMOUS_TAKE_PROFIT_ABS_GAIN:.2f}[/cyan], "
+                f"min locked pnl [cyan]${config.AUTONOMOUS_TAKE_PROFIT_MIN_PNL_USDC:.2f}[/cyan]"
+            )
     if config.DRY_RUN:
         gate_mode = "off" if config.PAPER_IGNORE_CAPITAL_GATES else "on"
         console.print(

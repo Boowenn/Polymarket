@@ -43,6 +43,10 @@ if not os.path.exists(env_path):
         f.write("GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO=0.70\n")
         f.write("GAME_MARKET_ACTIVE_EXIT_ABS_DROP=0.15\n")
         f.write("GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC=60\n")
+        f.write("ENABLE_AUTONOMOUS_TAKE_PROFIT=true\n")
+        f.write("AUTONOMOUS_TAKE_PROFIT_PRICE_RATIO=1.60\n")
+        f.write("AUTONOMOUS_TAKE_PROFIT_ABS_GAIN=0.12\n")
+        f.write("AUTONOMOUS_TAKE_PROFIT_MIN_PNL_USDC=0.35\n")
         f.write("DAILY_RISK_BUDGET=50\nPAPER_BANKROLL=250\nPAPER_DAILY_RISK_BUDGET=250\n")
         f.write("PAPER_IGNORE_CAPITAL_GATES=true\nMAX_TRADER_EXPOSURE_PCT=0.12\n")
         f.write("MAX_MARKET_EXPOSURE_PCT=0.15\nMIN_SIGNAL_CONFIRM_SEC=20\nMAX_SIGNAL_AGE_SEC=90\n")
@@ -382,6 +386,10 @@ def get_dashboard_data():
             "game_market_active_exit_enabled": config.game_market_active_exit_enabled(),
             "game_market_active_exit_price_ratio": config.GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO,
             "game_market_active_exit_abs_drop": config.GAME_MARKET_ACTIVE_EXIT_ABS_DROP,
+            "autonomous_take_profit_enabled": config.autonomous_take_profit_enabled(),
+            "autonomous_take_profit_price_ratio": config.AUTONOMOUS_TAKE_PROFIT_PRICE_RATIO,
+            "autonomous_take_profit_abs_gain": config.AUTONOMOUS_TAKE_PROFIT_ABS_GAIN,
+            "autonomous_take_profit_min_pnl_usdc": config.AUTONOMOUS_TAKE_PROFIT_MIN_PNL_USDC,
             "max_trade_pct": config.MAX_TRADE_PCT * 100,
             "max_trade_pct_cap_value": effective_bankroll * config.MAX_TRADE_PCT,
             "max_trade_absolute_cap": config.MAX_TRADE_VALUE_USDC,

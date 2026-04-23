@@ -39,7 +39,9 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 13. Default to a market-first autonomous engine before trusting trader-first copy engines on a tiny bankroll.
    For sports and esports, discover candidates directly from Gamma `markets` using `sports_market_types=moneyline`, exclude `game1/game2/game3` child markets, keep esports entries to `BO3` / `BO5` style series matches, and use a moderate-underdog price band instead of chasing very high-probability favorites or pure lottery longshots.
    On live scanning, prefer a forward window closer to `48h` than `6h`, otherwise the bot can easily spend whole evenings with zero viable candidates.
-14. When governance changes land, update this skill and the repo README in the same change.
+14. On tiny live bankrolls, do not force every good autonomous entry to ride all the way to settlement.
+   Keep session stop-loss as the first hard guard, but allow a separate proactive take-profit for autonomous non-single-game `Match Winner` positions once the mark has repriced materially in your favor and the locked PnL is meaningful in dollar terms.
+15. When governance changes land, update this skill and the repo README in the same change.
 
 ## Guardrails
 
@@ -55,6 +57,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never mark single-game live positions at entry value just because the order book is empty; use a real fallback mark before claiming drawdown is zero.
 - Never auto-close more journal size than the bot actually sold when a proactive exit only fills partially.
 - Never update governance text without checking whether the baseline date and numbers are still current.
+- Never claim that autonomous live positions have a take-profit policy unless the exit logic, dashboard copy, and `.env.example` all expose the same thresholds.
 
 ## References
 

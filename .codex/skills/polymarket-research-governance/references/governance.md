@@ -4,19 +4,20 @@
 
 Verified local baseline:
 
-- Date: `2026-04-22` JST
+- Date: `2026-04-23` JST
 - Command: `python report.py --days 3 --top 5`
-- `executed_entries = 200`
-- `executed_closed = 185`
-- `executed_decision_count = 182`
-- `executed_win_rate = 50.0%`
-- `executed_realized_pnl = +60.05`
-- `shadow_entries = 3582`
-- `shadow_closed = 3130`
-- `shadow_decision_count = 2699`
-- `shadow_win_rate = 67.7%`
-- `shadow_realized_pnl = +387.42`
-- `stage2_repeat_entry_experiment = 60 entries / 58 closed / 58 decided / -87.62 pnl`
+- `live_entries = 3`
+- `live_closed = 2`
+- `live_open = 1`
+- `live_decision_count = 2`
+- `live_close_rate = 66.7%`
+- `live_win_rate = 0.0%`
+- `live_realized_pnl = -7.08`
+- `autonomous_live_entries = 1`
+- `autonomous_live_closed = 0`
+- `copy_live_entries = 2`
+- `copy_live_closed = 2`
+- `copy_live_realized_pnl = -7.08`
 
 Use this snapshot as the current reference point until a newer report is intentionally recorded.
 
@@ -80,6 +81,7 @@ When copy-trading is not trusted enough for live capital, default to a narrow ma
 - keep the autonomous discovery horizon wide enough to see the next trading day; around `48h` is a better live default than `6h`
 - keep entries inside a moderate-underdog band such as `0.12-0.30`
 - keep autonomous sizing inside an executable small-bankroll band such as `$0.6-$1.5`
+- for autonomous non-single-game `Match Winner` live positions, allow a separate take-profit rule once the mark has moved materially in your favor and the locked PnL is meaningful on a tiny bankroll
 
 This is a rollout policy, not proof of edge. Promotion still requires executed evidence.
 
@@ -119,6 +121,8 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
   fall back to Gamma outcome prices so single-game markets do not hide a near-full loss as flat unrealized PnL
 - do not rely on a naive position `%` stop as the first live guard:
   Polymarket has no native stop order, and sports/esports books can gap or thin out enough to false-trigger a brittle price-based exit
+- when autonomous `Match Winner` entries reprice sharply in your favor:
+  allow a proactive take-profit so a tiny bankroll can lock a meaningful gain without forcing every winner to ride to settlement
 - for `Game 1 / Game 2 / Game 3 Winner` style markets:
   keep a dedicated active-exit rule enabled so the bot can try to flatten on a sharp adverse move before waiting for mirrored SELLs or final settlement
 - when a proactive active exit only fills part of the position:

@@ -2496,6 +2496,10 @@ function renderSystem(config, stats, performance, liveExecution) {
   const gameMarketActiveExitEnabled = Boolean(config.game_market_active_exit_enabled);
   const gameMarketActiveExitPriceRatio = Number(config.game_market_active_exit_price_ratio || 0);
   const gameMarketActiveExitAbsDrop = Number(config.game_market_active_exit_abs_drop || 0);
+  const autonomousTakeProfitEnabled = Boolean(config.autonomous_take_profit_enabled);
+  const autonomousTakeProfitPriceRatio = Number(config.autonomous_take_profit_price_ratio || 0);
+  const autonomousTakeProfitAbsGain = Number(config.autonomous_take_profit_abs_gain || 0);
+  const autonomousTakeProfitMinPnl = Number(config.autonomous_take_profit_min_pnl_usdc || 0);
   const maxTradeCapNote = maxTradeHasAbsoluteCap
     ? `百分比上限 ${fmtMoney(maxTradePctCapValue)}，绝对上限 ${fmtMoney(maxTradeAbsoluteCap)}，当前按较小值执行`
     : `当前仅按 bankroll 的 ${Number(config.max_trade_pct || 0).toFixed(1)}% 计算单笔上限`;
@@ -2592,7 +2596,7 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('top-execution-state').className = `control-value ${config.dry_run ? 'amber' : (delayedOrderAlertCount > 0 ? 'amber' : (sessionStopActive ? 'red' : 'blue'))}`;
   document.getElementById('top-execution-note').textContent = config.dry_run
     ? `repeat-entry ${repeatText} · 空簿复查 ${noBookText}`
-    : `持仓 ${openPositionCount}/${maxPositions} · 挂单 ${openOrderCount} · 延迟 ${delayedOrderCount} · 单局主动退出 ${gameMarketActiveExitEnabled ? '开启' : '关闭'}`;
+    : `持仓 ${openPositionCount}/${maxPositions} · 挂单 ${openOrderCount} · 延迟 ${delayedOrderCount} · 单局主动退出 ${gameMarketActiveExitEnabled ? '开启' : '关闭'} · 自主止盈 ${autonomousTakeProfitEnabled ? '开启' : '关闭'}`;
 
   let bannerClass = 'status-ok';
   let bannerText = '';
@@ -2626,8 +2630,8 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('hero-experiment-note').textContent = config.dry_run
     ? '空簿延迟复查会继续收样本，先验证是否值得放宽。'
     : liveEntries > 0
-      ? `当前引擎 ${config.entry_engine_label || 'live-only'}；已有 ${liveEntries} 笔真实成交，${config.autonomous_strategy_enabled ? `自主策略价格带 ${Number(config.autonomous_price_min || 0).toFixed(2)}-${Number(config.autonomous_price_max || 0).toFixed(2)}，` : ''}${gameMarketActiveExitEnabled ? '单局市场主动退出已开启，' : ''}继续积累纯实盘样本。`
-      : `当前引擎 ${config.entry_engine_label || 'live-only'}；先验证账户读取、挂单和最小单量拦截是否正常${config.autonomous_strategy_enabled ? `，自主策略会只看价格带 ${Number(config.autonomous_price_min || 0).toFixed(2)}-${Number(config.autonomous_price_max || 0).toFixed(2)} 的 Match Winner 候选` : ''}${gameMarketActiveExitEnabled ? '，并让单局市场主动退出护栏保持开启' : ''}。`;
+      ? `当前引擎 ${config.entry_engine_label || 'live-only'}；已有 ${liveEntries} 笔真实成交，${config.autonomous_strategy_enabled ? `自主策略价格带 ${Number(config.autonomous_price_min || 0).toFixed(2)}-${Number(config.autonomous_price_max || 0).toFixed(2)}，` : ''}${gameMarketActiveExitEnabled ? '单局市场主动退出已开启，' : ''}${autonomousTakeProfitEnabled ? `自主 Match Winner 止盈阈值 x${autonomousTakeProfitPriceRatio.toFixed(2)} / +${fmtMoney(autonomousTakeProfitAbsGain)} / 至少 ${fmtMoney(autonomousTakeProfitMinPnl)}，` : ''}继续积累纯实盘样本。`
+      : `当前引擎 ${config.entry_engine_label || 'live-only'}；先验证账户读取、挂单和最小单量拦截是否正常${config.autonomous_strategy_enabled ? `，自主策略会只看价格带 ${Number(config.autonomous_price_min || 0).toFixed(2)}-${Number(config.autonomous_price_max || 0).toFixed(2)} 的 Match Winner 候选` : ''}${gameMarketActiveExitEnabled ? '，并让单局市场主动退出护栏保持开启' : ''}${autonomousTakeProfitEnabled ? `，自主 Match Winner 止盈会在价格走到 x${autonomousTakeProfitPriceRatio.toFixed(2)} 或绝对增益 ${fmtMoney(autonomousTakeProfitAbsGain)}、且账面至少 ${fmtMoney(autonomousTakeProfitMinPnl)} 时尝试落袋` : ''}。`;
   document.getElementById('hero-guardrail').textContent = `${fmtMoney(maxTradeValue)} / ${maxPositions || 0} 仓`;
   document.getElementById('hero-guardrail-note').textContent = config.dry_run
     ? `纸面日预算 ${fmtMoney(dailyRiskBudget)} · 资本门控 ${config.paper_ignore_capital_gates ? '关闭' : '开启'}`
@@ -2657,7 +2661,7 @@ function renderSystem(config, stats, performance, liveExecution) {
     if (delayedAlert) delayedAlert.classList.add('hidden');
   } else {
     liveAlert.classList.remove('hidden');
-    liveAlert.innerHTML = `<strong>真实资金提醒：</strong>账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，钱包 ${walletText}，funder ${config.funder_short || '未设置'}。当前 ${liveEntries > 0 ? `已有 ${liveEntries} 笔真实成交` : '尚无真实成交'}，低于市场最小单量的机会会被直接跳过，而不是强行放大仓位。单笔上限 ${fmtMoney(maxTradeValue)}；${maxTradeCapNote}。${gameMarketActiveExitEnabled ? ` 单局市场会在价格跌到入场价 × ${gameMarketActiveExitPriceRatio.toFixed(2)} 或绝对回撤 ${fmtMoney(gameMarketActiveExitAbsDrop)} 时尝试主动退出。` : ''}`;
+    liveAlert.innerHTML = `<strong>真实资金提醒：</strong>账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，钱包 ${walletText}，funder ${config.funder_short || '未设置'}。当前 ${liveEntries > 0 ? `已有 ${liveEntries} 笔真实成交` : '尚无真实成交'}，低于市场最小单量的机会会被直接跳过，而不是强行放大仓位。单笔上限 ${fmtMoney(maxTradeValue)}；${maxTradeCapNote}。${gameMarketActiveExitEnabled ? ` 单局市场会在价格跌到入场价 × ${gameMarketActiveExitPriceRatio.toFixed(2)} 或绝对回撤 ${fmtMoney(gameMarketActiveExitAbsDrop)} 时尝试主动退出。` : ''}${autonomousTakeProfitEnabled ? ` 自主 Match Winner 仓位若涨到入场价 × ${autonomousTakeProfitPriceRatio.toFixed(2)} 或绝对增益 ${fmtMoney(autonomousTakeProfitAbsGain)}，且账面盈利至少 ${fmtMoney(autonomousTakeProfitMinPnl)}，也会尝试主动止盈。` : ''}`;
     if (delayedAlert) {
       if (config.delayed_order_alert_active) {
         delayedAlert.classList.remove('hidden');
@@ -2687,7 +2691,7 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('sys-guards-label').textContent = config.dry_run ? '研究护栏' : '实盘护栏';
   document.getElementById('sys-guards').textContent = config.dry_run
     ? `单笔上限 ${fmtMoney(maxTradeValue)} · 确认 ${config.min_signal_confirm_sec || 0}s`
-    : `单笔 ${fmtMoney(maxTradeValue)} · 已部署 ${fmtMoney(deployedValue)} · 挂单 ${openOrderCount} · 持仓 ${openPositionCount}/${maxPositions}${delayedOrderCount > 0 ? ` · 延迟 ${delayedOrderCount}` : ''}${sessionStopEnabled ? ` · 止损 ${sessionStopActive ? '已触发' : '已布防'}` : ''}${gameMarketActiveExitEnabled ? ' · 单局主动退出已开' : ''}`;
+    : `单笔 ${fmtMoney(maxTradeValue)} · 已部署 ${fmtMoney(deployedValue)} · 挂单 ${openOrderCount} · 持仓 ${openPositionCount}/${maxPositions}${delayedOrderCount > 0 ? ` · 延迟 ${delayedOrderCount}` : ''}${sessionStopEnabled ? ` · 止损 ${sessionStopActive ? '已触发' : '已布防'}` : ''}${gameMarketActiveExitEnabled ? ' · 单局主动退出已开' : ''}${autonomousTakeProfitEnabled ? ' · 自主止盈已开' : ''}`;
   document.getElementById('sys-experiments').textContent = config.dry_run
     ? `repeat-entry ${repeatText}；空簿延迟复查 ${noBookText}`
     : `${config.entry_engine_label || 'live-only'}；模拟盘 / shadow / experiment 已归档${config.autonomous_strategy_enabled ? `；自主策略只看 ${Number(config.autonomous_price_min || 0).toFixed(2)}-${Number(config.autonomous_price_max || 0).toFixed(2)} 的 Match Winner` : ''}`;
@@ -2793,7 +2797,7 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('sidebar-footnote').textContent =
     config.dry_run
       ? `当前只看 ${scopeText}。Repeat-entry ${repeatText}，空簿延迟复查 ${noBookText}。指标口径保持 executed / shadow / experiment 分层。`
-      : `当前是真实资金 ${canaryText}：账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，只看 ${scopeText}。${autonomousEnabled && !copyEnabled ? '默认引擎已经切到自主扫描，不再依赖外部交易员。' : '模拟盘、shadow 和 experiment 已归档。'} 若订单低于市场最小单量，会直接跳过而不是强行放大仓位。${sessionStopEnabled ? ` 会话级止损阈值 ${fmtMoney(sessionStopLimit)}${sessionStopWindowLabel ? `（${sessionStopWindowLabel}）` : ''}，当前总盈亏 ${fmtSignedMoney(liveTotalPnl)}，当前估值 ${fmtMoney(sessionStopMarkedValue)}${sessionStopActive ? '，已暂停新开仓。' : '。'}` : ''}${gameMarketActiveExitEnabled ? ` 单局市场主动退出已开启；当盘口太薄时，会先用 Gamma 价格做风险估值。` : ''}`;
+      : `当前是真实资金 ${canaryText}：账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，只看 ${scopeText}。${autonomousEnabled && !copyEnabled ? '默认引擎已经切到自主扫描，不再依赖外部交易员。' : '模拟盘、shadow 和 experiment 已归档。'} 若订单低于市场最小单量，会直接跳过而不是强行放大仓位。${sessionStopEnabled ? ` 会话级止损阈值 ${fmtMoney(sessionStopLimit)}${sessionStopWindowLabel ? `（${sessionStopWindowLabel}）` : ''}，当前总盈亏 ${fmtSignedMoney(liveTotalPnl)}，当前估值 ${fmtMoney(sessionStopMarkedValue)}${sessionStopActive ? '，已暂停新开仓。' : '。'}` : ''}${gameMarketActiveExitEnabled ? ` 单局市场主动退出已开启；当盘口太薄时，会先用 Gamma 价格做风险估值。` : ''}${autonomousTakeProfitEnabled ? ` 自主 Match Winner 止盈也已开启；价格走到入场价 x${autonomousTakeProfitPriceRatio.toFixed(2)} 或绝对增益 ${fmtMoney(autonomousTakeProfitAbsGain)}、且账面盈利至少 ${fmtMoney(autonomousTakeProfitMinPnl)} 时，会尝试中途落袋。` : ''}`;
 }
 
 function highlightSections() {

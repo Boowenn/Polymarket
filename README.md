@@ -80,6 +80,7 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - enable the live session stop so realized + marked unrealized drawdown can pause new entries before a tiny bankroll spirals
 - prefer `SESSION_STOP_MODE=calendar_day` with `SESSION_STOP_TIMEZONE=Asia/Tokyo`, so one bad day pauses the bot for the rest of that JST day without blocking the next day’s live sample collection
 - keep `SESSION_STOP_LOOKBACK_SEC` available only for explicit `trailing` mode
+- for autonomous `Match Winner` positions, keep proactive take-profit enabled so a sharply improving underdog price can be monetized before final settlement instead of forcing every good entry to ride to the end
 - keep the real `.env` local-only; do not commit private keys or live wallet settings
 - read the dashboard as a live-only view: real account cash, current guardrails, and true executed fills
 - if a live order stays in local `delayed` state beyond the alert threshold, surface it clearly in the dashboard before changing sizing or execution rules
@@ -107,6 +108,7 @@ The default autonomous live path is intentionally narrow:
 - for esports, require `BO3` or `BO5` in the match question
 - probe only a moderate underdog band, not pure longshots
 - size inside a small executable band rather than a pure percentage of bankroll
+- for live autonomous `Match Winner` entries, allow a proactive take-profit once the mark reprices to a clearly better level and the locked-in PnL is meaningful on a tiny bankroll
 
 This setup was chosen because Polymarket exposes enough public sports metadata and market data to build a market-first strategy without relying on trader activity, while official order book endpoints expose `min_order_size`, making sub-dollar sizing infeasible for many contracts on tiny bankrolls.
 

@@ -11,9 +11,14 @@ logger = logging.getLogger("active_exit")
 _last_exit_attempts = {}
 
 
+def _active_exit_enabled():
+    return config.active_exit_cycle_enabled()
+
+
 def _position_key(position):
     return "::".join(
         [
+            str(position.get("signal_source") or ""),
             str(position.get("trader_wallet") or ""),
             str(position.get("condition_id") or ""),
             str(position.get("outcome") or ""),
@@ -22,7 +27,7 @@ def _position_key(position):
     )
 
 
-def _trigger_price(position):
+def _game_market_stop_trigger_price(position):
     entry_price = float(position.get("avg_entry_price", 0) or 0)
     if entry_price <= 0:
         return 0.0
@@ -30,6 +35,16 @@ def _trigger_price(position):
     abs_price = entry_price - float(config.GAME_MARKET_ACTIVE_EXIT_ABS_DROP or 0)
     threshold = min(ratio_price, abs_price)
     return round(max(threshold, 0.01), 4)
+
+
+def _autonomous_take_profit_trigger_price(position):
+    entry_price = float(position.get("avg_entry_price", 0) or 0)
+    if entry_price <= 0:
+        return 0.0
+    ratio_price = entry_price * max(float(config.AUTONOMOUS_TAKE_PROFIT_PRICE_RATIO or 0), 1.0)
+    abs_price = entry_price + max(float(config.AUTONOMOUS_TAKE_PROFIT_ABS_GAIN or 0), 0.0)
+    threshold = max(ratio_price, abs_price)
+    return round(min(max(threshold, entry_price), 0.99), 4)
 
 
 def _build_exit_signal(position, reason):
@@ -58,11 +73,7 @@ def _build_exit_signal(position, reason):
 
 
 def _should_trigger(position):
-    if not config.game_market_active_exit_enabled():
-        return False, ""
     if str(position.get("entry_side") or "").upper() != "BUY":
-        return False, ""
-    if not position.get("is_single_game_market"):
         return False, ""
 
     mark_price = float(position.get("mark_price", 0) or 0)
@@ -71,16 +82,40 @@ def _should_trigger(position):
     if not position.get("mark_available") and str(position.get("mark_source") or "") == "entry_basis":
         return False, ""
 
-    threshold = _trigger_price(position)
-    if threshold <= 0:
+    if config.game_market_active_exit_enabled() and position.get("is_single_game_market"):
+        threshold = _game_market_stop_trigger_price(position)
+        if threshold <= 0:
+            return False, ""
+
+        if mark_price <= threshold:
+            return True, f"game_market_stop {mark_price:.4f} <= {threshold:.4f}"
+
+        market_end_ts = float(position.get("market_end_ts") or 0)
+        if market_end_ts and time.time() > market_end_ts and mark_price < float(position.get("avg_entry_price", 0) or 0):
+            return True, f"game_market_expired {mark_price:.4f} after scheduled end"
+
+    signal_source = str(position.get("signal_source") or "").strip().lower()
+    trader_wallet = str(position.get("trader_wallet") or "").strip().lower()
+    if not config.autonomous_take_profit_enabled():
+        return False, ""
+    if position.get("is_single_game_market"):
+        return False, ""
+    if signal_source != "autonomous" and trader_wallet != "system_autonomous":
         return False, ""
 
-    if mark_price <= threshold:
-        return True, f"game_market_stop {mark_price:.4f} <= {threshold:.4f}"
+    unrealized_pnl = float(position.get("unrealized_pnl", 0) or 0)
+    min_pnl = max(float(config.AUTONOMOUS_TAKE_PROFIT_MIN_PNL_USDC or 0), 0.0)
+    if unrealized_pnl + 1e-9 < min_pnl:
+        return False, ""
 
-    market_end_ts = float(position.get("market_end_ts") or 0)
-    if market_end_ts and time.time() > market_end_ts and mark_price < float(position.get("avg_entry_price", 0) or 0):
-        return True, f"game_market_expired {mark_price:.4f} after scheduled end"
+    threshold = _autonomous_take_profit_trigger_price(position)
+    if threshold <= 0:
+        return False, ""
+    if mark_price >= threshold:
+        return True, (
+            f"autonomous_take_profit {mark_price:.4f} >= {threshold:.4f} "
+            f"pnl={unrealized_pnl:.4f}"
+        )
 
     return False, ""
 
@@ -202,7 +237,7 @@ def _execute_exit(position, reason):
 
 
 def run_active_exit_cycle(force=False):
-    if not config.game_market_active_exit_enabled():
+    if not _active_exit_enabled():
         return {"candidates": 0, "attempted": 0, "filled": 0, "closed": 0, "pending": 0, "errors": 0}
 
     snapshot = portfolio.get_live_drawdown_snapshot(force=force)
