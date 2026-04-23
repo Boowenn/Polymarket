@@ -420,11 +420,14 @@ def build_autonomous_signals():
 
     built = []
     skipped = 0
+    rejection_reasons = {}
     retry_gate_reasons = {}
     for row in candidates.values():
         signal, reason = _build_signal_from_market(row)
         if signal is None:
             skipped += 1
+            reason_key = str(reason or "unknown build rejection")
+            rejection_reasons[reason_key] = rejection_reasons.get(reason_key, 0) + 1
             continue
         allowed, retry_reason = _can_retry_candidate(
             signal.get("condition_id", ""),
@@ -480,6 +483,18 @@ def build_autonomous_signals():
             "Autonomous strategy found %s candidate market(s) but nothing executable",
             len(candidates),
         )
+        if rejection_reasons:
+            top_rejections = dict(
+                sorted(
+                    rejection_reasons.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )[:8]
+            )
+            logger.info(
+                "Autonomous build rejection summary: %s (skipped=%s)",
+                top_rejections,
+                skipped,
+            )
         if retry_gate_reasons:
             logger.info("Autonomous retry gate summary: %s", retry_gate_reasons)
     else:
