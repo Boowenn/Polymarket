@@ -139,6 +139,8 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
   keep a dedicated active-exit rule enabled so the bot can try to flatten on a sharp adverse move before waiting for mirrored SELLs or final settlement
 - when a proactive active exit only fills part of the position:
   close only the matched journal size and leave the remainder open
+- when a proactive exit is preparing a SELL:
+  clip the requested size to real conditional-token balance / allowance first, otherwise a tiny balance mismatch can create repeated live exit failures while the journal still looks fully open
 
 This avoids disguising a sizing problem as successful live execution.
 

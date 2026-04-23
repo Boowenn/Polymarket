@@ -11,6 +11,7 @@ logger = logging.getLogger("executor")
 
 _clob_client = None
 _experiment_lock = threading.Lock()
+_balance_cache = {}
 
 
 def _safe_float(value, default=None):
@@ -93,6 +94,66 @@ def _normalize_live_fill(client, order_id, response, side, fallback_price):
     booked_price = float(matched_price or fallback_price or 0)
     booked_value = round(matched_size * booked_price, 4)
     return status, matched_size, booked_value, booked_price
+
+
+def get_asset_balance_allowance(asset_type, token_id=None, force=False):
+    client = _get_clob_client()
+    if client is None:
+        return None
+
+    asset_key = str(asset_type or "").strip().upper() or "UNKNOWN"
+    cache_key = (asset_key, str(token_id or ""))
+    ttl_sec = max(float(config.ORDERBOOK_CACHE_SEC or 0), 1.0)
+    now = time.time()
+    cached = _balance_cache.get(cache_key)
+    if not force and cached and cached.get("expires_at", 0) > now:
+        return dict(cached["payload"])
+
+    try:
+        from py_clob_client.clob_types import AssetType, BalanceAllowanceParams
+    except Exception as exc:
+        logger.warning("Failed to import balance allowance types: %s", exc)
+        return None
+
+    asset_value = getattr(AssetType, asset_key, asset_type)
+    params = BalanceAllowanceParams(
+        asset_type=asset_value,
+        token_id=token_id,
+        signature_type=config.poly_signature_type(),
+    )
+
+    try:
+        raw = client.get_balance_allowance(params) or {}
+    except Exception as exc:
+        logger.warning("Balance/allowance lookup failed for %s %s: %s", asset_key, token_id or "", exc)
+        return None
+
+    balance = max(float(_fixed_math_to_float(raw.get("balance")) or 0), 0.0)
+    allowance_values = []
+    for value in (raw.get("allowances") or {}).values():
+        parsed = _fixed_math_to_float(value)
+        if parsed is not None:
+            allowance_values.append(max(float(parsed), 0.0))
+    allowance = min(allowance_values) if allowance_values else None
+    available = balance if allowance is None else min(balance, allowance)
+
+    payload = {
+        "asset_type": asset_key,
+        "token_id": str(token_id or ""),
+        "balance": round(balance, 6),
+        "allowance": round(float(allowance), 6) if allowance is not None else None,
+        "available": round(float(available or 0), 6),
+        "raw": raw,
+    }
+    _balance_cache[cache_key] = {
+        "expires_at": now + ttl_sec,
+        "payload": dict(payload),
+    }
+    return payload
+
+
+def get_conditional_exit_capacity(token_id, force=False):
+    return get_asset_balance_allowance("CONDITIONAL", token_id=token_id, force=force)
 
 
 def _signal_from_trade_row(trade):

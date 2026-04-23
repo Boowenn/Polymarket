@@ -90,6 +90,75 @@ def _build_exit_signal(position, reason):
     }
 
 
+def _exit_size_plan(position, force_balance_refresh=False):
+    requested_size = round(float(position.get("entry_size", 0) or 0), 4)
+    if requested_size <= 0:
+        return {
+            "ok": False,
+            "pending_reason": "entry size is 0",
+            "requested_size": requested_size,
+            "planned_size": 0.0,
+            "available_size": 0.0,
+            "min_order_size": 0.0,
+            "clip_note": "",
+        }
+
+    balance_snapshot = executor.get_conditional_exit_capacity(
+        position.get("token_id", ""),
+        force=force_balance_refresh,
+    )
+    if not balance_snapshot:
+        return {
+            "ok": False,
+            "pending_reason": "conditional balance unavailable",
+            "requested_size": requested_size,
+            "planned_size": 0.0,
+            "available_size": 0.0,
+            "min_order_size": float(position.get("min_order_size", 0) or 0),
+            "clip_note": "",
+        }
+
+    available_size = max(float(balance_snapshot.get("available", 0) or 0), 0.0)
+    min_order_size = max(float(position.get("min_order_size", 0) or 0), 0.0)
+    planned_size = round(min(requested_size, available_size), 4)
+    if planned_size <= 0:
+        return {
+            "ok": False,
+            "pending_reason": f"no sellable balance available ({available_size:.4f})",
+            "requested_size": requested_size,
+            "planned_size": 0.0,
+            "available_size": available_size,
+            "min_order_size": min_order_size,
+            "clip_note": "",
+        }
+    if min_order_size > 0 and planned_size + 1e-9 < min_order_size:
+        return {
+            "ok": False,
+            "pending_reason": (
+                f"sellable balance {planned_size:.4f} below market minimum {min_order_size:.4f}"
+            ),
+            "requested_size": requested_size,
+            "planned_size": planned_size,
+            "available_size": available_size,
+            "min_order_size": min_order_size,
+            "clip_note": "",
+        }
+
+    clip_note = ""
+    if planned_size + 1e-9 < requested_size:
+        clip_note = f"partial_exit {planned_size:.4f}/{requested_size:.4f}"
+
+    return {
+        "ok": True,
+        "pending_reason": "",
+        "requested_size": requested_size,
+        "planned_size": planned_size,
+        "available_size": available_size,
+        "min_order_size": min_order_size,
+        "clip_note": clip_note,
+    }
+
+
 def _should_trigger(position):
     if str(position.get("entry_side") or "").upper() != "BUY":
         return False, ""
@@ -184,7 +253,17 @@ def _execute_exit(position, reason):
         _record_pending(position, f"{reason}; no executable full exit")
         return {"attempted": 0, "filled": 0, "closed": 0, "pending": 1}
 
-    signal = _build_exit_signal(position, reason)
+    plan = _exit_size_plan(position, force_balance_refresh=True)
+    if not plan.get("ok"):
+        _record_pending(position, f"{reason}; {plan.get('pending_reason', 'exit plan unavailable')}")
+        return {"attempted": 0, "filled": 0, "closed": 0, "pending": 1}
+
+    signal_reason = reason
+    if plan.get("clip_note"):
+        signal_reason = f"{reason}; {plan['clip_note']}"
+
+    signal = _build_exit_signal(position, signal_reason)
+    signal["size"] = float(plan.get("planned_size", 0) or 0)
     models.insert_trade(signal)
 
     try:
@@ -197,7 +276,7 @@ def _execute_exit(position, reason):
             OrderArgs(
                 token_id=signal["token_id"],
                 price=limit_price,
-                size=float(position.get("entry_size", 0) or 0),
+                size=float(signal.get("size", 0) or 0),
                 side=side,
             )
         )
@@ -232,19 +311,21 @@ def _execute_exit(position, reason):
             )
 
         logger.warning(
-            "[ACTIVE EXIT] %s %s planned=%.4f filled=%.4f @ %.4f status=%s closed=%s",
+            "[ACTIVE EXIT] %s %s planned=%.4f filled=%.4f @ %.4f status=%s closed=%s available=%.4f",
             signal.get("market_slug", ""),
             signal.get("outcome", ""),
-            float(position.get("entry_size", 0) or 0),
+            float(signal.get("size", 0) or 0),
             booked_size,
             booked_price,
             status,
             closed_count,
+            float(plan.get("available_size", 0) or 0),
         )
         models.log_risk_event(
             "ACTIVE_EXIT",
             (
                 f"{signal.get('market_slug', '')[:42]} {signal.get('outcome', '')[:24]} "
+                f"planned={float(signal.get('size', 0) or 0):.4f} "
                 f"filled={booked_size:.4f} price={booked_price:.4f}"
             ),
             status,

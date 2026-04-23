@@ -44,6 +44,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 14. On tiny live bankrolls, do not force every autonomous entry to ride all the way to settlement.
    Keep session stop-loss as the first hard guard, but add two softer autonomous `Match Winner` exits for non-single-game markets:
    a gentle protective exit once the marked loss is both meaningful in dollars and materially worse than entry, and a separate proactive take-profit once the mark has repriced materially in your favor and the locked PnL is meaningful.
+   When a proactive exit fires, size the exit from real conditional-token balance and allowance, not just the journal entry size; if the wallet can only sell part of the position, close only that matched size and keep the remainder open.
 15. When governance changes land, update this skill and the repo README in the same change.
 16. In live mode, keep exactly one active execution loop per runtime DB.
    If a second `main.py` or `web.py` is started, it should not launch another trading loop against the same `copybot.db`; secondary processes should degrade to UI-only / observer mode instead of racing SQLite writes.
