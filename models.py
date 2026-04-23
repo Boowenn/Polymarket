@@ -416,6 +416,26 @@ def init_db():
                 action_taken    TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS position_mark_cache (
+                signal_source       TEXT,
+                trader_wallet       TEXT,
+                token_id            TEXT,
+                entry_side          TEXT,
+                condition_id        TEXT DEFAULT '',
+                market_slug         TEXT DEFAULT '',
+                outcome             TEXT DEFAULT '',
+                mark_price          REAL DEFAULT 0,
+                marked_value        REAL DEFAULT 0,
+                gamma_price         REAL,
+                mark_source         TEXT DEFAULT '',
+                market_question     TEXT DEFAULT '',
+                group_item_title    TEXT DEFAULT '',
+                market_end_ts       REAL,
+                is_single_game_market INTEGER DEFAULT 0,
+                recorded_at         REAL,
+                PRIMARY KEY(signal_source, trader_wallet, token_id, entry_side)
+            );
+
             CREATE TABLE IF NOT EXISTS trade_journal (
                 id                  INTEGER PRIMARY KEY AUTOINCREMENT,
                 trade_id            TEXT UNIQUE,
@@ -466,11 +486,113 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_profiles_status ON trader_profiles(status, quality_score);
             CREATE INDEX IF NOT EXISTS idx_profile_history_wallet_ts ON trader_profile_history(wallet, snapshot_ts DESC);
             CREATE INDEX IF NOT EXISTS idx_profile_history_status_ts ON trader_profile_history(status, snapshot_ts DESC);
+            CREATE INDEX IF NOT EXISTS idx_position_mark_cache_ts ON position_mark_cache(recorded_at DESC);
             CREATE INDEX IF NOT EXISTS idx_journal_open ON trade_journal(trader_wallet, condition_id, outcome, exit_timestamp);
             CREATE INDEX IF NOT EXISTS idx_journal_sample_experiment ON trade_journal(sample_type, experiment_key, entry_timestamp DESC);
             """
         )
         _backfill_missing_trader_references(conn)
+
+
+def upsert_position_mark_cache(position):
+    if not position:
+        return
+
+    signal_source = str(position.get("signal_source") or "copy").strip().lower() or "copy"
+    trader_wallet = str(position.get("trader_wallet") or "").strip()
+    token_id = str(position.get("token_id") or "").strip()
+    entry_side = str(position.get("entry_side") or "BUY").strip().upper() or "BUY"
+    if not token_id:
+        return
+
+    recorded_at = float(position.get("recorded_at") or time.time())
+
+    def _writer():
+        with db() as conn:
+            conn.execute(
+                """
+                INSERT INTO position_mark_cache (
+                    signal_source, trader_wallet, token_id, entry_side,
+                    condition_id, market_slug, outcome,
+                    mark_price, marked_value, gamma_price, mark_source,
+                    market_question, group_item_title, market_end_ts,
+                    is_single_game_market, recorded_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(signal_source, trader_wallet, token_id, entry_side) DO UPDATE SET
+                    condition_id=excluded.condition_id,
+                    market_slug=excluded.market_slug,
+                    outcome=excluded.outcome,
+                    mark_price=excluded.mark_price,
+                    marked_value=excluded.marked_value,
+                    gamma_price=excluded.gamma_price,
+                    mark_source=excluded.mark_source,
+                    market_question=excluded.market_question,
+                    group_item_title=excluded.group_item_title,
+                    market_end_ts=excluded.market_end_ts,
+                    is_single_game_market=excluded.is_single_game_market,
+                    recorded_at=excluded.recorded_at
+                """,
+                (
+                    signal_source,
+                    trader_wallet,
+                    token_id,
+                    entry_side,
+                    str(position.get("condition_id") or ""),
+                    str(position.get("market_slug") or ""),
+                    str(position.get("outcome") or ""),
+                    float(position.get("mark_price") or 0),
+                    float(position.get("marked_value") or 0),
+                    None
+                    if position.get("gamma_price") in (None, "")
+                    else float(position.get("gamma_price") or 0),
+                    str(position.get("mark_source") or ""),
+                    str(position.get("market_question") or ""),
+                    str(position.get("group_item_title") or ""),
+                    None
+                    if position.get("market_end_ts") in (None, "")
+                    else float(position.get("market_end_ts") or 0),
+                    1 if position.get("is_single_game_market") else 0,
+                    recorded_at,
+                ),
+            )
+
+    _run_write_with_retry(_writer)
+
+
+def get_position_mark_cache_snapshot(max_age_sec=None):
+    cutoff_ts = None
+    if max_age_sec is not None:
+        cutoff_ts = time.time() - max(float(max_age_sec or 0), 0.0)
+
+    with db() as conn:
+        if cutoff_ts is None:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM position_mark_cache
+                """
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM position_mark_cache
+                WHERE recorded_at >= ?
+                """,
+                (cutoff_ts,),
+            ).fetchall()
+
+    snapshot = {}
+    for row in rows:
+        key = (
+            str(row["signal_source"] or "copy").strip().lower() or "copy",
+            str(row["trader_wallet"] or ""),
+            str(row["token_id"] or ""),
+            str(row["entry_side"] or "BUY").strip().upper() or "BUY",
+        )
+        snapshot[key] = dict(row)
+    return snapshot
 
 
 def get_non_live_data_counts():

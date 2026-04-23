@@ -180,6 +180,12 @@ def _position_mark_from_market(position, market, estimate, previous_mark=None):
     gamma_price = token_prices.get(token_id)
     if gamma_price is None:
         gamma_price = outcome_prices.get(outcome_key)
+    fallback_gamma_price = None
+    if previous_mark and previous_mark.get("gamma_price") not in (None, ""):
+        try:
+            fallback_gamma_price = float(previous_mark.get("gamma_price") or 0)
+        except Exception:
+            fallback_gamma_price = None
 
     orderbook_mark_available = bool(estimate.get("mark_available"))
     stale_fallback = bool(estimate.get("stale_fallback"))
@@ -222,24 +228,42 @@ def _position_mark_from_market(position, market, estimate, previous_mark=None):
         marked_value = float(position.get("entry_value", 0) or 0)
         mark_source = "entry_basis"
 
+    market_end_ts = _parse_iso_ts((market or {}).get("endDate"))
+    if market_end_ts is None and previous_mark and previous_mark.get("market_end_ts") not in (None, ""):
+        try:
+            market_end_ts = float(previous_mark.get("market_end_ts") or 0)
+        except Exception:
+            market_end_ts = None
+
+    market_question = str((market or {}).get("question") or previous_mark.get("market_question") or "")
+    group_item_title = str((market or {}).get("groupItemTitle") or previous_mark.get("group_item_title") or "")
+    if market:
+        is_single_game_market = _is_single_game_market(market, position.get("market_slug", ""))
+    else:
+        is_single_game_market = bool(previous_mark.get("is_single_game_market")) if previous_mark else False
+
     return {
-        "gamma_price": None if gamma_price is None else round(float(gamma_price), 4),
+        "gamma_price": None
+        if gamma_price is None and fallback_gamma_price is None
+        else round(float(gamma_price if gamma_price is not None else fallback_gamma_price), 4),
         "mark_price": round(float(mark_price or 0), 4),
         "marked_value": round(float(marked_value or 0), 4),
         "mark_source": mark_source,
         "mark_available": mark_source != "entry_basis",
         "exit_available": exit_available,
-        "market_end_ts": _parse_iso_ts((market or {}).get("endDate")),
-        "market_question": str((market or {}).get("question") or ""),
-        "group_item_title": str((market or {}).get("groupItemTitle") or ""),
-        "is_single_game_market": _is_single_game_market(market, position.get("market_slug", "")),
+        "market_end_ts": market_end_ts,
+        "market_question": market_question,
+        "group_item_title": group_item_title,
+        "is_single_game_market": is_single_game_market,
     }
 
 
 def get_live_open_position_marks(limit=500):
     rows = models.get_open_trade_journal(limit=limit)
     grouped = {}
-    previous_marks = {}
+    previous_marks = models.get_position_mark_cache_snapshot(
+        max_age_sec=float(config.LIVE_MARK_STALE_FALLBACK_SEC or 0)
+    )
 
     cached_snapshot = _drawdown_cache.get("data") or {}
     for cached in cached_snapshot.get("positions", []) or []:
@@ -360,11 +384,54 @@ def get_live_open_position_marks(limit=500):
             position_row["executable_value"],
         )
         if position_row["mark_available"]:
-            _position_mark_cache[position_key] = {
+            now_ts = time.time()
+            existing_cache = _position_mark_cache.get(position_key) or {}
+            cache_payload = {
                 "mark_price": position_row["mark_price"],
                 "mark_source": position_row["mark_source"],
                 "gamma_price": position_row.get("gamma_price"),
+                "market_end_ts": position_row.get("market_end_ts"),
+                "market_question": position_row.get("market_question", ""),
+                "group_item_title": position_row.get("group_item_title", ""),
+                "is_single_game_market": position_row.get("is_single_game_market", False),
+                "recorded_at": now_ts,
+                "persisted_at": float(existing_cache.get("persisted_at", 0) or 0),
             }
+            _position_mark_cache[position_key] = cache_payload
+            should_persist = (
+                not str(position_row["mark_source"]).startswith("cached_")
+                and (
+                    str(existing_cache.get("mark_source") or "") != str(position_row["mark_source"])
+                    or abs(
+                        float(existing_cache.get("mark_price", 0) or 0)
+                        - float(position_row.get("mark_price", 0) or 0)
+                    )
+                    > 1e-9
+                    or now_ts - float(existing_cache.get("persisted_at", 0) or 0) >= 30.0
+                )
+            )
+            if should_persist:
+                models.upsert_position_mark_cache(
+                    {
+                        "signal_source": position_row.get("signal_source", "copy"),
+                        "trader_wallet": position_row.get("trader_wallet", ""),
+                        "token_id": position_row.get("token_id", ""),
+                        "entry_side": position_row.get("entry_side", "BUY"),
+                        "condition_id": position_row.get("condition_id", ""),
+                        "market_slug": position_row.get("market_slug", ""),
+                        "outcome": position_row.get("outcome", ""),
+                        "mark_price": position_row.get("mark_price", 0),
+                        "marked_value": position_row.get("marked_value", 0),
+                        "gamma_price": position_row.get("gamma_price"),
+                        "mark_source": position_row.get("mark_source", ""),
+                        "market_question": position_row.get("market_question", ""),
+                        "group_item_title": position_row.get("group_item_title", ""),
+                        "market_end_ts": position_row.get("market_end_ts"),
+                        "is_single_game_market": position_row.get("is_single_game_market", False),
+                        "recorded_at": now_ts,
+                    }
+                )
+                cache_payload["persisted_at"] = now_ts
         marks.append(position_row)
 
     marks.sort(key=lambda row: row.get("first_entry_ts", 0))

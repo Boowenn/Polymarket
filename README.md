@@ -102,6 +102,7 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - for single-game markets such as `game1/game2/game3`, enable the dedicated active exit guard so the bot can try to flatten before settlement if the market rapidly moves against the mirrored position
 - when the order book goes thin, use Gamma outcome prices as the live mark fallback so single-game losses do not get hidden as `$0.00` unrealized drawdown
 - if the orderbook fetch itself blips but you still have a recent valid live mark, preserve that cached mark for drawdown visibility instead of snapping the position back to entry basis
+- keep that fallback in durable runtime state, not only in one Python process; a restarted dashboard or one-off observer script should still be able to reuse the most recent valid live mark instead of forgetting it
 - when switching from dry run to live, old `dry_run` positions should not consume the live bankroll, open-position count, or deployed-risk view
 - remember that many Polymarket markets require a `min_order_size` of `5` shares, so tiny bankrolls will naturally skip many higher-priced contracts rather than force larger size
 

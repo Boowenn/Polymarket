@@ -129,6 +129,7 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
   fall back to Gamma outcome prices so single-game markets do not hide a near-full loss as flat unrealized PnL
 - when orderbook fetches fail temporarily but a recent valid live mark exists:
   preserve that cached/stale mark for drawdown visibility instead of immediately snapping the position back to `entry_basis`
+- keep that fallback mark in durable runtime state rather than only process memory, so a restarted dashboard or a fresh observer process can still reuse the most recent valid live mark during short API outages
 - do not rely on a naive position `%` stop as the first live guard:
   Polymarket has no native stop order, and sports/esports books can gap or thin out enough to false-trigger a brittle price-based exit
 - when autonomous `Match Winner` entries reprice sharply in your favor:
