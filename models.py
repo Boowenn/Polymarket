@@ -1,9 +1,16 @@
 import sqlite3
+import threading
 import time
 from collections import Counter, defaultdict
 from contextlib import contextmanager
 
 import config
+
+
+_DB_CONNECT_LOCK = threading.Lock()
+_DB_TIMEOUT_SEC = 30.0
+_DB_BUSY_TIMEOUT_MS = 30_000
+_WAL_INITIALIZED = False
 
 
 BLOCK_REASON_META = {
@@ -161,10 +168,35 @@ def _summary_with_derived_metrics(summary):
     return normalized
 
 
-def get_connection():
-    conn = sqlite3.connect(config.DB_PATH)
+def _configure_connection(conn):
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute(f"PRAGMA busy_timeout={int(_DB_BUSY_TIMEOUT_MS)}")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    return conn
+
+
+def _ensure_wal_mode():
+    global _WAL_INITIALIZED
+    if _WAL_INITIALIZED:
+        return
+    with _DB_CONNECT_LOCK:
+        if _WAL_INITIALIZED:
+            return
+        conn = sqlite3.connect(config.DB_PATH, timeout=_DB_TIMEOUT_SEC)
+        try:
+            _configure_connection(conn)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.commit()
+            _WAL_INITIALIZED = True
+        finally:
+            conn.close()
+
+
+def get_connection():
+    _ensure_wal_mode()
+    conn = sqlite3.connect(config.DB_PATH, timeout=_DB_TIMEOUT_SEC)
+    _configure_connection(conn)
     return conn
 
 
@@ -201,6 +233,7 @@ def _scalar(conn, query, params=()):
 
 def init_db():
     with db() as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS traders (

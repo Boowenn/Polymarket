@@ -162,6 +162,7 @@ import executor
 import active_exit
 import dashboard
 import portfolio
+import runtime_control
 import strategy
 import autonomous_strategy
 import settlement
@@ -174,6 +175,7 @@ logging.basicConfig(
     handlers=[logging.FileHandler("copybot.log")],
 )
 logger = logging.getLogger("main")
+_execution_loop_lease = runtime_control.ProcessLease("execution_loop")
 
 
 def show_banner():
@@ -340,7 +342,7 @@ def run_cycle(cycle_count):
 
     # 7. Update PnL snapshot
     performance = models.get_performance_snapshot()
-    drawdown = portfolio.get_live_drawdown_snapshot(force=True)
+    drawdown = portfolio.get_live_drawdown_snapshot()
     models.log_pnl(
         performance["realized_pnl"],
         drawdown.get("unrealized_pnl", 0),
@@ -361,6 +363,11 @@ def main():
     console.print("  [cyan]Initializing database...[/cyan]", end=" ")
     models.init_db()
     console.print("[green]OK[/green]")
+
+    if not _execution_loop_lease.acquire():
+        console.print("  [yellow]Another execution loop already owns this runtime DB. Stop the other bot loop first.[/yellow]")
+        console.print()
+        return
 
     if not config.DRY_RUN and not config.PRIVATE_KEY:
         console.print("  [yellow]No PRIVATE_KEY found — switching to Watch Mode[/yellow]")

@@ -51,6 +51,8 @@ or
 python web.py
 ```
 
+The runtime DB is now protected by a single execution-loop lease. If you accidentally start a second `main.py` or `web.py`, the second process will not start another trading loop against the same `copybot.db`; `web.py` falls back to dashboard-only mode instead.
+
 ## Live wallet setup
 
 For `DRY_RUN=false`, the bot needs your signing private key plus the correct Polymarket wallet type:
@@ -86,6 +88,7 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - for autonomous non-single-game `Match Winner` positions, keep a separate gentle protective exit so a small live bankroll does not have to hold every weakening position all the way to settlement
 - keep the real `.env` local-only; do not commit private keys or live wallet settings
 - read the dashboard as a live-only view: real account cash, current guardrails, and true executed fills
+- keep only one active execution loop writing to the live DB; if you need another browser/view process, let it attach in dashboard-only mode instead of starting a second trader loop
 - if a live order stays in local `delayed` state beyond the alert threshold, surface it clearly in the dashboard before changing sizing or execution rules
 - automatically re-query delayed live orders and write them back as matched / canceled / expired before treating them as unresolved execution failures
 - only mark `opposite_signal` exits after your own mirrored opposite-side fill is actually booked; a raw trader sell signal alone should not close your live journal

@@ -8,6 +8,8 @@ copybot.db
 copybot.db-shm
 copybot.db-wal
 copybot.log
+.execution_loop.lock
+.test_execution_lock.lock
 archives/
 
 .claude/

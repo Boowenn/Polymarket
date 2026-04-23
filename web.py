@@ -85,6 +85,7 @@ import monitor
 import executor
 import active_exit
 import portfolio
+import runtime_control
 import strategy
 import autonomous_strategy
 import settlement
@@ -106,6 +107,8 @@ _last_leaderboard_ts = 0
 LEADERBOARD_INTERVAL = 300  # refresh leaderboard every 5 min
 _account_snapshot = {"ts": 0.0, "data": None}
 _account_snapshot_lock = threading.Lock()
+_dashboard_snapshot = {"ts": 0.0, "data": None}
+_execution_loop_lease = runtime_control.ProcessLease("execution_loop")
 
 
 def ts_fmt(ts):
@@ -460,6 +463,23 @@ def get_dashboard_data():
     }
 
 
+def safe_dashboard_data():
+    try:
+        payload = get_dashboard_data()
+        _dashboard_snapshot["ts"] = time.time()
+        _dashboard_snapshot["data"] = payload
+        return payload
+    except Exception as exc:
+        logger.warning("Dashboard snapshot failed: %s", exc)
+        cached = _dashboard_snapshot.get("data")
+        if cached:
+            payload = dict(cached)
+            payload["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            payload["snapshot_warning"] = f"stale_dashboard_snapshot:{exc}"
+            return payload
+        raise
+
+
 # ── routes ──
 @app.route("/")
 def index():
@@ -468,18 +488,18 @@ def index():
 
 @socketio.on("connect")
 def on_connect():
-    socketio.emit("update", get_dashboard_data())
+    socketio.emit("update", safe_dashboard_data())
 
 
 @socketio.on("request_update")
 def on_request_update():
-    socketio.emit("update", get_dashboard_data())
+    socketio.emit("update", safe_dashboard_data())
 
 
 def push_update():
     """Push latest data to all connected browsers."""
     try:
-        socketio.emit("update", get_dashboard_data())
+        socketio.emit("update", safe_dashboard_data())
     except Exception:
         pass
 
@@ -584,7 +604,7 @@ def bot_loop():
 
         # PnL snapshot
         performance = models.get_performance_snapshot()
-        drawdown = portfolio.get_live_drawdown_snapshot(force=True)
+        drawdown = portfolio.get_live_drawdown_snapshot()
         models.log_pnl(
             performance["realized_pnl"],
             drawdown.get("unrealized_pnl", 0),
@@ -600,8 +620,12 @@ def bot_loop():
 
 
 def main():
-    thread = threading.Thread(target=bot_loop, daemon=True)
-    thread.start()
+    loop_owned = _execution_loop_lease.acquire()
+    if loop_owned:
+        thread = threading.Thread(target=bot_loop, daemon=True)
+        thread.start()
+    else:
+        logger.warning("Execution loop already running in another process; starting dashboard in UI-only mode")
 
     port = int(os.environ.get("PORT", 5000))
     print()
@@ -609,6 +633,8 @@ def main():
     print(f"   Polymarket {config.market_scope_label()} Trading Bot")
     print(f"   Dashboard: http://localhost:{port}")
     print(f"   Scan interval: {config.POLL_INTERVAL}s")
+    if not loop_owned:
+        print("   Mode: dashboard only (another execution loop owns the runtime DB)")
     print("  =============================================")
     print()
     socketio.run(app, host="0.0.0.0", port=port, debug=False, allow_unsafe_werkzeug=True)

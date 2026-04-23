@@ -120,6 +120,7 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
 - only write `opposite_signal` exits when the bot's mirrored opposite-side order actually books a fill; the copied trader's reversal alone is not enough
 - show real account cash separately from the strategy bankroll cap; the wallet balance is not the same thing as the bot budget
 - when live mode is enabled, exclude historical `dry_run` executed positions from live deployed-risk, exposure, and max-position views
+- keep exactly one active execution loop writing to the live runtime DB; if another `main.py` or `web.py` starts, it should degrade to observer/UI-only mode instead of racing SQLite writes
 - block orders that fall below the market `min_order_size` instead of automatically increasing size to force a fill
 - prefer the first live stop to be a session-level drawdown cap:
   use `realized_pnl + marked_unrealized_pnl` to pause new entries once the configured threshold is breached

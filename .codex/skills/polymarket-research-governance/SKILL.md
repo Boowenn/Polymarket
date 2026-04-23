@@ -44,6 +44,8 @@ Use this skill as the repo's governance entrypoint for research and execution ch
    Keep session stop-loss as the first hard guard, but add two softer autonomous `Match Winner` exits for non-single-game markets:
    a gentle protective exit once the marked loss is both meaningful in dollars and materially worse than entry, and a separate proactive take-profit once the mark has repriced materially in your favor and the locked PnL is meaningful.
 15. When governance changes land, update this skill and the repo README in the same change.
+16. In live mode, keep exactly one active execution loop per runtime DB.
+   If a second `main.py` or `web.py` is started, it should not launch another trading loop against the same `copybot.db`; secondary processes should degrade to UI-only / observer mode instead of racing SQLite writes.
 
 ## Guardrails
 
@@ -61,6 +63,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never update governance text without checking whether the baseline date and numbers are still current.
 - Never dedupe autonomous candidates forever just because a previous row exists in `trades`; blocked, unmirrored, or execution-error attempts need a retry path with cooldown.
 - Never claim that autonomous live positions have a take-profit policy unless the exit logic, dashboard copy, and `.env.example` all expose the same thresholds.
+- Never re-apply `PRAGMA journal_mode=WAL` on every SQLite connection in the live runtime; initialize WAL once and let later connections use busy timeouts instead of turning read paths into extra write-lock attempts.
 
 ## References
 
