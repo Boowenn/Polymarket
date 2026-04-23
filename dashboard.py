@@ -191,6 +191,12 @@ def render_dashboard(traders=None, cycle_count=0):
                 f"  Unrealized   {'[green]' if unrealized >= 0 else '[red]'}${unrealized:,.2f}[/]",
                 f"  Marked Value ${float(drawdown.get('marked_value', 0) or 0):,.2f}  |  Executable ${float(drawdown.get('executable_value', 0) or 0):,.2f}",
                 (
+                    f"  Dust Hidden  {int(drawdown.get('dust_position_count', 0) or 0)} residual(s) / "
+                    f"${float(drawdown.get('dust_marked_value', 0) or 0):,.4f}"
+                    if int(drawdown.get("dust_position_count", 0) or 0) > 0
+                    else "  Dust Hidden  none"
+                ),
+                (
                     f"  Stop Loss    [red]ACTIVE[/red] at -${drawdown.get('loss_limit_usdc', 0):,.2f} "
                     f"(total ${drawdown.get('total_pnl', 0):,.2f})"
                     if drawdown.get("stop_active")

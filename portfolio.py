@@ -42,6 +42,21 @@ def _exit_side(entry_side):
     return "SELL" if str(entry_side or "BUY").upper() == "BUY" else "BUY"
 
 
+def _is_dust_position(entry_size, entry_value, marked_value=0.0, executable_value=0.0):
+    size_threshold = max(float(config.DUST_POSITION_MAX_SIZE or 0), 0.0)
+    value_threshold = max(float(config.DUST_POSITION_MAX_VALUE_USDC or 0), 0.0)
+    size_value = max(float(entry_size or 0), 0.0)
+    max_value = max(
+        max(float(entry_value or 0), 0.0),
+        max(float(marked_value or 0), 0.0),
+        max(float(executable_value or 0), 0.0),
+    )
+    return (
+        (size_threshold > 0 and size_value <= size_threshold + 1e-9)
+        or (value_threshold > 0 and max_value <= value_threshold + 1e-9)
+    )
+
+
 def _cache_get(bucket, key):
     cached = bucket.get(key)
     if cached and cached["expires_at"] > time.time():
@@ -338,6 +353,12 @@ def get_live_open_position_marks(limit=500):
             "group_item_title": mark_info.get("group_item_title", ""),
             "is_single_game_market": bool(mark_info.get("is_single_game_market")),
         }
+        position_row["is_dust_residual"] = _is_dust_position(
+            position_row["entry_size"],
+            position_row["entry_value"],
+            position_row["marked_value"],
+            position_row["executable_value"],
+        )
         if position_row["mark_available"]:
             _position_mark_cache[position_key] = {
                 "mark_price": position_row["mark_price"],
@@ -379,7 +400,9 @@ def get_live_drawdown_snapshot(limit=500, force=False):
 
     since_ts, stop_window_label = config.session_stop_window(now)
     live_summary = models.get_live_execution_summary(since_ts=since_ts)
-    positions = get_live_open_position_marks(limit=limit)
+    all_positions = get_live_open_position_marks(limit=limit)
+    dust_positions = [row for row in all_positions if row.get("is_dust_residual")]
+    positions = [row for row in all_positions if not row.get("is_dust_residual")]
     realized_pnl = round(float(live_summary.get("realized_pnl", 0) or 0), 4)
     entry_value = round(sum(float(row.get("entry_value", 0) or 0) for row in positions), 4)
     marked_value = round(sum(float(row.get("marked_value", 0) or 0) for row in positions), 4)
@@ -400,6 +423,10 @@ def get_live_drawdown_snapshot(limit=500, force=False):
         "computed_at": time.time(),
         "positions": positions,
         "open_position_count": len(positions),
+        "dust_positions": dust_positions,
+        "dust_position_count": len(dust_positions),
+        "dust_entry_value": round(sum(float(row.get("entry_value", 0) or 0) for row in dust_positions), 4),
+        "dust_marked_value": round(sum(float(row.get("marked_value", 0) or 0) for row in dust_positions), 4),
         "mark_failures": sum(1 for row in positions if not row.get("mark_available")),
         "entry_value": entry_value,
         "marked_value": marked_value,

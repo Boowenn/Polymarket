@@ -395,6 +395,8 @@ def get_dashboard_data():
             "session_stop_marked_value": drawdown.get("marked_value", 0),
             "session_stop_executable_value": drawdown.get("executable_value", 0),
             "session_stop_mark_failures": drawdown.get("mark_failures", 0),
+            "dust_position_count": drawdown.get("dust_position_count", 0),
+            "dust_position_value": drawdown.get("dust_marked_value", 0),
             "game_market_active_exit_enabled": config.game_market_active_exit_enabled(),
             "game_market_active_exit_price_ratio": config.GAME_MARKET_ACTIVE_EXIT_PRICE_RATIO,
             "game_market_active_exit_abs_drop": config.GAME_MARKET_ACTIVE_EXIT_ABS_DROP,
@@ -454,6 +456,8 @@ def get_dashboard_data():
             "signal_count": len(recent),
             "deployed_value": deployed_value,
             "open_position_count": open_position_count,
+            "dust_position_count": drawdown.get("dust_position_count", 0),
+            "dust_position_value": drawdown.get("dust_marked_value", 0),
         },
         "charts": {
             "pnl_curve": pnl_curve,

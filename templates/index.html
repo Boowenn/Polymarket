@@ -2472,6 +2472,9 @@ function renderSystem(config, stats, performance, liveExecution) {
   const maxTradeAbsoluteCap = Number(config.max_trade_absolute_cap || 0);
   const maxTradeHasAbsoluteCap = Boolean(config.max_trade_has_absolute_cap);
   const openOrderCount = Number(config.open_order_count || 0);
+  const dustPositionCount = Number(config.dust_position_count || stats.dust_position_count || 0);
+  const dustPositionValue = Number(config.dust_position_value || stats.dust_position_value || 0);
+  const dustNote = dustPositionCount > 0 ? ` · 已隐藏 dust ${dustPositionCount} 笔 / ${fmtMoney(dustPositionValue)}` : '';
   const walletText = String(config.poly_signature_type_label || 'EOA');
   const canaryText = config.small_bankroll_canary ? '超小额 live smoke test' : '实盘执行';
   const authText = liveAuthText(config);
@@ -2596,7 +2599,7 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('top-execution-state').className = `control-value ${config.dry_run ? 'amber' : (delayedOrderAlertCount > 0 ? 'amber' : (sessionStopActive ? 'red' : 'blue'))}`;
   document.getElementById('top-execution-note').textContent = config.dry_run
     ? `repeat-entry ${repeatText} · 空簿复查 ${noBookText}`
-    : `持仓 ${openPositionCount}/${maxPositions} · 挂单 ${openOrderCount} · 延迟 ${delayedOrderCount} · 单局主动退出 ${gameMarketActiveExitEnabled ? '开启' : '关闭'} · 自主止盈 ${autonomousTakeProfitEnabled ? '开启' : '关闭'}`;
+    : `持仓 ${openPositionCount}/${maxPositions} · 挂单 ${openOrderCount} · 延迟 ${delayedOrderCount}${dustNote} · 单局主动退出 ${gameMarketActiveExitEnabled ? '开启' : '关闭'} · 自主止盈 ${autonomousTakeProfitEnabled ? '开启' : '关闭'}`;
 
   let bannerClass = 'status-ok';
   let bannerText = '';
@@ -2691,7 +2694,7 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('sys-guards-label').textContent = config.dry_run ? '研究护栏' : '实盘护栏';
   document.getElementById('sys-guards').textContent = config.dry_run
     ? `单笔上限 ${fmtMoney(maxTradeValue)} · 确认 ${config.min_signal_confirm_sec || 0}s`
-    : `单笔 ${fmtMoney(maxTradeValue)} · 已部署 ${fmtMoney(deployedValue)} · 挂单 ${openOrderCount} · 持仓 ${openPositionCount}/${maxPositions}${delayedOrderCount > 0 ? ` · 延迟 ${delayedOrderCount}` : ''}${sessionStopEnabled ? ` · 止损 ${sessionStopActive ? '已触发' : '已布防'}` : ''}${gameMarketActiveExitEnabled ? ' · 单局主动退出已开' : ''}${autonomousTakeProfitEnabled ? ' · 自主止盈已开' : ''}`;
+    : `单笔 ${fmtMoney(maxTradeValue)} · 已部署 ${fmtMoney(deployedValue)} · 挂单 ${openOrderCount} · 持仓 ${openPositionCount}/${maxPositions}${delayedOrderCount > 0 ? ` · 延迟 ${delayedOrderCount}` : ''}${dustPositionCount > 0 ? ` · dust ${dustPositionCount}` : ''}${sessionStopEnabled ? ` · 止损 ${sessionStopActive ? '已触发' : '已布防'}` : ''}${gameMarketActiveExitEnabled ? ' · 单局主动退出已开' : ''}${autonomousTakeProfitEnabled ? ' · 自主止盈已开' : ''}`;
   document.getElementById('sys-experiments').textContent = config.dry_run
     ? `repeat-entry ${repeatText}；空簿延迟复查 ${noBookText}`
     : `${config.entry_engine_label || 'live-only'}；模拟盘 / shadow / experiment 已归档${config.autonomous_strategy_enabled ? `；自主策略只看 ${Number(config.autonomous_price_min || 0).toFixed(2)}-${Number(config.autonomous_price_max || 0).toFixed(2)} 的 Match Winner` : ''}`;
@@ -2788,7 +2791,7 @@ function renderSystem(config, stats, performance, liveExecution) {
 
     document.getElementById('s-open-positions').textContent = `${openPositionCount} / ${maxPositions}`;
     document.getElementById('s-open-positions').className = 'stat-value';
-    document.getElementById('s-open-positions-note').textContent = `只统计非 dry_run executed 持仓 · 挂单 ${openOrderCount} 笔`;
+    document.getElementById('s-open-positions-note').textContent = `只统计非 dry_run executed 持仓 · 挂单 ${openOrderCount} 笔${dustPositionCount > 0 ? ` · 已隐藏 dust ${dustPositionCount} 笔 / ${fmtMoney(dustPositionValue)}` : ''}`;
   }
 
   document.getElementById('s-buys').textContent = stats.buy_count;
@@ -2797,7 +2800,7 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('sidebar-footnote').textContent =
     config.dry_run
       ? `当前只看 ${scopeText}。Repeat-entry ${repeatText}，空簿延迟复查 ${noBookText}。指标口径保持 executed / shadow / experiment 分层。`
-      : `当前是真实资金 ${canaryText}：账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，只看 ${scopeText}。${autonomousEnabled && !copyEnabled ? '默认引擎已经切到自主扫描，不再依赖外部交易员。' : '模拟盘、shadow 和 experiment 已归档。'} 若订单低于市场最小单量，会直接跳过而不是强行放大仓位。${sessionStopEnabled ? ` 会话级止损阈值 ${fmtMoney(sessionStopLimit)}${sessionStopWindowLabel ? `（${sessionStopWindowLabel}）` : ''}，当前总盈亏 ${fmtSignedMoney(liveTotalPnl)}，当前估值 ${fmtMoney(sessionStopMarkedValue)}${sessionStopActive ? '，已暂停新开仓。' : '。'}` : ''}${gameMarketActiveExitEnabled ? ` 单局市场主动退出已开启；当盘口太薄时，会先用 Gamma 价格做风险估值。` : ''}${autonomousTakeProfitEnabled ? ` 自主 Match Winner 止盈也已开启；价格走到入场价 x${autonomousTakeProfitPriceRatio.toFixed(2)} 或绝对增益 ${fmtMoney(autonomousTakeProfitAbsGain)}、且账面盈利至少 ${fmtMoney(autonomousTakeProfitMinPnl)} 时，会尝试中途落袋。` : ''}`;
+      : `当前是真实资金 ${canaryText}：账户现金 ${accountCashText}，策略预算 ${fmtMoney(strategyBankroll)}，只看 ${scopeText}。${autonomousEnabled && !copyEnabled ? '默认引擎已经切到自主扫描，不再依赖外部交易员。' : '模拟盘、shadow 和 experiment 已归档。'} 若订单低于市场最小单量，会直接跳过而不是强行放大仓位。${dustPositionCount > 0 ? ` 当前另有 ${dustPositionCount} 笔 dust residual（${fmtMoney(dustPositionValue)}）已从主持仓口径隐藏。` : ''}${sessionStopEnabled ? ` 会话级止损阈值 ${fmtMoney(sessionStopLimit)}${sessionStopWindowLabel ? `（${sessionStopWindowLabel}）` : ''}，当前总盈亏 ${fmtSignedMoney(liveTotalPnl)}，当前估值 ${fmtMoney(sessionStopMarkedValue)}${sessionStopActive ? '，已暂停新开仓。' : '。'}` : ''}${gameMarketActiveExitEnabled ? ` 单局市场主动退出已开启；当盘口太薄时，会先用 Gamma 价格做风险估值。` : ''}${autonomousTakeProfitEnabled ? ` 自主 Match Winner 止盈也已开启；价格走到入场价 x${autonomousTakeProfitPriceRatio.toFixed(2)} 或绝对增益 ${fmtMoney(autonomousTakeProfitAbsGain)}、且账面盈利至少 ${fmtMoney(autonomousTakeProfitMinPnl)} 时，会尝试中途落袋。` : ''}`;
 }
 
 function highlightSections() {

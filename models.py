@@ -1563,6 +1563,7 @@ def get_block_reason_analysis(since_ts=None, sample_types=("shadow",), limit=10)
 
 
 def get_trade_journal_summary(since_ts=None, sample_types=None, experiment_key=None):
+    dust_clause = _dust_position_clause()
     sql = """
         SELECT
             COUNT(*) AS total_entries,
@@ -1592,6 +1593,8 @@ def get_trade_journal_summary(since_ts=None, sample_types=None, experiment_key=N
     if experiment_key is not None:
         clauses.append("COALESCE(experiment_key, '') = ?")
         params.append(str(experiment_key or ""))
+    if dust_clause != "0":
+        clauses.append(f"NOT {dust_clause}")
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
 
@@ -1619,7 +1622,32 @@ def _active_executed_status_clause():
     return "LOWER(COALESCE(entry_status, '')) NOT IN ('', 'dry_run')"
 
 
+def _entry_value_sql(prefix=""):
+    column_prefix = f"{prefix}." if prefix else ""
+    return (
+        f"COALESCE({column_prefix}entry_value, "
+        f"COALESCE({column_prefix}entry_size, 0) * "
+        f"COALESCE({column_prefix}protected_price, {column_prefix}tradable_price, {column_prefix}signal_price), 0)"
+    )
+
+
+def _dust_position_clause(prefix=""):
+    size_threshold = max(float(config.DUST_POSITION_MAX_SIZE or 0), 0.0)
+    value_threshold = max(float(config.DUST_POSITION_MAX_VALUE_USDC or 0), 0.0)
+    if size_threshold <= 0 and value_threshold <= 0:
+        return "0"
+
+    column_prefix = f"{prefix}." if prefix else ""
+    clauses = []
+    if size_threshold > 0:
+        clauses.append(f"COALESCE({column_prefix}entry_size, 0) <= {size_threshold:.8f}")
+    if value_threshold > 0:
+        clauses.append(f"{_entry_value_sql(prefix)} <= {value_threshold:.8f}")
+    return "(" + " OR ".join(clauses) + ")"
+
+
 def get_live_execution_summary(since_ts=None):
+    dust_clause = _dust_position_clause()
     sql = """
         SELECT
             COUNT(*) AS total_entries,
@@ -1640,6 +1668,8 @@ def get_live_execution_summary(since_ts=None):
           AND LOWER(COALESCE(entry_status, '')) NOT IN ('', 'dry_run')
     """
     params = []
+    if dust_clause != "0":
+        sql += f" AND NOT {dust_clause}"
     if since_ts is not None:
         sql += " AND entry_timestamp >= ?"
         params.append(float(since_ts))
@@ -2064,14 +2094,16 @@ def get_recent_pnl_log(limit=120):
 
 def get_daily_deployed_value():
     status_clause = _active_executed_status_clause()
+    dust_clause = _dust_position_clause()
     with db() as conn:
         row = conn.execute(
             f"""
-            SELECT COALESCE(SUM(COALESCE(entry_value, entry_size * COALESCE(protected_price, tradable_price, signal_price), 0)), 0) AS spent
+            SELECT COALESCE(SUM({_entry_value_sql()}), 0) AS spent
             FROM trade_journal
             WHERE COALESCE(sample_type, 'executed') = 'executed'
               AND exit_timestamp IS NULL
               AND {status_clause}
+              AND NOT {dust_clause}
             """
         ).fetchone()
     return row["spent"] if row else 0
@@ -2083,15 +2115,17 @@ def get_daily_pnl():
 
 def get_exposure_by_trader(wallet, lookback_sec=86400):
     status_clause = _active_executed_status_clause()
+    dust_clause = _dust_position_clause()
     with db() as conn:
         row = conn.execute(
             f"""
-            SELECT COALESCE(SUM(COALESCE(entry_value, entry_size * COALESCE(protected_price, tradable_price, signal_price), 0)), 0) AS exposure
+            SELECT COALESCE(SUM({_entry_value_sql()}), 0) AS exposure
             FROM trade_journal
             WHERE COALESCE(sample_type, 'executed') = 'executed'
               AND exit_timestamp IS NULL
               AND trader_wallet = ?
               AND {status_clause}
+              AND NOT {dust_clause}
             """,
             (wallet,),
         ).fetchone()
@@ -2100,13 +2134,15 @@ def get_exposure_by_trader(wallet, lookback_sec=86400):
 
 def get_exposure_by_market(condition_id, outcome=None, lookback_sec=86400):
     status_clause = _active_executed_status_clause()
+    dust_clause = _dust_position_clause()
     sql = f"""
-        SELECT COALESCE(SUM(COALESCE(entry_value, entry_size * COALESCE(protected_price, tradable_price, signal_price), 0)), 0) AS exposure
+        SELECT COALESCE(SUM({_entry_value_sql()}), 0) AS exposure
         FROM trade_journal
         WHERE COALESCE(sample_type, 'executed') = 'executed'
           AND exit_timestamp IS NULL
           AND condition_id = ?
           AND {status_clause}
+          AND NOT {dust_clause}
     """
     params = [condition_id]
     if outcome is not None:
@@ -2141,6 +2177,7 @@ def get_recent_risk_logs(limit=10):
 
 def get_open_position_count():
     status_clause = _active_executed_status_clause()
+    dust_clause = _dust_position_clause()
     with db() as conn:
         row = conn.execute(
             f"""
@@ -2149,6 +2186,7 @@ def get_open_position_count():
             WHERE COALESCE(sample_type, 'executed') = 'executed'
               AND exit_timestamp IS NULL
               AND {status_clause}
+              AND NOT {dust_clause}
             """
         ).fetchone()
     return row["cnt"] if row else 0
