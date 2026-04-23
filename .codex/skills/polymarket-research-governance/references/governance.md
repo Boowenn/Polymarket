@@ -80,7 +80,7 @@ When copy-trading is not trusted enough for live capital, default to a narrow ma
 - for esports, require `BO3` or `BO5` style match questions
 - keep the autonomous discovery horizon wide enough to see the next trading day; around `48h` is a better live default than `6h`
 - keep entries inside a moderate-underdog band such as `0.12-0.30`
-- keep autonomous sizing inside an executable small-bankroll band such as `$0.6-$1.5`
+- keep autonomous sizing inside an executable small-bankroll band such as `$0.6-$1.2`
 - for autonomous non-single-game `Match Winner` live positions, allow a separate take-profit rule once the mark has moved materially in your favor and the locked PnL is meaningful on a tiny bankroll
 
 This is a rollout policy, not proof of edge. Promotion still requires executed evidence.
@@ -105,7 +105,8 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
 - keep scope narrowed to the intended live segment, such as `sports,esports`
 - keep repeat-entry paused and avoid widening experiments
 - show live guardrails clearly in the dashboard: bankroll, deployed notional, remaining daily budget, max trade size, max positions, wallet type, and funder summary
-- for bankrolls around `$20`, prefer a real absolute single-trade cap such as `$0.6-$1.5`; cent-level caps like `$0.02-$0.08` are usually not executable once `min_order_size=5` is applied
+- for bankrolls around `$15-$20`, prefer a real absolute single-trade cap such as `$0.6-$1.2`; cent-level caps like `$0.02-$0.08` are usually not executable once `min_order_size=5` is applied
+- if live sample collection stays too slow while execution quality is otherwise acceptable, prefer raising `MAX_POSITIONS` from `1` to `2` before increasing the single-trade cap
 - prefer calendar-day session-stop enforcement in the repo's operating timezone (currently `Asia/Tokyo`), so a single bad live stretch pauses new entries for the rest of that JST day without permanently freezing the engine forever
 - reserve rolling-window enforcement for explicit trailing-stop experiments, not as the default live posture
 - if the user proposes even smaller sizing, verify it against real `min_order_size` and outcome price bands before accepting it as a live default

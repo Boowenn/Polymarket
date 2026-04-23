@@ -74,9 +74,9 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - keep new autonomous entries inside real `moneyline` match markets discovered with `sports_market_types=moneyline`
 - keep esports entries restricted to `BO3` / `BO5` style series markets
 - keep `repeat-entry` paused
-- prefer `MAX_POSITIONS=1` or `2`
+- for a `$15-$20` canary, prefer `MAX_POSITIONS=2` once auth/execution are stable enough to collect live samples
 - use a tight daily loss limit and daily risk budget
-- prefer an absolute single-trade cap such as `MAX_TRADE_VALUE_USDC=0.6` to `1.5` instead of relying only on `MAX_TRADE_PCT`; with Polymarket's `min_order_size=5`, cent-level caps like `$0.02-$0.08` are usually non-executable
+- prefer an absolute single-trade cap such as `MAX_TRADE_VALUE_USDC=0.6` to `1.2` instead of relying only on `MAX_TRADE_PCT`; with Polymarket's `min_order_size=5`, cent-level caps like `$0.02-$0.08` are usually non-executable
 - enable the live session stop so realized + marked unrealized drawdown can pause new entries before a tiny bankroll spirals
 - prefer `SESSION_STOP_MODE=calendar_day` with `SESSION_STOP_TIMEZONE=Asia/Tokyo`, so one bad day pauses the bot for the rest of that JST day without blocking the next day’s live sample collection
 - keep `SESSION_STOP_LOOKBACK_SEC` available only for explicit `trailing` mode
