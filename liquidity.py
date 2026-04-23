@@ -19,18 +19,25 @@ def _get_public_client():
     return _public_client
 
 
-def get_order_book(token_id):
+def get_order_book(token_id, allow_stale=False, return_meta=False):
     cached = _book_cache.get(token_id)
     now = time.monotonic()
     if cached and cached["expires_at"] > now:
-        return cached["book"]
+        return (cached["book"], False) if return_meta else cached["book"]
 
-    book = _get_public_client().get_order_book(token_id)
+    try:
+        book = _get_public_client().get_order_book(token_id)
+    except Exception:
+        if allow_stale and cached and cached.get("book") is not None:
+            logger.warning("Using stale cached orderbook for %s after fetch failure", token_id[:18])
+            return (cached["book"], True) if return_meta else cached["book"]
+        raise
+
     _book_cache[token_id] = {
         "book": book,
         "expires_at": now + max(config.ORDERBOOK_CACHE_SEC, 0.5),
     }
-    return book
+    return (book, False) if return_meta else book
 
 
 def _levels_for_side(book, side):
@@ -159,7 +166,7 @@ def _estimate_execution_from_book(book, side, order_size, reference_price):
     return assessment
 
 
-def estimate_execution(signal, order_size):
+def estimate_execution(signal, order_size, allow_stale_book=False):
     token_id = signal.get("token_id", "")
     if not token_id:
         return _empty_execution_estimate("missing token_id")
@@ -168,22 +175,35 @@ def estimate_execution(signal, order_size):
 
     reference_price = float(signal.get("price", 0) or 0)
     try:
-        book = get_order_book(token_id)
+        book, stale_fallback = get_order_book(
+            token_id,
+            allow_stale=allow_stale_book,
+            return_meta=True,
+        )
     except Exception as exc:
         logger.warning("Orderbook fetch failed for %s: %s", token_id[:18], exc)
         return _empty_execution_estimate(f"orderbook unavailable: {exc}", reference_price)
 
-    return _estimate_execution_from_book(
+    assessment = _estimate_execution_from_book(
         book,
         str(signal.get("side", "BUY") or "BUY").upper(),
         order_size,
         reference_price,
     )
+    assessment["stale_fallback"] = bool(stale_fallback)
+    if stale_fallback and not assessment.get("reason"):
+        assessment["reason"] = "using stale cached orderbook after fetch failure"
+    return assessment
 
 
 def assess_execution(signal, order_size):
     assessment = estimate_execution(signal, order_size)
     if not assessment.get("mark_available"):
+        return assessment
+
+    if assessment.get("stale_fallback"):
+        assessment["ok"] = False
+        assessment["reason"] = "orderbook fetch failed; stale cached book is mark-only"
         return assessment
 
     min_order_size = float(assessment.get("min_order_size", 0) or 0)

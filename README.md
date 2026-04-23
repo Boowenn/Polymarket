@@ -89,12 +89,14 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - keep the real `.env` local-only; do not commit private keys or live wallet settings
 - read the dashboard as a live-only view: real account cash, current guardrails, and true executed fills
 - keep only one active execution loop writing to the live DB; if you need another browser/view process, let it attach in dashboard-only mode instead of starting a second trader loop
+- if you use synthetic engines such as autonomous or consensus, keep their system wallets registered in SQLite before recording `trades`, otherwise foreign-key enforcement can kill live sample collection
 - if a live order stays in local `delayed` state beyond the alert threshold, surface it clearly in the dashboard before changing sizing or execution rules
 - automatically re-query delayed live orders and write them back as matched / canceled / expired before treating them as unresolved execution failures
 - only mark `opposite_signal` exits after your own mirrored opposite-side fill is actually booked; a raw trader sell signal alone should not close your live journal
 - for the first live stop, prefer a session-level drawdown cap over a per-position `%` stop; Polymarket has no native stop order, so a brittle price-percent trigger can misfire in sports/esports books
 - for single-game markets such as `game1/game2/game3`, enable the dedicated active exit guard so the bot can try to flatten before settlement if the market rapidly moves against the mirrored position
 - when the order book goes thin, use Gamma outcome prices as the live mark fallback so single-game losses do not get hidden as `$0.00` unrealized drawdown
+- if the orderbook fetch itself blips but you still have a recent valid live mark, preserve that cached mark for drawdown visibility instead of snapping the position back to entry basis
 - when switching from dry run to live, old `dry_run` positions should not consume the live bankroll, open-position count, or deployed-risk view
 - remember that many Polymarket markets require a `min_order_size` of `5` shares, so tiny bankrolls will naturally skip many higher-priced contracts rather than force larger size
 

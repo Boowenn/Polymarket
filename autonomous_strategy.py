@@ -443,8 +443,27 @@ def build_autonomous_signals():
     )
     built = built[: config.AUTONOMOUS_MAX_SIGNALS_PER_CYCLE]
 
+    recorded = []
     for signal in built:
-        models.insert_trade(signal)
+        try:
+            models.insert_trade(signal)
+            recorded.append(signal)
+        except Exception as exc:
+            logger.warning(
+                "Failed to record autonomous signal %s / %s: %s",
+                signal.get("market_slug", ""),
+                signal.get("outcome", ""),
+                exc,
+            )
+            try:
+                models.log_risk_event(
+                    "AUTONOMOUS_RECORD_ERROR",
+                    f"{signal.get('market_slug', '')[:42]} {signal.get('outcome', '')[:24]}",
+                    str(exc),
+                )
+            except Exception:
+                pass
+    built = recorded
 
     if built:
         logger.info(

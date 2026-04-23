@@ -11,6 +11,8 @@ _DB_CONNECT_LOCK = threading.Lock()
 _DB_TIMEOUT_SEC = 30.0
 _DB_BUSY_TIMEOUT_MS = 30_000
 _WAL_INITIALIZED = False
+_SQLITE_WRITE_RETRIES = 3
+_SQLITE_WRITE_RETRY_BASE_SEC = 0.15
 
 
 BLOCK_REASON_META = {
@@ -231,6 +233,83 @@ def _scalar(conn, query, params=()):
     return row[0]
 
 
+def _is_sqlite_locked(exc):
+    return "database is locked" in str(exc or "").strip().lower()
+
+
+def _run_write_with_retry(writer, retries=_SQLITE_WRITE_RETRIES):
+    attempts = max(int(retries or 0), 1)
+    for attempt in range(1, attempts + 1):
+        try:
+            return writer()
+        except sqlite3.OperationalError as exc:
+            if not _is_sqlite_locked(exc) or attempt >= attempts:
+                raise
+            time.sleep(_SQLITE_WRITE_RETRY_BASE_SEC * attempt)
+
+
+def _placeholder_trader_username(wallet, username=""):
+    wallet = str(wallet or "").strip()
+    username = str(username or "").strip()
+    if username:
+        return username
+    if wallet == "system_autonomous":
+        return "Autonomy"
+    if wallet == "system_consensus":
+        return "Consensus"
+    return wallet[:12] if wallet else "Unknown"
+
+
+def _placeholder_trader_rank(wallet):
+    wallet = str(wallet or "").strip()
+    if wallet.startswith("system_"):
+        return 9_999_999
+    return 9_000_000
+
+
+def _ensure_trader_reference(conn, wallet, username=""):
+    wallet = str(wallet or "").strip()
+    if not wallet:
+        return
+
+    username = _placeholder_trader_username(wallet, username)
+    now = time.time()
+    conn.execute(
+        """
+        INSERT INTO traders (wallet, username, rank, pnl, volume, last_updated)
+        VALUES (?, ?, ?, 0, 0, ?)
+        ON CONFLICT(wallet) DO UPDATE SET
+            username = CASE
+                WHEN COALESCE(traders.username, '') = '' THEN excluded.username
+                ELSE traders.username
+            END,
+            last_updated = MAX(COALESCE(traders.last_updated, 0), excluded.last_updated)
+        """,
+        (wallet, username, _placeholder_trader_rank(wallet), now),
+    )
+
+
+def _backfill_missing_trader_references(conn):
+    rows = conn.execute(
+        """
+        SELECT wallet, MAX(username) AS username
+        FROM (
+            SELECT trader_wallet AS wallet, '' AS username
+            FROM trades
+            WHERE COALESCE(trader_wallet, '') != ''
+            UNION ALL
+            SELECT trader_wallet AS wallet, COALESCE(trader_username, '') AS username
+            FROM trade_journal
+            WHERE COALESCE(trader_wallet, '') != ''
+        ) refs
+        WHERE wallet NOT IN (SELECT wallet FROM traders)
+        GROUP BY wallet
+        """
+    ).fetchall()
+    for row in rows:
+        _ensure_trader_reference(conn, row["wallet"], row["username"])
+
+
 def init_db():
     with db() as conn:
         conn.execute("PRAGMA journal_mode=WAL")
@@ -391,6 +470,7 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_journal_sample_experiment ON trade_journal(sample_type, experiment_key, entry_timestamp DESC);
             """
         )
+        _backfill_missing_trader_references(conn)
 
 
 def get_non_live_data_counts():
@@ -556,6 +636,7 @@ def upsert_trader_profile(
     last_activity_ts=0,
 ):
     with db() as conn:
+        _ensure_trader_reference(conn, wallet)
         conn.execute(
             """INSERT INTO trader_profiles (
                    wallet, status, quality_score, risk_flags, profile_note,
@@ -684,6 +765,7 @@ def record_trader_profile_snapshot(trader, profile, force=False):
     interval_sec = max(int(config.PROFILE_HISTORY_INTERVAL_SEC or 0), 60)
 
     with db() as conn:
+        _ensure_trader_reference(conn, trader.get("wallet", ""), trader.get("username", ""))
         latest = conn.execute(
             """
             SELECT *
@@ -805,30 +887,38 @@ def get_recent_autonomous_trade_attempt(condition_id, outcome, side, within_sec=
 
 
 def insert_trade(trade):
-    with db() as conn:
-        conn.execute(
-            """INSERT OR IGNORE INTO trades (
-                   id, trader_wallet, condition_id, token_id, market_slug, market_scope, outcome,
-                   side, size, price, timestamp, signal_source, signal_score, signal_note
-               )
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                trade["id"],
-                trade["trader_wallet"],
-                trade.get("condition_id", ""),
-                trade.get("token_id", ""),
-                trade.get("market_slug", ""),
-                trade.get("market_scope", ""),
-                trade.get("outcome", ""),
-                trade.get("side", "BUY"),
-                float(trade.get("size", 0) or 0),
-                float(trade.get("price", 0) or 0),
-                float(trade.get("timestamp", time.time()) or time.time()),
-                trade.get("signal_source", "copy"),
-                float(trade.get("signal_score", 0) or 0),
-                trade.get("signal_note", ""),
-            ),
-        )
+    def _writer():
+        with db() as conn:
+            _ensure_trader_reference(
+                conn,
+                trade.get("trader_wallet", ""),
+                trade.get("trader_username", ""),
+            )
+            conn.execute(
+                """INSERT OR IGNORE INTO trades (
+                       id, trader_wallet, condition_id, token_id, market_slug, market_scope, outcome,
+                       side, size, price, timestamp, signal_source, signal_score, signal_note
+                   )
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    trade["id"],
+                    trade["trader_wallet"],
+                    trade.get("condition_id", ""),
+                    trade.get("token_id", ""),
+                    trade.get("market_slug", ""),
+                    trade.get("market_scope", ""),
+                    trade.get("outcome", ""),
+                    trade.get("side", "BUY"),
+                    float(trade.get("size", 0) or 0),
+                    float(trade.get("price", 0) or 0),
+                    float(trade.get("timestamp", time.time()) or time.time()),
+                    trade.get("signal_source", "copy"),
+                    float(trade.get("signal_score", 0) or 0),
+                    trade.get("signal_note", ""),
+                ),
+            )
+
+    _run_write_with_retry(_writer)
 
 
 def mark_trade_mirrored(trade_id, order_id, side, size, price, status):
@@ -948,51 +1038,59 @@ def upsert_trade_journal(
     entry_reason="",
 ):
     journal_trade_id = trade_id or signal["id"]
-    with db() as conn:
-        conn.execute(
-            """
-            INSERT INTO trade_journal (
-                trade_id, trader_wallet, trader_username, condition_id, token_id,
-                market_slug, market_scope, outcome, entry_side, signal_source, signal_price,
-                tradable_price, protected_price, entry_size, entry_value,
-                entry_timestamp, entry_status, sample_type, experiment_key, entry_reason
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(trade_id) DO UPDATE SET
-                trader_username=excluded.trader_username,
-                market_scope=excluded.market_scope,
-                tradable_price=excluded.tradable_price,
-                protected_price=excluded.protected_price,
-                entry_size=excluded.entry_size,
-                entry_value=excluded.entry_value,
-                entry_status=excluded.entry_status,
-                sample_type=excluded.sample_type,
-                experiment_key=excluded.experiment_key,
-                entry_reason=excluded.entry_reason
-            """,
-            (
-                journal_trade_id,
+    def _writer():
+        with db() as conn:
+            _ensure_trader_reference(
+                conn,
                 signal.get("trader_wallet", ""),
                 signal.get("trader_username", ""),
-                signal.get("condition_id", ""),
-                signal.get("token_id", ""),
-                signal.get("market_slug", ""),
-                signal.get("market_scope", ""),
-                signal.get("outcome", ""),
-                signal.get("side", "BUY"),
-                signal.get("signal_source", "copy"),
-                float(signal.get("price", 0) or 0),
-                float(tradable_price) if tradable_price is not None else None,
-                float(protected_price) if protected_price is not None else None,
-                float(size or 0),
-                float(value or 0),
-                float(signal.get("timestamp", time.time()) or time.time()),
-                status,
-                sample_type,
-                experiment_key,
-                entry_reason,
-            ),
-        )
+            )
+            conn.execute(
+                """
+                INSERT INTO trade_journal (
+                    trade_id, trader_wallet, trader_username, condition_id, token_id,
+                    market_slug, market_scope, outcome, entry_side, signal_source, signal_price,
+                    tradable_price, protected_price, entry_size, entry_value,
+                    entry_timestamp, entry_status, sample_type, experiment_key, entry_reason
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(trade_id) DO UPDATE SET
+                    trader_username=excluded.trader_username,
+                    market_scope=excluded.market_scope,
+                    tradable_price=excluded.tradable_price,
+                    protected_price=excluded.protected_price,
+                    entry_size=excluded.entry_size,
+                    entry_value=excluded.entry_value,
+                    entry_status=excluded.entry_status,
+                    sample_type=excluded.sample_type,
+                    experiment_key=excluded.experiment_key,
+                    entry_reason=excluded.entry_reason
+                """,
+                (
+                    journal_trade_id,
+                    signal.get("trader_wallet", ""),
+                    signal.get("trader_username", ""),
+                    signal.get("condition_id", ""),
+                    signal.get("token_id", ""),
+                    signal.get("market_slug", ""),
+                    signal.get("market_scope", ""),
+                    signal.get("outcome", ""),
+                    signal.get("side", "BUY"),
+                    signal.get("signal_source", "copy"),
+                    float(signal.get("price", 0) or 0),
+                    float(tradable_price) if tradable_price is not None else None,
+                    float(protected_price) if protected_price is not None else None,
+                    float(size or 0),
+                    float(value or 0),
+                    float(signal.get("timestamp", time.time()) or time.time()),
+                    status,
+                    sample_type,
+                    experiment_key,
+                    entry_reason,
+                ),
+            )
+
+    _run_write_with_retry(_writer)
 
 
 def close_open_journal_entries(
