@@ -79,11 +79,11 @@ When copy-trading is not trusted enough for live capital, default to a narrow ma
 - exclude `game1/game2/game3` child markets from new autonomous entries
 - for esports, require `BO3` or `BO5` style match questions
 - keep the autonomous discovery horizon wide enough to see the next trading day; around `48h` is a better live default than `6h`
-- keep entries inside a balanced executable band such as `0.18-0.45`
-- keep a preferred target near the middle of that band, for example around `0.32`, so the selector does not mechanically reward the cheapest side
-- keep autonomous sizing inside an executable small-bankroll band such as `$0.6-$1.2`
+- keep entries inside a sturdier executable band such as `0.26-0.50`
+- keep a preferred target in the safer half of that band, for example around `0.38`, so the selector does not mechanically reward the cheapest side
+- keep autonomous sizing inside an executable small-bankroll band that can still clear `5` shares in the safer half of that price band; around `$0.6-$2.5` is more realistic than a hard `$1.2-$1.5` ceiling if you want to avoid defaulting back into deep underdogs
 - for autonomous non-single-game `Match Winner` live positions, keep two softer exits:
-  a gentle protective exit once the marked loss is both meaningful in dollars and materially worse than entry, and a separate take-profit rule once the mark has moved materially in your favor and the locked PnL is meaningful on a tiny bankroll
+  an earlier protective exit once the marked loss is already meaningful in dollars on a tiny bankroll, and a separate take-profit rule that is willing to bank smaller wins instead of waiting for a huge repricing
 - if an autonomous candidate was only blocked, unmirrored, or execution-error'd, allow it to retry after a short cooldown such as `10-30` minutes instead of treating the first row in `trades` as a permanent ban
 
 This is a rollout policy, not proof of edge. Promotion still requires executed evidence.

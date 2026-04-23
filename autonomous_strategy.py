@@ -244,9 +244,12 @@ def _score_candidate(row, price_value, min_order_value, assessment):
     elif lead_sec >= config.AUTONOMOUS_MIN_EVENT_LEAD_SEC:
         score += 4
 
-    score += round(max(0.0, 1.0 - min(price_distance / band_half_width, 1.0)) * 8, 1)
+    score += round(max(0.0, 1.0 - min(price_distance / band_half_width, 1.0)) * 7, 1)
     if price_value >= price_target:
-        score += 1
+        score += 3
+    else:
+        under_target_ratio = min((price_target - price_value) / band_half_width, 1.0)
+        score -= round(under_target_ratio * 3, 1)
 
     if spread <= max(config.MAX_BOOK_SPREAD / 2, 0.01):
         score += 6
@@ -303,6 +306,7 @@ def _candidate_preference_key(pair):
     price_value = float(pair.get("price") or 0)
     price_target = config.autonomous_price_target()
     return (
+        0 if price_value >= price_target else 1,
         abs(price_value - price_target),
         -price_value,
         str(pair.get("outcome") or ""),

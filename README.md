@@ -120,15 +120,16 @@ The default autonomous live path is intentionally narrow:
 - for esports, expect `groupItemTitle` to read `Match Winner`; for traditional sports, allow the title to be blank when the market is still a moneyline match
 - skip `game1/game2/game3` child markets
 - for esports, require `BO3` or `BO5` in the match question
-- probe a balanced executable band such as `0.18-0.45`, and aim near the middle of that band instead of blindly chasing the cheapest side
+- probe a sturdier executable band such as `0.26-0.50`, and aim in the safer half of that band instead of drifting back into deep underdogs
 - size inside a small executable band rather than a pure percentage of bankroll
-- for live autonomous `Match Winner` entries, allow a proactive take-profit once the mark reprices to a clearly better level and the locked-in PnL is meaningful on a tiny bankroll
-- for live autonomous non-single-game `Match Winner` entries, allow a separate protective exit once the mark has deteriorated enough to matter in dollars, so the bot can defend capital without turning into a hyperactive stop bot
+- for live autonomous `Match Winner` entries, allow a proactive take-profit that is willing to bank smaller wins on a tiny bankroll instead of waiting for a huge repricing
+- for live autonomous non-single-game `Match Winner` entries, allow a separate protective exit earlier, once the marked loss is already meaningful on a tiny bankroll
 - when a live active exit is smaller than the journal entry because wallet holdings are lower than expected, sell the real available size and let the journal remainder stay open instead of retrying an impossible full-size order
 - before a live autonomous or copy `BUY` is accepted, require a small exit-safe share buffer above the raw `min_order_size`, so a partial live fill is less likely to strand the bot below the exchange's later sell minimum
 - if the operator manually buys or sells from the same live wallet, pull that wallet's activity and reconcile the open journal by token so the dashboard reflects true remaining size instead of stale bot-only bookkeeping
 - if manual reconciliation leaves a tiny residual below a dust threshold, hide that dust from the main live dashboard, deployed-risk, and open-position counts so the UI reflects economically meaningful exposure
 - do not permanently dedupe blocked autonomous candidates by market/outcome alone; use a short retry cooldown instead so improved capital or position settings can unlock the same candidate later in the day
+- if you want to move away from deep-underdog behavior on a tiny bankroll, remember that the execution ceiling has to move with the price band; a `5`-share market priced around `0.50` needs about `$2.50`, so a hard `$1.50` cap structurally forces the engine back toward cheaper contracts
 
 This setup was chosen because Polymarket exposes enough public sports metadata and market data to build a market-first strategy without relying on trader activity, while official order book endpoints expose `min_order_size`, making sub-dollar sizing infeasible for many contracts on tiny bankrolls.
 

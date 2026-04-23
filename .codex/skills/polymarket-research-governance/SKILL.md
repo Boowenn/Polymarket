@@ -43,12 +43,13 @@ Use this skill as the repo's governance entrypoint for research and execution ch
    Synthetic engines such as `system_autonomous` or `system_consensus` still need stable trader references in SQLite before writing `trades`, otherwise live runtime errors can silently kill sample collection.
 14. On tiny live bankrolls, do not force every autonomous entry to ride all the way to settlement.
    Keep session stop-loss as the first hard guard, but add two softer autonomous `Match Winner` exits for non-single-game markets:
-   a gentle protective exit once the marked loss is both meaningful in dollars and materially worse than entry, and a separate proactive take-profit once the mark has repriced materially in your favor and the locked PnL is meaningful.
+   an earlier protective exit once the marked loss is already meaningful on a tiny bankroll, and a separate proactive take-profit that is willing to bank smaller wins instead of waiting for a huge repricing.
    When a proactive exit fires, size the exit from real conditional-token balance and allowance, not just the journal entry size; if the wallet can only sell part of the position, close only that matched size and keep the remainder open.
    For live `BUY` entries, require a small exit-safe share buffer above the exchange `min_order_size`; a contract that is only barely buyable can become impossible to SELL back out once the true filled size lands below the later sell minimum.
    Keep the last valid live mark in durable runtime state, not only process memory, so a restarted dashboard or one-off observer process can still preserve drawdown visibility during short orderbook/Gamma fetch outages.
    If the operator manually trades from the same live wallet, reconcile that wallet activity back into the open journal by token before trusting open-position counts, realized PnL, or active-exit decisions.
    If that reconciliation leaves only sub-cent / sub-share dust, keep the dust row for auditability but exclude it from primary live exposure, deployed-value, and open-position metrics.
+   If you want to move away from deep-underdog behavior, raise the executable autonomous band and the tiny-bankroll trade ceiling together; a `5`-share market around `0.50` needs roughly `$2.50`, so a hard `$1.50` ceiling structurally pushes the engine back toward cheap underdogs.
 15. When governance changes land, update this skill and the repo README in the same change.
 16. In live mode, keep exactly one active execution loop per runtime DB.
    If a second `main.py` or `web.py` is started, it should not launch another trading loop against the same `copybot.db`; secondary processes should degrade to UI-only / observer mode instead of racing SQLite writes.
