@@ -77,6 +77,8 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - for a `$15-$20` canary, prefer `MAX_POSITIONS=2` once auth/execution are stable enough to collect live samples
 - use a tight daily loss limit and daily risk budget
 - prefer an absolute single-trade cap such as `MAX_TRADE_VALUE_USDC=0.6` to `1.2` instead of relying only on `MAX_TRADE_PCT`; with Polymarket's `min_order_size=5`, cent-level caps like `$0.02-$0.08` are usually non-executable
+- allow blocked or failed autonomous candidates to retry after a short cooldown such as `10-30` minutes instead of suppressing them forever; keep dedupe only for still-open positions, unresolved live orders, and recent successful fills
+- remember that marketable `BUY` orders can still be rejected below roughly `$1` notional even when the displayed `min_order_size` is only `5` shares; keep a conservative `MARKETABLE_BUY_MIN_VALUE_USDC` floor in the live canary
 - enable the live session stop so realized + marked unrealized drawdown can pause new entries before a tiny bankroll spirals
 - prefer `SESSION_STOP_MODE=calendar_day` with `SESSION_STOP_TIMEZONE=Asia/Tokyo`, so one bad day pauses the bot for the rest of that JST day without blocking the next day’s live sample collection
 - keep `SESSION_STOP_LOOKBACK_SEC` available only for explicit `trailing` mode
@@ -109,6 +111,7 @@ The default autonomous live path is intentionally narrow:
 - probe only a moderate underdog band, not pure longshots
 - size inside a small executable band rather than a pure percentage of bankroll
 - for live autonomous `Match Winner` entries, allow a proactive take-profit once the mark reprices to a clearly better level and the locked-in PnL is meaningful on a tiny bankroll
+- do not permanently dedupe blocked autonomous candidates by market/outcome alone; use a short retry cooldown instead so improved capital or position settings can unlock the same candidate later in the day
 
 This setup was chosen because Polymarket exposes enough public sports metadata and market data to build a market-first strategy without relying on trader activity, while official order book endpoints expose `min_order_size`, making sub-dollar sizing infeasible for many contracts on tiny bankrolls.
 

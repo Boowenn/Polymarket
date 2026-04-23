@@ -732,6 +732,45 @@ def trade_exists(trade_id):
     return row is not None
 
 
+def has_open_autonomous_position(condition_id, outcome, side="BUY"):
+    with db() as conn:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM trade_journal
+            WHERE condition_id = ?
+              AND outcome = ?
+              AND entry_side = ?
+              AND exit_timestamp IS NULL
+              AND sample_type = 'executed'
+              AND COALESCE(signal_source, 'copy') = 'autonomous'
+            LIMIT 1
+            """,
+            (condition_id, outcome, side),
+        ).fetchone()
+    return row is not None
+
+
+def get_recent_autonomous_trade_attempt(condition_id, outcome, side, within_sec=None):
+    sql = """
+        SELECT *
+        FROM trades
+        WHERE condition_id = ?
+          AND outcome = ?
+          AND side = ?
+          AND COALESCE(signal_source, 'copy') = 'autonomous'
+    """
+    params = [condition_id, outcome, side]
+    if within_sec is not None and float(within_sec or 0) > 0:
+        sql += " AND timestamp >= ?"
+        params.append(time.time() - float(within_sec or 0))
+    sql += " ORDER BY timestamp DESC LIMIT 1"
+
+    with db() as conn:
+        row = conn.execute(sql, params).fetchone()
+    return dict(row) if row else None
+
+
 def insert_trade(trade):
     with db() as conn:
         conn.execute(

@@ -105,6 +105,7 @@ def first_run_setup():
         f.write(f"MAX_ORDERBOOK_AGE_SEC=15\n")
         f.write(f"MAX_BOOK_SPREAD=0.03\n")
         f.write(f"MIN_TOP_LEVEL_LIQUIDITY_USDC=25\n")
+        f.write(f"MARKETABLE_BUY_MIN_VALUE_USDC=1.0\n")
         f.write(f"MAX_BOOK_PRICE_DRIFT=0.02\n")
         f.write(f"MAX_BOOK_PRICE_IMPACT=0.02\n")
         f.write(f"SETTLEMENT_POLL_SEC=120\n")
@@ -135,6 +136,7 @@ def first_run_setup():
         f.write(f"AUTONOMOUS_MAX_CANDIDATES_PER_TAG=80\n")
         f.write(f"AUTONOMOUS_MAX_SIGNALS_PER_CYCLE=3\n")
         f.write(f"AUTONOMOUS_REQUIRE_ESPORTS_SERIES=true\n")
+        f.write(f"AUTONOMOUS_RETRY_COOLDOWN_SEC=1200\n")
         f.write(f"MIN_AUTONOMOUS_SCORE=68\n")
         f.write(f"REPORT_DEFAULT_DAYS=3\n")
 
@@ -211,7 +213,8 @@ def show_banner():
         console.print(
             f"  Auto Plan: underdog band [cyan]{config.AUTONOMOUS_MIN_PRICE:.2f}-{config.AUTONOMOUS_MAX_PRICE:.2f}[/cyan], "
             f"event lead [cyan]{config.AUTONOMOUS_MIN_EVENT_LEAD_SEC//60}min-{config.AUTONOMOUS_MAX_EVENT_LEAD_SEC//3600}h[/cyan], "
-            f"trade range [cyan]${config.effective_autonomous_trade_floor():.2f}-${config.effective_autonomous_trade_ceiling():.2f}[/cyan]"
+            f"trade range [cyan]${config.effective_autonomous_trade_floor():.2f}-${config.effective_autonomous_trade_ceiling():.2f}[/cyan], "
+            f"retry cooldown [cyan]{int(config.AUTONOMOUS_RETRY_COOLDOWN_SEC or 0)//60}m[/cyan]"
         )
         if config.autonomous_take_profit_enabled():
             console.print(

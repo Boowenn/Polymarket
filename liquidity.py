@@ -129,6 +129,8 @@ def _estimate_execution_from_book(book, side, order_size, reference_price):
     tick_size = float(book.tick_size or 0.01)
     min_order_size = float(getattr(book, "min_order_size", 0) or 0)
     min_order_value = min_order_size * best_price if min_order_size > 0 else 0.0
+    if side == "BUY":
+        min_order_value = max(min_order_value, float(config.MARKETABLE_BUY_MIN_VALUE_USDC or 0))
     limit_price = _round_limit_price(worst_price, tick_size, side)
 
     assessment = {

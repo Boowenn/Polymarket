@@ -24,7 +24,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 6. Before claiming live-readiness, verify wallet auth with a read-only CLOB call.
    For Polymarket proxy wallets, require the correct `POLY_SIGNATURE_TYPE` and `POLY_FUNDER` from the account settings page before any live canary.
 7. For tiny live bankrolls, prefer a smoke-test mindset over a sizing mindset.
-   Surface real guardrails in the dashboard, keep `.env` local-only, block sub-minimum market sizes instead of auto-inflating order size, explicitly alert on live orders that stay `delayed` beyond the configured threshold, and auto-reconcile those delayed orders back to their final CLOB status before drawing conclusions. For bankrolls around `$15-$20`, prefer a small absolute cap such as `$0.6-$1.2` per trade over a pure percentage cap; cent-level caps are usually non-executable because Polymarket books commonly require `min_order_size=5`. If live sample collection is too slow and execution is otherwise healthy, prefer lifting `MAX_POSITIONS` from `1` to `2` before increasing per-trade size.
+   Surface real guardrails in the dashboard, keep `.env` local-only, block sub-minimum market sizes instead of auto-inflating order size, explicitly alert on live orders that stay `delayed` beyond the configured threshold, and auto-reconcile those delayed orders back to their final CLOB status before drawing conclusions. For bankrolls around `$15-$20`, prefer a small absolute cap such as `$0.6-$1.2` per trade over a pure percentage cap; cent-level caps are usually non-executable because Polymarket books commonly require `min_order_size=5`. Also remember that live marketable `BUY` orders can still fail below about `$1` notional even when `min_order_size` looks satisfied, so keep a separate notional floor for tiny live entries. If live sample collection is too slow and execution is otherwise healthy, prefer lifting `MAX_POSITIONS` from `1` to `2` before increasing per-trade size.
 8. For the first real-money stop, prefer a session-level drawdown cap over a position `%` stop.
    Prefer a calendar-day reset in the repo's operating timezone (for example `Asia/Tokyo`) so one bad live stretch pauses new entries for the rest of that trading day without permanently locking the bot forever.
    Keep trailing-window mode available only when explicitly needed.
@@ -39,6 +39,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 13. Default to a market-first autonomous engine before trusting trader-first copy engines on a tiny bankroll.
    For sports and esports, discover candidates directly from Gamma `markets` using `sports_market_types=moneyline`, exclude `game1/game2/game3` child markets, keep esports entries to `BO3` / `BO5` style series matches, and use a moderate-underdog price band instead of chasing very high-probability favorites or pure lottery longshots.
    On live scanning, prefer a forward window closer to `48h` than `6h`, otherwise the bot can easily spend whole evenings with zero viable candidates.
+   Do not permanently suppress a candidate just because one earlier attempt was blocked or failed; allow the same autonomous market/outcome to retry after a short cooldown once capital, position count, or execution conditions improve.
 14. On tiny live bankrolls, do not force every good autonomous entry to ride all the way to settlement.
    Keep session stop-loss as the first hard guard, but allow a separate proactive take-profit for autonomous non-single-game `Match Winner` positions once the mark has repriced materially in your favor and the locked PnL is meaningful in dollar terms.
 15. When governance changes land, update this skill and the repo README in the same change.
@@ -57,6 +58,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never mark single-game live positions at entry value just because the order book is empty; use a real fallback mark before claiming drawdown is zero.
 - Never auto-close more journal size than the bot actually sold when a proactive exit only fills partially.
 - Never update governance text without checking whether the baseline date and numbers are still current.
+- Never dedupe autonomous candidates forever just because a previous row exists in `trades`; blocked, unmirrored, or execution-error attempts need a retry path with cooldown.
 - Never claim that autonomous live positions have a take-profit policy unless the exit logic, dashboard copy, and `.env.example` all expose the same thresholds.
 
 ## References

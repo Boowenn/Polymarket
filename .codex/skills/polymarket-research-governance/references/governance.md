@@ -82,6 +82,7 @@ When copy-trading is not trusted enough for live capital, default to a narrow ma
 - keep entries inside a moderate-underdog band such as `0.12-0.30`
 - keep autonomous sizing inside an executable small-bankroll band such as `$0.6-$1.2`
 - for autonomous non-single-game `Match Winner` live positions, allow a separate take-profit rule once the mark has moved materially in your favor and the locked PnL is meaningful on a tiny bankroll
+- if an autonomous candidate was only blocked, unmirrored, or execution-error'd, allow it to retry after a short cooldown such as `10-30` minutes instead of treating the first row in `trades` as a permanent ban
 
 This is a rollout policy, not proof of edge. Promotion still requires executed evidence.
 
@@ -106,7 +107,9 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
 - keep repeat-entry paused and avoid widening experiments
 - show live guardrails clearly in the dashboard: bankroll, deployed notional, remaining daily budget, max trade size, max positions, wallet type, and funder summary
 - for bankrolls around `$15-$20`, prefer a real absolute single-trade cap such as `$0.6-$1.2`; cent-level caps like `$0.02-$0.08` are usually not executable once `min_order_size=5` is applied
+- keep a separate marketable-`BUY` notional floor near `$1.00`; on tiny underdog contracts the exchange can reject `$0.65-$0.80` orders even when the visible `min_order_size` is already satisfied
 - if live sample collection stays too slow while execution quality is otherwise acceptable, prefer raising `MAX_POSITIONS` from `1` to `2` before increasing the single-trade cap
+- once `MAX_POSITIONS` or bankroll settings change, make sure previously blocked autonomous candidates can re-enter the funnel after cooldown instead of staying permanently hidden behind stale dedupe
 - prefer calendar-day session-stop enforcement in the repo's operating timezone (currently `Asia/Tokyo`), so a single bad live stretch pauses new entries for the rest of that JST day without permanently freezing the engine forever
 - reserve rolling-window enforcement for explicit trailing-stop experiments, not as the default live posture
 - if the user proposes even smaller sizing, verify it against real `min_order_size` and outcome price bands before accepting it as a live default

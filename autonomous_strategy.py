@@ -16,6 +16,20 @@ logger = logging.getLogger("autonomous_strategy")
 _GENERIC_TAG_IDS = frozenset({"1", "64", "100639", "100350"})
 _SPORTS_CACHE = {"rows": [], "expires_at": 0.0}
 _MARKET_CACHE = {}
+_FINAL_NO_FILL_STATUSES = frozenset(
+    {
+        "canceled",
+        "cancelled",
+        "expired",
+        "unmatched",
+        "failed",
+        "rejected",
+        "order_status_canceled",
+        "order_status_cancelled",
+        "order_status_expired",
+        "order_status_unmatched",
+    }
+)
 
 
 def _parse_json_list(value):
@@ -243,6 +257,46 @@ def _score_candidate(row, price_value, min_order_value, assessment):
     return round(min(score, 99.0), 1)
 
 
+def _candidate_key(condition_id, outcome):
+    return f"autonomous:{condition_id}:{outcome}"
+
+
+def _attempt_trade_id(condition_id, outcome, attempt_ts=None):
+    attempt_ts = float(attempt_ts if attempt_ts is not None else time.time())
+    return f"{_candidate_key(condition_id, outcome)}:{int(attempt_ts * 1000)}"
+
+
+def _can_retry_candidate(condition_id, outcome, side):
+    if models.has_open_autonomous_position(condition_id, outcome, side):
+        return False, "autonomous open position"
+
+    cooldown_sec = int(config.AUTONOMOUS_RETRY_COOLDOWN_SEC or 0)
+    latest = models.get_recent_autonomous_trade_attempt(
+        condition_id,
+        outcome,
+        side,
+        within_sec=None,
+    )
+    if not latest:
+        return True, ""
+
+    status = str(latest.get("our_status") or "").strip().lower()
+    filled = float(latest.get("our_size", 0) or 0) > 0
+    mirrored = bool(latest.get("mirrored"))
+    latest_ts = float(latest.get("timestamp", 0) or 0)
+    recent_enough = (cooldown_sec <= 0) or (latest_ts >= time.time() - cooldown_sec)
+
+    if mirrored and filled:
+        if recent_enough:
+            return False, f"autonomous recent fill cooldown ({cooldown_sec}s)"
+        return True, ""
+    if mirrored and status and status not in _FINAL_NO_FILL_STATUSES:
+        return False, f"autonomous order pending ({status})"
+    if cooldown_sec > 0 and recent_enough:
+        return False, f"autonomous retry cooldown ({cooldown_sec}s)"
+    return True, ""
+
+
 def _build_signal_from_market(row):
     pairs = _candidate_pairs(row)
     if len(pairs) != 2:
@@ -260,6 +314,7 @@ def _build_signal_from_market(row):
 
     min_order_size = float(getattr(book, "min_order_size", 0) or 0)
     min_order_value = round(min_order_size * price_value, 4) if min_order_size > 0 else round(price_value, 4)
+    min_order_value = max(min_order_value, float(config.MARKETABLE_BUY_MIN_VALUE_USDC or 0))
     trade_floor = max(config.effective_autonomous_trade_floor(), min_order_value)
     trade_ceiling = config.effective_autonomous_trade_ceiling()
     if trade_floor <= 0:
@@ -275,19 +330,23 @@ def _build_signal_from_market(row):
         planned_size = round(min_order_size, 4)
         target_value = round(planned_size * price_value, 4)
 
+    condition_id = row.get("conditionId", "")
+    outcome = underdog["outcome"]
+    signal_ts = time.time()
     signal = {
-        "id": f"autonomous:{row.get('conditionId', '')}:{underdog['outcome']}",
+        "id": _attempt_trade_id(condition_id, outcome, signal_ts),
+        "candidate_key": _candidate_key(condition_id, outcome),
         "trader_wallet": "system_autonomous",
         "trader_username": "Autonomy",
-        "condition_id": row.get("conditionId", ""),
+        "condition_id": condition_id,
         "token_id": underdog["token_id"],
         "market_slug": row.get("slug", ""),
         "market_scope": _scope_for_code(str(row.get("_autonomous_sport_code") or "").strip().lower()),
-        "outcome": underdog["outcome"],
+        "outcome": outcome,
         "side": "BUY",
         "size": planned_size,
         "price": price_value,
-        "timestamp": time.time(),
+        "timestamp": signal_ts,
         "signal_source": "autonomous",
         "signal_score": 0,
         "signal_note": "",
@@ -339,12 +398,19 @@ def build_autonomous_signals():
 
     built = []
     skipped = 0
+    retry_gate_reasons = {}
     for row in candidates.values():
         signal, reason = _build_signal_from_market(row)
         if signal is None:
             skipped += 1
             continue
-        if models.trade_exists(signal["id"]):
+        allowed, retry_reason = _can_retry_candidate(
+            signal.get("condition_id", ""),
+            signal.get("outcome", ""),
+            signal.get("side", "BUY"),
+        )
+        if not allowed:
+            retry_gate_reasons[retry_reason] = retry_gate_reasons.get(retry_reason, 0) + 1
             continue
         built.append(signal)
 
@@ -371,6 +437,8 @@ def build_autonomous_signals():
             "Autonomous strategy found %s candidate market(s) but nothing executable",
             len(candidates),
         )
+        if retry_gate_reasons:
+            logger.info("Autonomous retry gate summary: %s", retry_gate_reasons)
     else:
         logger.info("Autonomous strategy found no eligible markets in current window")
 
