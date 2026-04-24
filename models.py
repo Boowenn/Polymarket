@@ -10,6 +10,7 @@ import config
 
 logger = logging.getLogger(__name__)
 _DB_CONNECT_LOCK = threading.Lock()
+_DB_OPERATION_LOCK = threading.RLock()
 _DB_TIMEOUT_SEC = 30.0
 _DB_BUSY_TIMEOUT_MS = 30_000
 _WAL_INITIALIZED = False
@@ -216,12 +217,13 @@ def get_connection():
 
 @contextmanager
 def db():
-    conn = get_connection()
-    try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
+    with _DB_OPERATION_LOCK:
+        conn = get_connection()
+        try:
+            yield conn
+            conn.commit()
+        finally:
+            conn.close()
 
 
 def _table_columns(conn, table_name):

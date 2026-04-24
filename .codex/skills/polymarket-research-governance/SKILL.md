@@ -74,6 +74,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never claim that autonomous live positions have a take-profit policy unless the exit logic, dashboard copy, and `.env.example` all expose the same thresholds.
 - Never re-apply `PRAGMA journal_mode=WAL` on every SQLite connection in the live runtime; initialize WAL once and let later connections use busy timeouts instead of turning read paths into extra write-lock attempts.
 - Never let a one-time WAL initialization lock abort dashboard/report observer reads; if the runtime DB is already busy, continue with busy-timeout connection settings rather than crashing the UI path.
+- Never allow dashboard socket refreshes, active exits, and live reconciliation threads inside the same process to race SQLite writes; serialize local DB access before loosening strategy or risk settings.
 - Never let a temporary orderbook fetch blip zero-out live drawdown back to `entry_basis` when a cached/stale market mark is still available; keep execution gating strict, but preserve the best recent live mark for risk visibility.
 - Never keep that cached/stale live mark only in a single Python process; live drawdown fallback should survive process restarts and observer-mode checks.
 - Never approve a live `BUY` that only barely clears the raw `min_order_size` if that leaves no buffer for a later executable SELL; tiny live fills must stay exitable, not just buyable.
