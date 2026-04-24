@@ -1264,6 +1264,36 @@ def upsert_trade_journal(
     _run_write_with_retry(_writer)
 
 
+def close_pending_journal_entry(trade_id, status, close_ts=None):
+    if not trade_id:
+        return 0
+    ts = float(close_ts if close_ts is not None else time.time())
+    normalized_status = str(status or "order_unfilled")
+
+    def _writer():
+        with db() as conn:
+            cur = conn.execute(
+                """
+                UPDATE trade_journal
+                SET entry_size = 0,
+                    entry_value = 0,
+                    entry_status = ?,
+                    exit_price = 0,
+                    exit_timestamp = ?,
+                    exit_reason = 'order_unfilled',
+                    close_trade_id = ?,
+                    realized_pnl = 0
+                WHERE trade_id = ?
+                  AND exit_timestamp IS NULL
+                  AND LOWER(COALESCE(entry_status, '')) = 'pending_live_order'
+                """,
+                (normalized_status, ts, trade_id, trade_id),
+            )
+            return cur.rowcount
+
+    return _run_write_with_retry(_writer)
+
+
 def close_open_journal_entries(
     signal,
     exit_price=None,

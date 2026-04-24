@@ -64,6 +64,8 @@ Use this skill as the repo's governance entrypoint for research and execution ch
    This authority never includes editing local personal account configuration or secrets such as real `.env`, private keys, `POLY_FUNDER`, API credentials, wallet settings, or other secret values.
 20. For live FAK `BUY` orders, treat the exchange precision contract as part of risk control.
    Marketable BUYs should be built from a USDC `amount` rounded down to two decimals, not from a share `size` whose implied maker amount can carry too many decimals and be rejected by CLOB.
+21. Treat submitted live `BUY` orders with no immediate filled size as reserved exposure until CLOB reconciliation proves otherwise.
+   A delayed / zero-size matched response should create a `pending_live_order` journal row that counts against capital, exposure, and max-position gates; later reconciliation should replace it with the real fill or close it as unfilled if the order is canceled / expired.
 
 ## Guardrails
 
@@ -96,6 +98,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never pause on a repo-level live runtime defect solely because manual review is unavailable when the operator has explicitly granted autonomous repair authority; fix, test, commit, push, and report the result.
 - Never treat autonomous repair authority as permission to edit real `.env`, private keys, `POLY_FUNDER`, API credentials, wallet settings, or any other personal secret.
 - Never send live FAK `BUY` orders as raw share-sized `OrderArgs` when CLOB is enforcing market-buy maker/taker precision; use a two-decimal USDC amount so precision rejects do not masquerade as strategy failures.
+- Never leave a submitted live `BUY` in a zero-filled delayed/matched limbo without reserving risk budget; pending orders must block further entries until reconciled.
 
 ## References
 

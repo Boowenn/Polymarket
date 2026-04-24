@@ -6,14 +6,14 @@ Verified local baseline:
 
 - Date: `2026-04-24` JST
 - Command: `python report.py --days 3 --top 5`
-- `live_entries = 8`
+- `live_entries = 10`
 - `live_closed = 7`
-- `live_open = 1`
+- `live_open = 3`
 - `live_decision_count = 7`
-- `live_close_rate = 87.5%`
+- `live_close_rate = 70.0%`
 - `live_win_rate = 14.3%`
 - `live_realized_pnl = -7.86`
-- `autonomous_live_entries = 10`
+- `autonomous_live_entries = 12`
 - `autonomous_live_closed = 7`
 - `autonomous_live_realized_pnl = -0.78`
 - `copy_live_entries = 2`
@@ -166,6 +166,8 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
   require a small exit-safe share buffer above the raw exchange `min_order_size`, so a tiny partial fill is less likely to strand the bot below the later executable SELL minimum
 - when placing a live FAK `BUY`:
   submit a market-buy USDC amount rounded down to two decimals, because CLOB can reject share-sized marketable BUYs whose implied maker amount carries too much precision
+- when a submitted live `BUY` returns no immediate filled size:
+  reserve it as `pending_live_order` exposure until delayed reconciliation updates the real fill or closes it as unfilled, otherwise the bot can overrun daily risk budget before CLOB catches up
 - when the operator manually trades from the same live wallet:
   reconcile those wallet fills back into `trade_journal` by token, so manual sells close or shrink the bot position instead of leaving stale open exposure on the dashboard
 - if that reconciliation leaves only negligible residual dust:

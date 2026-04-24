@@ -213,6 +213,21 @@ def _record_executed_fill(signal, size, value, status, tradable_price, protected
     )
 
 
+def _record_pending_live_order(signal, size, value, status, tradable_price, protected_price):
+    pending_signal = dict(signal)
+    pending_signal["timestamp"] = time.time()
+    models.upsert_trade_journal(
+        pending_signal,
+        size=size,
+        value=value,
+        status="pending_live_order",
+        tradable_price=tradable_price,
+        protected_price=protected_price,
+        sample_type="executed",
+        entry_reason=f"awaiting_live_fill_reconciliation:{status}",
+    )
+
+
 def _log_exit_safety_breach(signal, booked_size, assessment):
     min_order_size = float((assessment or {}).get("min_order_size", 0) or 0)
     exit_safe_min_order_size = float((assessment or {}).get("exit_safe_min_order_size", 0) or 0)
@@ -331,6 +346,11 @@ def reconcile_delayed_orders(limit=None, min_age_sec=None):
             continue
 
         if normalized in final_no_fill_statuses:
+            models.close_pending_journal_entry(
+                trade.get("id", ""),
+                status,
+                close_ts=time.time(),
+            )
             summary["closed"] += 1
 
         logger.info(
@@ -696,6 +716,16 @@ def execute_trade(signal):
                     booked_size,
                     signal.get("_execution_assessment") or {},
                 )
+
+        if booked_size <= 0 and side == BUY:
+            _record_pending_live_order(
+                signal,
+                size=our_size,
+                value=our_value,
+                status=status,
+                tradable_price=tradable_price,
+                protected_price=protected_price,
+            )
 
         logger.info(
             f"[LIVE] {source} {trader_name}: {signal['side']} planned={our_size:.4f} "
