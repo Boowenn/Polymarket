@@ -381,6 +381,16 @@ def _record_blocked_shadow(signal, size, value, reason):
                 signal.get("market_slug", ""),
             )
             return
+        cooldown_sec = int(config.LIVE_BLOCKED_SHADOW_COOLDOWN_SEC or 0)
+        if cooldown_sec > 0 and models.get_recent_shadow_entry_count(signal, cooldown_sec) > 0:
+            logger.info(
+                "[SHADOW SKIP] live blocked shadow cooldown active (%ss) | %s %s %s",
+                cooldown_sec,
+                signal.get("signal_source", "copy"),
+                signal.get("market_slug", ""),
+                signal.get("outcome", ""),
+            )
+            return
 
     normalized_reason = models.normalize_block_reason(reason)
     if not config.DRY_RUN and normalized_reason in {"unknown", "timing_gate"}:

@@ -6,16 +6,16 @@ Verified local baseline:
 
 - Date: `2026-04-24` JST
 - Command: `python report.py --days 3 --top 5`
-- `live_entries = 10`
-- `live_closed = 7`
-- `live_open = 3`
-- `live_decision_count = 7`
-- `live_close_rate = 70.0%`
-- `live_win_rate = 14.3%`
-- `live_realized_pnl = -7.86`
-- `autonomous_live_entries = 12`
-- `autonomous_live_closed = 7`
-- `autonomous_live_realized_pnl = -0.78`
+- `live_entries = 11`
+- `live_closed = 9`
+- `live_open = 2`
+- `live_decision_count = 9`
+- `live_close_rate = 81.8%`
+- `live_win_rate = 11.1%`
+- `live_realized_pnl = -8.07`
+- `autonomous_live_entries = 14`
+- `autonomous_live_closed = 10`
+- `autonomous_live_realized_pnl = -0.99`
 - `copy_live_entries = 2`
 - `copy_live_closed = 2`
 - `copy_live_realized_pnl = -7.08`
@@ -29,7 +29,7 @@ Use this snapshot as the current reference point until a newer report is intenti
 - `experiment`: isolated experimental samples. Treat them as separate from both `executed` and `shadow`.
 
 Never mix these sample types in trader rankings, source rankings, dashboard summaries, or rollout decisions.
-Live blocked shadow rows may be recorded in live mode for no-money research, but they remain shadow-only evidence and must not override executed live results.
+Live blocked shadow rows may be recorded in live mode for no-money research, but they remain shadow-only evidence and must not override executed live results. Use a cooldown/dedupe window so repeated blocks for the same market/outcome do not flood the sample.
 
 ## Authoritative Metric Definitions
 

@@ -11,7 +11,7 @@ A defensive Polymarket sports and esports trading bot focused on real-money exec
 - Blocks suspicious flow such as micro-order spam, burst trading, same-second bursts, and fast flip scalping when copy research is enabled.
 - Uses order book checks before entry to avoid wide spread, drift, and impact traps.
 - Supports copy-driven research as an optional engine, but it is disabled by default.
-- Records live blocked shadow candidates for settled, no-money strategy research while keeping them separate from executed live results.
+- Records live blocked shadow candidates for settled, no-money strategy research while keeping them separate from executed live results, with cooldown dedupe so one repeated block does not flood the sample.
 - Supports `DRY_RUN=true` for optional offline research, but the active live dashboard/report path is now live-only after cutover.
 - Can archive pre-live dry-run / shadow / experiment data out of the active DB so real-money stats stay clean.
 - Keeps isolated stage-2 experiments available only for explicit research use; they are not part of the live-only runtime view.

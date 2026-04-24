@@ -1587,6 +1587,31 @@ def get_open_shadow_count(sample_type="shadow"):
     return int(row["cnt"] or 0) if row else 0
 
 
+def get_recent_shadow_entry_count(signal, lookback_sec=3600):
+    cutoff = time.time() - max(float(lookback_sec or 0), 0)
+    with db() as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM trade_journal
+            WHERE COALESCE(sample_type, 'executed') = 'shadow'
+              AND COALESCE(signal_source, 'copy') = ?
+              AND condition_id = ?
+              AND outcome = ?
+              AND entry_side = ?
+              AND entry_timestamp >= ?
+            """,
+            (
+                signal.get("signal_source", "copy"),
+                signal.get("condition_id", ""),
+                signal.get("outcome", ""),
+                signal.get("side", "BUY"),
+                cutoff,
+            ),
+        ).fetchone()
+    return int(row["cnt"] or 0) if row else 0
+
+
 def settle_trade_journal_by_condition(snapshot):
     condition_id = snapshot.get("condition_id", "")
     settlement_ts = float(snapshot.get("settlement_timestamp", time.time()) or time.time())
