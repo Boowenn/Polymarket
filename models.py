@@ -170,11 +170,12 @@ def _summary_with_derived_metrics(summary):
     return normalized
 
 
-def _configure_connection(conn):
+def _configure_connection(conn, apply_write_pragmas=False):
     conn.row_factory = sqlite3.Row
     conn.execute(f"PRAGMA busy_timeout={int(_DB_BUSY_TIMEOUT_MS)}")
     conn.execute("PRAGMA foreign_keys=ON")
-    conn.execute("PRAGMA synchronous=NORMAL")
+    if apply_write_pragmas:
+        conn.execute("PRAGMA synchronous=NORMAL")
     return conn
 
 
@@ -187,7 +188,7 @@ def _ensure_wal_mode():
             return
         conn = sqlite3.connect(config.DB_PATH, timeout=_DB_TIMEOUT_SEC)
         try:
-            _configure_connection(conn)
+            _configure_connection(conn, apply_write_pragmas=True)
             conn.execute("PRAGMA journal_mode=WAL")
             conn.commit()
             _WAL_INITIALIZED = True

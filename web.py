@@ -492,7 +492,7 @@ def index():
 
 
 @socketio.on("connect")
-def on_connect():
+def on_connect(auth=None):
     socketio.emit("update", safe_dashboard_data())
 
 
