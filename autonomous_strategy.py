@@ -458,6 +458,14 @@ def build_autonomous_signals():
     recorded = []
     record_error_reasons = {}
     for signal in built:
+        signal = dict(signal)
+        attempt_ts = time.time()
+        signal["timestamp"] = attempt_ts
+        signal["id"] = _attempt_trade_id(
+            signal.get("condition_id", ""),
+            signal.get("outcome", ""),
+            attempt_ts,
+        )
         try:
             models.insert_trade(signal)
             recorded.append(signal)

@@ -51,6 +51,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
    If that reconciliation leaves only sub-cent / sub-share dust, keep the dust row for auditability but exclude it from primary live exposure, deployed-value, and open-position metrics.
    If you want to move away from deep-underdog behavior, raise the executable autonomous band and the tiny-bankroll trade ceiling together; a `5`-share market around `0.50` needs roughly `$2.50`, so a hard `$1.50` ceiling structurally pushes the engine back toward cheap underdogs.
    When live autonomous entry requires an exit-safe buffer above the raw exchange minimum, size the planned BUY to that buffered minimum when the current trade ceiling can afford it; do not generate a raw-minimum entry that is guaranteed to be rejected by the later exit-safety check.
+   If autonomous candidate scanning takes longer than the live signal age limit, refresh the final selected signal timestamp and attempt id immediately before recording/execution so fresh market-first signals are not discarded as stale before they can place.
 15. When governance changes land, update this skill and the repo README in the same change.
 16. In live mode, keep exactly one active execution loop per runtime DB.
    If a second `main.py` or `web.py` is started, it should not launch another trading loop against the same `copybot.db`; secondary processes should degrade to UI-only / observer mode instead of racing SQLite writes.
@@ -84,6 +85,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never keep that cached/stale live mark only in a single Python process; live drawdown fallback should survive process restarts and observer-mode checks.
 - Never approve a live `BUY` that only barely clears the raw `min_order_size` if that leaves no buffer for a later executable SELL; tiny live fills must stay exitable, not just buyable.
 - Never let autonomous sizing compute only the raw `min_order_size` and then reject every candidate against a higher exit-safe minimum; either buy the buffered size within the existing cap or skip the market as too expensive.
+- Never allow a slow autonomous scan to make newly selected signals stale before execution; timestamp the final selected attempt at record time, not only at first candidate evaluation time.
 - Never let a sandbox/automation blackhole proxy make Gamma, Data API, or CLOB calls fail while reporting the bot as merely having no eligible markets.
 
 ## References
