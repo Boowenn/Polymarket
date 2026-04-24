@@ -61,8 +61,35 @@ def _sample_order(sample_type):
     return {"executed": 0, "shadow": 1, "experiment": 2}.get(sample_type, 9)
 
 
+def _row_entry_value(row):
+    explicit = row.get("entry_value")
+    if explicit is not None:
+        return float(explicit or 0)
+    size = float(row.get("entry_size") or 0)
+    for key in ("protected_price", "tradable_price", "signal_price"):
+        price = row.get(key)
+        if price is not None:
+            return size * float(price or 0)
+    return 0.0
+
+
+def _is_dust_position(row):
+    size_threshold = max(float(config.DUST_POSITION_MAX_SIZE or 0), 0.0)
+    value_threshold = max(float(config.DUST_POSITION_MAX_VALUE_USDC or 0), 0.0)
+    if size_threshold <= 0 and value_threshold <= 0:
+        return False
+    size = float(row.get("entry_size") or 0)
+    if size_threshold > 0 and size <= size_threshold:
+        return True
+    return value_threshold > 0 and _row_entry_value(row) <= value_threshold
+
+
 def _is_live_journal_row(row):
-    return _sample_type(row) == "executed" and (row.get("entry_status") or "").strip().lower() not in ("", "dry_run")
+    return (
+        _sample_type(row) == "executed"
+        and (row.get("entry_status") or "").strip().lower() not in ("", "dry_run")
+        and not _is_dust_position(row)
+    )
 
 
 def load_window_data(since_ts):

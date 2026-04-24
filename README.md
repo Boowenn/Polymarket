@@ -98,6 +98,7 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - if a live fill still lands below the market minimum and becomes temporarily unexitable, log it as an exit-safety breach and slow the active-exit retry cadence instead of hammering the same impossible SELL every minute
 - if you manually trade from the same live wallet in the Polymarket UI, reconcile that wallet activity back into `trade_journal` before reading open positions or realized PnL; manual sells should shrink or close the bot journal instead of leaving ghost live exposure behind
 - if that reconciliation leaves only tiny sub-cent / sub-share residue, treat it as `dust residual` instead of a full live position; keep the raw row for auditability, but exclude it from primary open-position and deployed-risk views
+- keep live report source and trader tables on the same dust-excluded primary live basis as the overview and dashboard, so tiny residual rows do not make sections disagree
 - keep the real `.env` local-only; do not commit private keys or live wallet settings
 - read the dashboard as a live-only view: real account cash, current guardrails, and true executed fills
 - keep only one active execution loop writing to the live DB; if you need another browser/view process, let it attach in dashboard-only mode instead of starting a second trader loop

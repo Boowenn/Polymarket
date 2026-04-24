@@ -6,16 +6,16 @@ Verified local baseline:
 
 - Date: `2026-04-24` JST
 - Command: `python report.py --days 3 --top 5`
-- `live_entries = 11`
-- `live_closed = 9`
-- `live_open = 2`
-- `live_decision_count = 9`
-- `live_close_rate = 81.8%`
-- `live_win_rate = 11.1%`
-- `live_realized_pnl = -8.07`
-- `autonomous_live_entries = 14`
-- `autonomous_live_closed = 10`
-- `autonomous_live_realized_pnl = -0.99`
+- `live_entries = 12`
+- `live_closed = 11`
+- `live_open = 1`
+- `live_decision_count = 11`
+- `live_close_rate = 91.7%`
+- `live_win_rate = 9.1%`
+- `live_realized_pnl = -9.72`
+- `autonomous_live_entries = 10`
+- `autonomous_live_closed = 9`
+- `autonomous_live_realized_pnl = -2.64`
 - `copy_live_entries = 2`
 - `copy_live_closed = 2`
 - `copy_live_realized_pnl = -7.08`
@@ -175,6 +175,7 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
   reconcile those wallet fills back into `trade_journal` by token, so manual sells close or shrink the bot position instead of leaving stale open exposure on the dashboard
 - if that reconciliation leaves only negligible residual dust:
   preserve the raw residual row, but exclude it from primary live position counts, deployed value, and exposure gates so the UI reflects economically meaningful risk rather than wallet rounding residue
+- keep live report source and trader tables on the same dust-excluded primary live-execution basis as the overview, dashboard exposure, and risk gates, while preserving dust rows in SQLite for auditability
 
 This avoids disguising a sizing problem as successful live execution.
 
