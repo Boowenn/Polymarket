@@ -112,6 +112,7 @@ Allowed autonomous actions:
 - repair defects that distort live execution, wallet reconciliation, active exits, risk gates, dashboard/report metrics, or SQLite/runtime stability
 - run the smallest sufficient tests for the touched area
 - commit and push the focused fix to GitHub `main`
+- after local validation passes, keep local and GitHub state aligned by pushing the focused commit in the same round; do not leave verified autonomous fixes, deployments, or behavior-rule changes only in the local worktree
 - restart `web.py` or clear duplicate UI-only / stale launcher processes when the runtime has drifted into multiple competing loops
 
 Still forbidden:
