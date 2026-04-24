@@ -4,6 +4,7 @@ Fast trade scanning loop + slow leaderboard refresh, push to browser in real-tim
 """
 
 import os
+import socket
 import time
 import logging
 import threading
@@ -288,8 +289,8 @@ def get_dashboard_data():
     mirrored = models.get_mirrored_trades()
     pnl_curve = models.get_recent_pnl_log(limit=120)
     effective_bankroll = config.effective_bankroll()
-    daily_risk_budget = config.effective_daily_risk_budget()
-    deployed_value = float(models.get_daily_deployed_value() or 0)
+    open_deployed_budget = config.effective_daily_risk_budget()
+    deployed_value = float(models.get_open_deployed_value() or 0)
     open_position_count = int(models.get_open_position_count() or 0)
     account_snapshot = get_live_account_snapshot()
 
@@ -378,10 +379,12 @@ def get_dashboard_data():
             "autonomous_require_esports_series": config.AUTONOMOUS_REQUIRE_ESPORTS_SERIES,
             "paper_daily_risk_budget": config.PAPER_DAILY_RISK_BUDGET,
             "paper_ignore_capital_gates": config.PAPER_IGNORE_CAPITAL_GATES,
-            "daily_risk_budget": daily_risk_budget,
+            "daily_risk_budget": open_deployed_budget,
+            "open_deployed_budget": open_deployed_budget,
             "daily_loss_limit": config.DAILY_LOSS_LIMIT,
             "deployed_value": deployed_value,
-            "remaining_daily_risk_budget": max(daily_risk_budget - deployed_value, 0),
+            "remaining_daily_risk_budget": max(open_deployed_budget - deployed_value, 0),
+            "remaining_open_deployed_budget": max(open_deployed_budget - deployed_value, 0),
             "session_stop_loss_enabled": drawdown.get("stop_enabled", False),
             "session_stop_loss_limit": drawdown.get("loss_limit_usdc", float(config.SESSION_STOP_LOSS_USDC or 0)),
             "session_stop_mode": config.SESSION_STOP_MODE,
@@ -535,6 +538,14 @@ def push_update():
         pass
 
 
+def _port_in_use(port):
+    try:
+        with socket.create_connection(("127.0.0.1", int(port)), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
 # ── bot loop ──
 def bot_loop():
     global _cycle, _last_leaderboard_ts
@@ -660,13 +671,23 @@ def bot_loop():
 
 def main():
     loop_owned = _execution_loop_lease.acquire()
+    port = int(os.environ.get("PORT", 5000))
     if loop_owned:
         thread = threading.Thread(target=bot_loop, daemon=True)
         thread.start()
     else:
+        if _port_in_use(port):
+            logger.warning(
+                "Execution loop already running and dashboard port %s is in use; exiting duplicate UI-only process",
+                port,
+            )
+            print()
+            print(f"  Dashboard already running at http://localhost:{port}")
+            print("  Not starting another web.py process.")
+            print()
+            return
         logger.warning("Execution loop already running in another process; starting dashboard in UI-only mode")
 
-    port = int(os.environ.get("PORT", 5000))
     print()
     print("  =============================================")
     print(f"   Polymarket {config.market_scope_label()} Trading Bot")

@@ -40,13 +40,14 @@ if /i "%choice%"=="2" (
     python main.py
 ) else (
     set "DASHBOARD_URL=http://localhost:5000"
+    set "DASHBOARD_PORT=5000"
     set "CHROME_EXE="
     if exist "C:\Program Files\Google\Chrome\Application\chrome.exe" set "CHROME_EXE=C:\Program Files\Google\Chrome\Application\chrome.exe"
     if not defined CHROME_EXE if exist "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" set "CHROME_EXE=C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
     if not defined CHROME_EXE if exist "%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe" set "CHROME_EXE=%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"
 
     echo.
-    echo   Starting web dashboard...
+    echo   Opening web dashboard...
     if defined CHROME_EXE (
         echo   Opening dashboard in Chrome...
         start "" "%CHROME_EXE%" "%DASHBOARD_URL%"
@@ -56,7 +57,15 @@ if /i "%choice%"=="2" (
     )
     echo   Open %DASHBOARD_URL% in your browser if it does not open automatically.
     echo.
+    for /f "tokens=5" %%P in ('netstat -ano ^| findstr /r /c:":%DASHBOARD_PORT% .*LISTENING"') do (
+        echo   Dashboard is already running on port %DASHBOARD_PORT% ^(PID %%P^).
+        echo   Not starting another web.py process.
+        echo.
+        goto dashboard_done
+    )
+    echo   Starting web dashboard runtime...
     python web.py
+    :dashboard_done
 )
 
 pause

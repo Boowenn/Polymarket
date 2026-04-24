@@ -366,21 +366,48 @@ def _experiment_trade_id(signal, experiment_key):
 
 
 def _record_blocked_shadow(signal, size, value, reason):
-    if not (config.DRY_RUN and config.DRY_RUN_RECORD_BLOCKED_SAMPLES):
+    if config.DRY_RUN:
+        if not config.DRY_RUN_RECORD_BLOCKED_SAMPLES:
+            return
+    else:
+        if not config.LIVE_RECORD_BLOCKED_SHADOW_SAMPLES:
+            return
+        max_open = int(config.LIVE_BLOCKED_SHADOW_MAX_OPEN or 0)
+        if max_open > 0 and models.get_open_shadow_count("shadow") >= max_open:
+            logger.info(
+                "[SHADOW SKIP] live blocked shadow cap reached (%s open) | %s %s",
+                max_open,
+                signal.get("signal_source", "copy"),
+                signal.get("market_slug", ""),
+            )
+            return
+
+    normalized_reason = models.normalize_block_reason(reason)
+    if not config.DRY_RUN and normalized_reason in {"unknown", "timing_gate"}:
         return
 
     assessment = signal.get("_execution_assessment") or {}
     tradable_price = assessment.get("avg_price")
     protected_price = assessment.get("limit_price")
+    shadow_signal = dict(signal)
+    shadow_signal["timestamp"] = time.time()
     models.upsert_trade_journal(
-        signal,
+        shadow_signal,
         size=size,
         value=value,
-        status="blocked_shadow",
+        status="blocked_shadow" if config.DRY_RUN else "live_blocked_shadow",
         tradable_price=float(tradable_price) if tradable_price is not None else None,
         protected_price=float(protected_price) if protected_price is not None else None,
         sample_type="shadow",
+        trade_id=f"{signal['id']}::shadow::{int(shadow_signal['timestamp'])}",
         entry_reason=reason,
+    )
+    logger.info(
+        "[SHADOW] recorded %s blocked candidate | %s %s reason=%s",
+        "dry-run" if config.DRY_RUN else "live",
+        signal.get("signal_source", "copy"),
+        signal.get("market_slug", ""),
+        reason,
     )
 
 

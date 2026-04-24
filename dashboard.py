@@ -179,7 +179,7 @@ def render_dashboard(traders=None, cycle_count=0):
                 f"  Live Exec    {live_total} entries ({live_open} open / {live_closed} closed)",
                 f"  Live WR      {live_wr}  on {live_decisions} decided trades",
                 f"  Live CR      {live_cr:.1f}%  ([green]{live_wins}W[/green] / [red]{live_losses}L[/red] / {live_flats} flat)",
-                f"  Risk Budget  ${config.effective_daily_risk_budget():,.0f}  |  Max Pos {config.MAX_POSITIONS}",
+                f"  Deployed Cap ${config.effective_daily_risk_budget():,.0f}  |  Max Pos {config.MAX_POSITIONS}",
                 (
                     f"  Max Trade    ${config.effective_max_trade_value():,.2f} "
                     f"(pct cap ${config.effective_bankroll() * config.MAX_TRADE_PCT:,.2f}"

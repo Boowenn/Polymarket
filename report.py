@@ -301,7 +301,17 @@ def categorize_risk_logs(rows):
 
         if event == "WHIPSAW_SKIP" or "reversed" in action:
             counts["whipsaw"] += 1
-        elif any(token in action for token in ("daily risk budget", "daily loss limit", "trade too large", "max $")):
+        elif any(
+            token in action
+            for token in (
+                "autonomous loss probation",
+                "daily risk budget",
+                "open deployed budget",
+                "daily loss limit",
+                "trade too large",
+                "max $",
+            )
+        ):
             counts["capital_gate"] += 1
         elif any(token in action for token in ("spread", "liquidity", "orderbook", "drift", "impact")):
             counts["liquidity_gate"] += 1
@@ -398,7 +408,7 @@ def build_recommendations(journal_summary, risk_counts, trader_rows, source_rows
             )
         else:
             recommendations.append(
-                "大部分信号被资金/单笔上限挡住了。若要提高成交数，优先评估 BANKROLL、MAX_TRADE_VALUE_USDC、MAX_TRADE_PCT 和 DAILY_RISK_BUDGET 的组合，不要为了成交而放大到超出你能承受的真实风险。"
+                "大部分信号被资金/单笔/开放部署上限挡住了。若要提高成交数，优先评估 BANKROLL、MAX_TRADE_VALUE_USDC、MAX_TRADE_PCT 和 DAILY_RISK_BUDGET 的组合；DAILY_RISK_BUDGET 当前约束的是仍然开放的已部署资金，不是会在午夜自动清零的成交额。"
             )
 
     if risk_counts.get("whipsaw", 0) >= 3:
@@ -539,8 +549,30 @@ def build_live_recommendations(journal_summary, risk_counts, trader_rows, source
             f"真实入场漂移 {avg_drift:.3f} 已接近阈值 {config.MAX_BOOK_PRICE_DRIFT:.3f}。优先降 size，不要为了多成交去放宽滑点。"
         )
 
+    autonomous_source = next((row for row in source_rows if str(row["source"]).startswith("autonomous/")), None)
+    if autonomous_source:
+        autonomous_decisions = int(autonomous_source.get("decision_count", 0) or 0)
+        autonomous_win_rate = autonomous_source.get("win_rate")
+        autonomous_pnl = float(autonomous_source.get("realized_pnl", 0) or 0)
+        probation_win_rate_pct = float(config.AUTONOMOUS_LOSS_PROBATION_MAX_WIN_RATE or 0) * 100
+        if (
+            config.ENABLE_AUTONOMOUS_LOSS_PROBATION
+            and autonomous_decisions >= int(config.AUTONOMOUS_LOSS_PROBATION_MIN_DECISIONS or 0)
+            and autonomous_win_rate is not None
+            and float(autonomous_win_rate) <= probation_win_rate_pct
+            and autonomous_pnl < 0
+        ):
+            recommendations.append(
+                "autonomous 近期真实判定样本已经进入亏损观察期。新入场应降到 "
+                f"{config.AUTONOMOUS_LOSS_PROBATION_MAX_OPEN_POSITIONS} 个并发仓位以内，"
+                "先让现有仓位退出，不要继续满负荷试错。"
+            )
+
     if risk_counts.get("capital_gate", 0) >= max(3, total_entries):
-        recommendations.append("实盘信号里有不少被资金/单笔上限拦住。若后面要提成交数，优先小幅提高 bankroll 或日预算，不要先放宽流动性门槛。")
+        recommendations.append(
+            "实盘信号里有不少被资金/单笔/开放部署上限拦住。若后面要提成交数，"
+            "优先评估 bankroll、单笔上限和当前开放仓位，不要先放宽流动性门槛。"
+        )
 
     if risk_counts.get("liquidity_gate", 0) >= max(3, total_entries):
         recommendations.append("实盘里流动性/价差拦截依然很多。继续接受跳单，不要为了出手率去追薄簿。")

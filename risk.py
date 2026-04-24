@@ -18,6 +18,7 @@ class RiskCheck:
             self._check_whipsaw_trap,
             self._check_orderbook_liquidity,
             self._check_price_band,
+            self._check_autonomous_loss_probation,
             self._check_repeat_harvest,
             self._check_daily_risk_budget,
             self._check_market_exposure,
@@ -179,12 +180,42 @@ class RiskCheck:
         if not config.capital_gates_enabled():
             return True, ""
         proposed = self._planned_value(signal)
-        spent = models.get_daily_deployed_value()
+        spent = models.get_open_deployed_value()
         budget = config.effective_daily_risk_budget()
         if spent + proposed > budget:
             return False, (
-                f"daily risk budget reached (${spent + proposed:.2f} > "
+                f"open deployed budget reached (${spent + proposed:.2f} > "
                 f"${budget:.2f})"
+            )
+        return True, ""
+
+    def _check_autonomous_loss_probation(self, signal):
+        if config.DRY_RUN or not config.ENABLE_AUTONOMOUS_LOSS_PROBATION:
+            return True, ""
+        if signal.get("signal_source", "copy") != "autonomous":
+            return True, ""
+
+        lookback_sec = float(config.AUTONOMOUS_LOSS_PROBATION_LOOKBACK_DAYS or 0) * 86400
+        since_ts = time.time() - lookback_sec if lookback_sec > 0 else None
+        summary = models.get_live_source_decision_summary("autonomous", since_ts=since_ts)
+        decisions = int(summary.get("decision_count", 0) or 0)
+        if decisions < int(config.AUTONOMOUS_LOSS_PROBATION_MIN_DECISIONS or 0):
+            return True, ""
+
+        realized_pnl = float(summary.get("realized_pnl", 0) or 0)
+        win_rate = summary.get("win_rate")
+        if win_rate is None:
+            return True, ""
+        if realized_pnl >= 0 or float(win_rate) > float(config.AUTONOMOUS_LOSS_PROBATION_MAX_WIN_RATE or 0):
+            return True, ""
+
+        open_count = models.get_open_position_count()
+        max_open = int(config.AUTONOMOUS_LOSS_PROBATION_MAX_OPEN_POSITIONS or 0)
+        if open_count >= max_open:
+            return False, (
+                "autonomous loss probation active "
+                f"(decisions={decisions}, win_rate={float(win_rate) * 100:.1f}%, "
+                f"pnl=${realized_pnl:.2f}, open_positions={open_count}/{max_open})"
             )
         return True, ""
 

@@ -29,6 +29,7 @@ Use this snapshot as the current reference point until a newer report is intenti
 - `experiment`: isolated experimental samples. Treat them as separate from both `executed` and `shadow`.
 
 Never mix these sample types in trader rankings, source rankings, dashboard summaries, or rollout decisions.
+Live blocked shadow rows may be recorded in live mode for no-money research, but they remain shadow-only evidence and must not override executed live results.
 
 ## Authoritative Metric Definitions
 
@@ -86,6 +87,7 @@ When copy-trading is not trusted enough for live capital, default to a narrow ma
 - for autonomous non-single-game `Match Winner` live positions, keep two softer exits:
   an earlier protective exit once the marked loss is already meaningful in dollars on a tiny bankroll, and a separate take-profit rule that is willing to bank smaller wins instead of waiting for a huge repricing
 - if an autonomous candidate was only blocked, unmirrored, or execution-error'd, allow it to retry after a short cooldown such as `10-30` minutes instead of treating the first row in `trades` as a permanent ban
+- when the recent autonomous live decision sample is both losing and below the configured probation win-rate threshold, reduce autonomous concurrency to a one-position probation mode before allowing fresh entries; this is a defensive brake, not proof that the strategy has recovered
 
 This is a rollout policy, not proof of edge. Promotion still requires executed evidence.
 
@@ -127,7 +129,7 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
 - keep secrets in local `.env` only and never commit them
 - keep scope narrowed to the intended live segment, such as `sports,esports`
 - keep repeat-entry paused and avoid widening experiments
-- show live guardrails clearly in the dashboard: bankroll, deployed notional, remaining daily budget, max trade size, max positions, wallet type, and funder summary
+- show live guardrails clearly in the dashboard: bankroll, deployed notional, remaining open-deployed budget, max trade size, max positions, wallet type, and funder summary
 - for bankrolls around `$15-$20`, prefer a real absolute single-trade cap such as `$1.2-$1.5`; cent-level caps like `$0.02-$0.08` are usually not executable once `min_order_size=5` is applied, and `0.30`-priced markets commonly need about `$1.50` just to clear the minimum
 - keep a separate marketable-`BUY` notional floor near `$1.00`; on tiny sports/esports contracts the exchange can reject `$0.65-$0.80` orders even when the visible `min_order_size` is already satisfied
 - if live sample collection stays too slow while execution quality is otherwise acceptable, prefer raising `MAX_POSITIONS` from `1` to `2` before increasing the single-trade cap

@@ -230,7 +230,7 @@ def _set_cooldown(position, seconds):
 
 def _pending_recheck_sec(pending_reason):
     text = str(pending_reason or "").lower()
-    if "below market minimum" in text:
+    if "below market minimum" in text or "no executable full exit" in text:
         return max(
             int(config.ACTIVE_EXIT_MIN_SIZE_PENDING_RECHECK_SEC or 0),
             int(config.GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC or 0),
@@ -265,7 +265,9 @@ def _execute_exit(position, reason):
         return {"attempted": 0, "filled": 0, "closed": 0, "errors": 1}
 
     if not position.get("exit_available"):
-        _record_pending(position, f"{reason}; no executable full exit")
+        pending_reason = f"{reason}; no executable full exit"
+        _set_cooldown(position, _pending_recheck_sec(pending_reason))
+        _record_pending(position, pending_reason)
         return {"attempted": 0, "filled": 0, "closed": 0, "pending": 1}
 
     plan = _exit_size_plan(position, force_balance_refresh=True)

@@ -117,7 +117,13 @@ def normalize_block_reason(reason):
         return "cooldown"
     if "trader not approved" in lowered or "score too low" in lowered or "profile missing" in lowered:
         return "trader_quality"
-    if "daily risk budget" in lowered or "exposure too high" in lowered or "max positions reached" in lowered:
+    if (
+        "daily risk budget" in lowered
+        or "open deployed budget" in lowered
+        or "autonomous loss probation" in lowered
+        or "exposure too high" in lowered
+        or "max positions reached" in lowered
+    ):
         return "capital_gate"
     if "waiting confirmation" in lowered or "stale signal" in lowered:
         return "timing_gate"
@@ -1567,6 +1573,20 @@ def get_open_trade_journal(limit=100):
     return [dict(row) for row in rows]
 
 
+def get_open_shadow_count(sample_type="shadow"):
+    with db() as conn:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS cnt
+            FROM trade_journal
+            WHERE COALESCE(sample_type, 'executed') = ?
+              AND exit_timestamp IS NULL
+            """,
+            (sample_type,),
+        ).fetchone()
+    return int(row["cnt"] or 0) if row else 0
+
+
 def settle_trade_journal_by_condition(snapshot):
     condition_id = snapshot.get("condition_id", "")
     settlement_ts = float(snapshot.get("settlement_timestamp", time.time()) or time.time())
@@ -2293,7 +2313,7 @@ def get_recent_pnl_log(limit=120):
     return points
 
 
-def get_daily_deployed_value():
+def get_open_deployed_value():
     status_clause = _active_executed_status_clause()
     dust_clause = _dust_position_clause()
     with db() as conn:
@@ -2310,8 +2330,44 @@ def get_daily_deployed_value():
     return row["spent"] if row else 0
 
 
+def get_daily_deployed_value():
+    return get_open_deployed_value()
+
+
 def get_daily_pnl():
-    return {"spent": get_daily_deployed_value()}
+    return {"spent": get_open_deployed_value()}
+
+
+def get_live_source_decision_summary(signal_source, since_ts=None):
+    status_clause = _active_executed_status_clause()
+    sql = f"""
+        SELECT
+            COUNT(*) AS closed_entries,
+            SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins,
+            SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) AS losses,
+            COALESCE(SUM(realized_pnl), 0) AS realized_pnl
+        FROM trade_journal
+        WHERE COALESCE(sample_type, 'executed') = 'executed'
+          AND LOWER(COALESCE(entry_status, '')) NOT IN ('', 'dry_run')
+          AND LOWER(COALESCE(signal_source, 'copy')) = ?
+          AND exit_timestamp IS NOT NULL
+          AND {status_clause}
+    """
+    params = [str(signal_source or "").strip().lower()]
+    if since_ts is not None:
+        sql += " AND entry_timestamp >= ?"
+        params.append(float(since_ts))
+
+    with db() as conn:
+        row = conn.execute(sql, params).fetchone()
+
+    data = dict(row) if row else {"closed_entries": 0, "wins": 0, "losses": 0, "realized_pnl": 0}
+    wins = int(data.get("wins", 0) or 0)
+    losses = int(data.get("losses", 0) or 0)
+    decisions = wins + losses
+    data["decision_count"] = decisions
+    data["win_rate"] = (wins / decisions) if decisions else None
+    return data
 
 
 def get_exposure_by_trader(wallet, lookback_sec=86400):

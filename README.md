@@ -11,6 +11,7 @@ A defensive Polymarket sports and esports trading bot focused on real-money exec
 - Blocks suspicious flow such as micro-order spam, burst trading, same-second bursts, and fast flip scalping when copy research is enabled.
 - Uses order book checks before entry to avoid wide spread, drift, and impact traps.
 - Supports copy-driven research as an optional engine, but it is disabled by default.
+- Records live blocked shadow candidates for settled, no-money strategy research while keeping them separate from executed live results.
 - Supports `DRY_RUN=true` for optional offline research, but the active live dashboard/report path is now live-only after cutover.
 - Can archive pre-live dry-run / shadow / experiment data out of the active DB so real-money stats stay clean.
 - Keeps isolated stage-2 experiments available only for explicit research use; they are not part of the live-only runtime view.
@@ -23,6 +24,7 @@ A defensive Polymarket sports and esports trading bot focused on real-money exec
 - `main.py`: terminal runner
 - `web.py`: web dashboard
 - `report.py`: multi-day observation and improvement report
+- `backtest.py`: settled journal backtest summary with executed / shadow / experiment isolation
 - `strategy.py`: trader scoring and consensus logic
 - `autonomous_strategy.py`: autonomous sports/esports entry engine
 - `risk.py`: runtime risk gates
@@ -77,7 +79,7 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - keep esports entries restricted to `BO3` / `BO5` style series markets
 - keep `repeat-entry` paused
 - for a `$15-$20` canary, prefer `MAX_POSITIONS=2` once auth/execution are stable enough to collect live samples
-- use a tight daily loss limit and daily risk budget
+- use a tight daily loss limit and a conservative open deployed-capital budget
 - prefer an absolute single-trade cap such as `MAX_TRADE_VALUE_USDC=1.2` to `1.5` instead of relying only on `MAX_TRADE_PCT`; with Polymarket's `min_order_size=5`, cent-level caps like `$0.02-$0.08` are usually non-executable, and a `0.30`-priced market often needs about `$1.50` just to clear the minimum
 - allow blocked or failed autonomous candidates to retry after a short cooldown such as `10-30` minutes instead of suppressing them forever; keep dedupe only for still-open positions, unresolved live orders, and recent successful fills
 - remember that marketable `BUY` orders can still be rejected below roughly `$1` notional even when the displayed `min_order_size` is only `5` shares; keep a conservative `MARKETABLE_BUY_MIN_VALUE_USDC` floor in the live canary
@@ -90,6 +92,7 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - before a live `BUY` is allowed through, make sure the planned size is not only above the raw `min_order_size`, but also above a small exit-safe buffer such as `5.25` shares for a `5`-share market; otherwise the bot can create a position that was buyable but is too small to sell back out cleanly later
 - when that exit-safe buffer is affordable under the current single-trade cap, plan the BUY directly at the buffered size instead of planning exactly `5` shares and letting the safety check reject it
 - because a full autonomous scan and sequential order confirmation can take longer than the live signal age limit, refresh autonomous attempt timestamps at record time and again at executor entry so brand-new candidates are not blocked as stale
+- when the recent autonomous live decision sample is both losing and below the probation win-rate threshold, automatically reduce autonomous concurrency to a one-position probation mode before allowing fresh entries
 - for live FAK `BUY` orders, send a two-decimal USDC amount instead of a raw share-sized limit order; otherwise CLOB can reject otherwise valid tiny-bankroll buys because the implied maker amount has too many decimals
 - if a live BUY is accepted by CLOB but the immediate order read does not yet expose a filled size, reserve it as `pending_live_order` exposure until reconciliation proves the final fill or no-fill status
 - if a live fill still lands below the market minimum and becomes temporarily unexitable, log it as an exit-safety breach and slow the active-exit retry cadence instead of hammering the same impossible SELL every minute
