@@ -94,6 +94,8 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - keep the real `.env` local-only; do not commit private keys or live wallet settings
 - read the dashboard as a live-only view: real account cash, current guardrails, and true executed fills
 - keep only one active execution loop writing to the live DB; if you need another browser/view process, let it attach in dashboard-only mode instead of starting a second trader loop
+- if automation or a sandboxed shell starts the runtime with a blackhole proxy such as `127.0.0.1:9`, clear that inherited proxy before API calls; otherwise the dashboard can stay up while CLOB/Gamma/Data API reconciliation is silently offline
+- if an observer/report starts while the live runtime is writing, it should continue with SQLite busy-timeout settings instead of crashing just because the one-time WAL setup is locked
 - if you use synthetic engines such as autonomous or consensus, keep their system wallets registered in SQLite before recording `trades`, otherwise foreign-key enforcement can kill live sample collection
 - if a live order stays in local `delayed` state beyond the alert threshold, surface it clearly in the dashboard before changing sizing or execution rules
 - automatically re-query delayed live orders and write them back as matched / canceled / expired before treating them as unresolved execution failures

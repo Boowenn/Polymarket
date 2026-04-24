@@ -4,17 +4,18 @@
 
 Verified local baseline:
 
-- Date: `2026-04-23` JST
+- Date: `2026-04-24` JST
 - Command: `python report.py --days 3 --top 5`
-- `live_entries = 4`
-- `live_closed = 2`
-- `live_open = 2`
-- `live_decision_count = 2`
-- `live_close_rate = 66.7%`
-- `live_win_rate = 0.0%`
-- `live_realized_pnl = -7.08`
-- `autonomous_live_entries = 2`
-- `autonomous_live_closed = 0`
+- `live_entries = 7`
+- `live_closed = 7`
+- `live_open = 0`
+- `live_decision_count = 7`
+- `live_close_rate = 100.0%`
+- `live_win_rate = 14.3%`
+- `live_realized_pnl = -7.86`
+- `autonomous_live_entries = 9`
+- `autonomous_live_closed = 7`
+- `autonomous_live_realized_pnl = -0.78`
 - `copy_live_entries = 2`
 - `copy_live_closed = 2`
 - `copy_live_realized_pnl = -7.08`

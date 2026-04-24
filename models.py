@@ -1,3 +1,4 @@
+import logging
 import sqlite3
 import threading
 import time
@@ -7,6 +8,7 @@ from contextlib import contextmanager
 import config
 
 
+logger = logging.getLogger(__name__)
 _DB_CONNECT_LOCK = threading.Lock()
 _DB_TIMEOUT_SEC = 30.0
 _DB_BUSY_TIMEOUT_MS = 30_000
@@ -188,10 +190,19 @@ def _ensure_wal_mode():
             return
         conn = sqlite3.connect(config.DB_PATH, timeout=_DB_TIMEOUT_SEC)
         try:
-            _configure_connection(conn, apply_write_pragmas=True)
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.commit()
-            _WAL_INITIALIZED = True
+            try:
+                _configure_connection(conn, apply_write_pragmas=True)
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.commit()
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower():
+                    raise
+                logger.warning(
+                    "Skipping WAL initialization because database is locked; "
+                    "continuing with busy-timeout connection settings"
+                )
+            finally:
+                _WAL_INITIALIZED = True
         finally:
             conn.close()
 

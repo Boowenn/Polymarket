@@ -3,6 +3,19 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
+
+def _clear_blackhole_proxy_env():
+    """Avoid inheriting sandbox/test proxy settings that break live API calls."""
+    blackhole_markers = ("127.0.0.1:9", "localhost:9")
+    proxy_keys = ("http_proxy", "https_proxy", "all_proxy")
+    for key, value in list(os.environ.items()):
+        lowered_key = key.lower()
+        if lowered_key in proxy_keys or lowered_key.endswith("_proxy"):
+            if any(marker in str(value).lower() for marker in blackhole_markers):
+                os.environ.pop(key, None)
+
+
+_clear_blackhole_proxy_env()
 load_dotenv()
 
 

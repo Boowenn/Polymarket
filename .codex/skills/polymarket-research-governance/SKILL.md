@@ -53,6 +53,8 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 15. When governance changes land, update this skill and the repo README in the same change.
 16. In live mode, keep exactly one active execution loop per runtime DB.
    If a second `main.py` or `web.py` is started, it should not launch another trading loop against the same `copybot.db`; secondary processes should degrade to UI-only / observer mode instead of racing SQLite writes.
+17. If a live runtime is started from automation, do not let inherited blackhole proxy variables such as `127.0.0.1:9` break Polymarket API calls while the local dashboard still looks healthy.
+   Clear only known bad proxy env values, never user secrets or wallet settings.
 
 ## Guardrails
 
@@ -71,9 +73,11 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never dedupe autonomous candidates forever just because a previous row exists in `trades`; blocked, unmirrored, or execution-error attempts need a retry path with cooldown.
 - Never claim that autonomous live positions have a take-profit policy unless the exit logic, dashboard copy, and `.env.example` all expose the same thresholds.
 - Never re-apply `PRAGMA journal_mode=WAL` on every SQLite connection in the live runtime; initialize WAL once and let later connections use busy timeouts instead of turning read paths into extra write-lock attempts.
+- Never let a one-time WAL initialization lock abort dashboard/report observer reads; if the runtime DB is already busy, continue with busy-timeout connection settings rather than crashing the UI path.
 - Never let a temporary orderbook fetch blip zero-out live drawdown back to `entry_basis` when a cached/stale market mark is still available; keep execution gating strict, but preserve the best recent live mark for risk visibility.
 - Never keep that cached/stale live mark only in a single Python process; live drawdown fallback should survive process restarts and observer-mode checks.
 - Never approve a live `BUY` that only barely clears the raw `min_order_size` if that leaves no buffer for a later executable SELL; tiny live fills must stay exitable, not just buyable.
+- Never let a sandbox/automation blackhole proxy make Gamma, Data API, or CLOB calls fail while reporting the bot as merely having no eligible markets.
 
 ## References
 
