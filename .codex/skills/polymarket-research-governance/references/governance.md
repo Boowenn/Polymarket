@@ -4,7 +4,7 @@
 
 Verified local baseline:
 
-- Date: `2026-04-24` JST
+- Date: `2026-04-25` JST
 - Command: `python report.py --days 3 --top 5`
 - `live_entries = 12`
 - `live_closed = 11`
@@ -19,6 +19,9 @@ Verified local baseline:
 - `copy_live_entries = 2`
 - `copy_live_closed = 2`
 - `copy_live_realized_pnl = -7.08`
+- `7d_executed_autonomous_entries = 16`
+- `7d_executed_autonomous_win_rate = 6.2%`
+- `7d_executed_autonomous_realized_pnl = -2.65`
 
 Use this snapshot as the current reference point until a newer report is intentionally recorded.
 
@@ -89,6 +92,20 @@ When copy-trading is not trusted enough for live capital, default to a narrow ma
 - if an autonomous candidate was only blocked, unmirrored, or execution-error'd, allow it to retry after a short cooldown such as `10-30` minutes instead of treating the first row in `trades` as a permanent ban
 - when the recent autonomous live decision sample is both losing and below the configured probation win-rate threshold, reduce autonomous concurrency to a one-position probation mode before allowing fresh entries; this is a defensive brake, not proof that the strategy has recovered
 - when the executed autonomous live sample is severely bad, default to loss quarantine: pause autonomous new entries entirely while exits, settlement, reconciliation, dashboard, report, backtest, and shadow observation continue; current defaults trigger at 8 dust-excluded live decisions, win rate at or below 12%, and at least `$1.00` realized loss
+
+### Loss Quarantine Recovery Protocol
+
+The current live autonomous sample is in loss quarantine. Treat that as an intended hard stop, not as a runtime defect.
+
+While quarantine is active:
+
+- keep default autonomous real-money entries paused in every runner
+- continue settlement, wallet reconciliation, delayed-order reconciliation, active exits, dashboard, reports, backtests, and shadow-only observation
+- use shadow and backtest output only to propose hypotheses, not to restart the default live strategy
+- do not raise bankroll, single-trade cap, max positions, price band, liquidity limits, session stop, probation, or quarantine thresholds to force new fills
+- do not restart autonomous live entries just because the calendar day changed or the open-position count drops to zero
+
+Recovery requires an explicit narrow experiment plan based on executed-loss attribution. The first acceptable plan should name the single rule being replaced, the sample type it will write, its maximum exposure or no-money status, the minimum decided sample before review, and the rollback condition. Until that exists, loss quarantine remains the live default.
 
 This is a rollout policy, not proof of edge. Promotion still requires executed evidence.
 

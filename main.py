@@ -84,13 +84,13 @@ def first_run_setup():
         f.write(f"GAME_MARKET_ACTIVE_EXIT_ABS_DROP=0.15\n")
         f.write(f"GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC=60\n")
         f.write(f"ENABLE_AUTONOMOUS_PROTECTIVE_EXIT=true\n")
-        f.write(f"AUTONOMOUS_PROTECTIVE_EXIT_PRICE_RATIO=0.82\n")
-        f.write(f"AUTONOMOUS_PROTECTIVE_EXIT_ABS_DROP=0.08\n")
-        f.write(f"AUTONOMOUS_PROTECTIVE_EXIT_MIN_LOSS_USDC=0.18\n")
+        f.write(f"AUTONOMOUS_PROTECTIVE_EXIT_PRICE_RATIO=0.90\n")
+        f.write(f"AUTONOMOUS_PROTECTIVE_EXIT_ABS_DROP=0.04\n")
+        f.write(f"AUTONOMOUS_PROTECTIVE_EXIT_MIN_LOSS_USDC=0.10\n")
         f.write(f"ENABLE_AUTONOMOUS_TAKE_PROFIT=true\n")
-        f.write(f"AUTONOMOUS_TAKE_PROFIT_PRICE_RATIO=1.60\n")
-        f.write(f"AUTONOMOUS_TAKE_PROFIT_ABS_GAIN=0.12\n")
-        f.write(f"AUTONOMOUS_TAKE_PROFIT_MIN_PNL_USDC=0.35\n")
+        f.write(f"AUTONOMOUS_TAKE_PROFIT_PRICE_RATIO=1.20\n")
+        f.write(f"AUTONOMOUS_TAKE_PROFIT_ABS_GAIN=0.05\n")
+        f.write(f"AUTONOMOUS_TAKE_PROFIT_MIN_PNL_USDC=0.10\n")
         f.write(f"MAX_POSITIONS=10\n")
         f.write(f"DAILY_RISK_BUDGET=50\n")
         f.write(f"PAPER_BANKROLL=250\n")
@@ -131,10 +131,10 @@ def first_run_setup():
         f.write(f"CONSENSUS_TRADE_PCT=0.015\n")
         f.write(f"AUTONOMOUS_SPORT_CODES=dota2,cs2,lol,val,nfl,nba,mlb,nhl,epl,cfb,ncaab\n")
         f.write(f"AUTONOMOUS_MIN_TRADE_VALUE_USDC=0.60\n")
-        f.write(f"AUTONOMOUS_MAX_TRADE_VALUE_USDC=1.50\n")
-        f.write(f"AUTONOMOUS_MIN_PRICE=0.18\n")
-        f.write(f"AUTONOMOUS_MAX_PRICE=0.45\n")
-        f.write(f"AUTONOMOUS_TARGET_PRICE=0.32\n")
+        f.write(f"AUTONOMOUS_MAX_TRADE_VALUE_USDC=2.50\n")
+        f.write(f"AUTONOMOUS_MIN_PRICE=0.26\n")
+        f.write(f"AUTONOMOUS_MAX_PRICE=0.50\n")
+        f.write(f"AUTONOMOUS_TARGET_PRICE=0.38\n")
         f.write(f"AUTONOMOUS_MIN_MARKET_LIQUIDITY=750\n")
         f.write(f"AUTONOMOUS_MIN_EVENT_LEAD_SEC=900\n")
         f.write(f"AUTONOMOUS_MAX_EVENT_LEAD_SEC=172800\n")
@@ -143,6 +143,15 @@ def first_run_setup():
         f.write(f"AUTONOMOUS_REQUIRE_ESPORTS_SERIES=true\n")
         f.write(f"AUTONOMOUS_RETRY_COOLDOWN_SEC=1200\n")
         f.write(f"MIN_AUTONOMOUS_SCORE=68\n")
+        f.write(f"ENABLE_AUTONOMOUS_LOSS_PROBATION=true\n")
+        f.write(f"AUTONOMOUS_LOSS_PROBATION_LOOKBACK_DAYS=3\n")
+        f.write(f"AUTONOMOUS_LOSS_PROBATION_MIN_DECISIONS=8\n")
+        f.write(f"AUTONOMOUS_LOSS_PROBATION_MAX_WIN_RATE=0.20\n")
+        f.write(f"AUTONOMOUS_LOSS_PROBATION_MAX_OPEN_POSITIONS=1\n")
+        f.write(f"ENABLE_AUTONOMOUS_LOSS_QUARANTINE=true\n")
+        f.write(f"AUTONOMOUS_LOSS_QUARANTINE_MIN_DECISIONS=8\n")
+        f.write(f"AUTONOMOUS_LOSS_QUARANTINE_MAX_WIN_RATE=0.12\n")
+        f.write(f"AUTONOMOUS_LOSS_QUARANTINE_MIN_REALIZED_LOSS_USDC=1.00\n")
         f.write(f"REPORT_DEFAULT_DAYS=3\n")
 
     print()
@@ -167,6 +176,7 @@ import strategy
 import autonomous_strategy
 import settlement
 import wallet_reconcile
+import risk
 from dashboard import console
 
 # Logging to file only — dashboard handles terminal output
@@ -177,6 +187,54 @@ logging.basicConfig(
 )
 logger = logging.getLogger("main")
 _execution_loop_lease = runtime_control.ProcessLease("execution_loop")
+_entry_pause_log = {"key": "", "ts": 0.0}
+
+
+def _log_entry_pause(kind, reason):
+    now_ts = time.time()
+    key = f"{kind}:{reason}"
+    log_sec = float(getattr(config, "ENTRY_RISK_PAUSE_LOG_SEC", 300) or 300)
+    if _entry_pause_log.get("key") == key and now_ts - float(_entry_pause_log.get("ts", 0) or 0) < log_sec:
+        return
+    _entry_pause_log["key"] = key
+    _entry_pause_log["ts"] = now_ts
+    logger.warning("Entry scanning paused by %s: %s", kind, reason)
+    models.log_risk_event("ENTRY_SCAN_PAUSED", kind, reason)
+
+
+def _entry_pause_state():
+    if config.DRY_RUN:
+        return {"pause_all": False, "pause_autonomous": False, "reason": ""}
+
+    if config.session_stop_loss_enabled():
+        drawdown = portfolio.get_live_drawdown_snapshot()
+        if drawdown.get("stop_active"):
+            return {
+                "pause_all": True,
+                "pause_autonomous": True,
+                "kind": "session_stop",
+                "reason": drawdown.get("stop_reason") or "session stop active",
+            }
+
+    quarantine = risk.autonomous_loss_quarantine_state()
+    if quarantine.get("blocks_new_entries"):
+        return {
+            "pause_all": False,
+            "pause_autonomous": True,
+            "kind": "autonomous_loss_quarantine",
+            "reason": quarantine.get("reason", "autonomous loss quarantine active"),
+        }
+
+    probation = risk.autonomous_loss_probation_state()
+    if probation.get("blocks_new_entries"):
+        return {
+            "pause_all": False,
+            "pause_autonomous": True,
+            "kind": "autonomous_loss_probation",
+            "reason": probation.get("reason", "autonomous loss probation active"),
+        }
+
+    return {"pause_all": False, "pause_autonomous": False, "reason": ""}
 
 
 def show_banner():
@@ -269,6 +327,7 @@ def countdown(seconds):
 def run_cycle(cycle_count):
     """Execute one full polling cycle."""
     logger.info(f"--- Cycle #{cycle_count} ---")
+    entry_pause = _entry_pause_state()
 
     # 1. Refresh leaderboard when trader-driven engines are enabled
     traders = []
@@ -282,7 +341,9 @@ def run_cycle(cycle_count):
 
     # 2. Scan for new copy trades
     new_signals = []
-    if config.copy_strategy_enabled():
+    if entry_pause.get("pause_all"):
+        _log_entry_pause(entry_pause.get("kind", "risk"), entry_pause.get("reason", "risk pause active"))
+    elif config.copy_strategy_enabled():
         try:
             new_signals = monitor.scan_all_traders()
             if new_signals:
@@ -292,7 +353,12 @@ def run_cycle(cycle_count):
 
     # 3. Consensus fallback only matters when trader discovery is on
     strategy_signals = []
-    if config.copy_strategy_enabled() and config.ENABLE_CONSENSUS_STRATEGY and not new_signals:
+    if (
+        not entry_pause.get("pause_all")
+        and config.copy_strategy_enabled()
+        and config.ENABLE_CONSENSUS_STRATEGY
+        and not new_signals
+    ):
         try:
             strategy_signals = strategy.build_consensus_signals()
             if strategy_signals:
@@ -303,7 +369,10 @@ def run_cycle(cycle_count):
 
     # 4. Build autonomous signals from public market data
     autonomous_signals = []
-    if config.autonomous_strategy_enabled():
+    if entry_pause.get("pause_all") or entry_pause.get("pause_autonomous"):
+        if entry_pause.get("pause_autonomous"):
+            _log_entry_pause(entry_pause.get("kind", "risk"), entry_pause.get("reason", "risk pause active"))
+    elif config.autonomous_strategy_enabled():
         try:
             autonomous_signals = autonomous_strategy.build_autonomous_signals()
             if autonomous_signals:
