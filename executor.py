@@ -543,6 +543,13 @@ def execute_trade(signal):
         return {"status": "skipped", "reason": "calculated size is 0"}
 
     signal = dict(signal)
+    if str(signal.get("signal_source") or "").strip().lower() == "autonomous":
+        execution_ts = time.time()
+        signal["timestamp"] = execution_ts
+        try:
+            models.refresh_trade_attempt_timestamp(signal.get("id", ""), execution_ts)
+        except Exception as exc:
+            logger.warning("Could not refresh autonomous signal timestamp before execution: %s", exc)
     signal["_planned_size"] = our_size
     signal["_planned_value"] = our_value
 

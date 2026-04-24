@@ -1091,6 +1091,22 @@ def mark_trade_mirrored(trade_id, order_id, side, size, price, status):
         )
 
 
+def refresh_trade_attempt_timestamp(trade_id, timestamp=None):
+    if not trade_id:
+        return 0
+    ts = float(timestamp if timestamp is not None else time.time())
+
+    def _writer():
+        with db() as conn:
+            cur = conn.execute(
+                "UPDATE trades SET timestamp = ? WHERE id = ?",
+                (ts, trade_id),
+            )
+            return cur.rowcount
+
+    return _run_write_with_retry(_writer)
+
+
 def get_recent_trades(limit=20):
     with db() as conn:
         rows = conn.execute(
