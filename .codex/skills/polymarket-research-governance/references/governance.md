@@ -164,6 +164,8 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
   clip the requested size to real conditional-token balance / allowance first, otherwise a tiny balance mismatch can create repeated live exit failures while the journal still looks fully open
 - before a live `BUY` is approved:
   require a small exit-safe share buffer above the raw exchange `min_order_size`, so a tiny partial fill is less likely to strand the bot below the later executable SELL minimum
+- when placing a live FAK `BUY`:
+  submit a market-buy USDC amount rounded down to two decimals, because CLOB can reject share-sized marketable BUYs whose implied maker amount carries too much precision
 - when the operator manually trades from the same live wallet:
   reconcile those wallet fills back into `trade_journal` by token, so manual sells close or shrink the bot position instead of leaving stale open exposure on the dashboard
 - if that reconciliation leaves only negligible residual dust:

@@ -1,6 +1,7 @@
 import logging
 import threading
 import time
+from decimal import Decimal, ROUND_DOWN, InvalidOperation
 
 import config
 import liquidity
@@ -26,6 +27,22 @@ def _fixed_math_to_float(value):
     if raw is None:
         return None
     return raw / 1_000_000
+
+
+def _round_down(value, decimals):
+    try:
+        amount = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        amount = Decimal("0")
+    if amount <= 0:
+        return 0.0
+    quantum = Decimal("1").scaleb(-int(decimals))
+    return float(amount.quantize(quantum, rounding=ROUND_DOWN))
+
+
+def _buy_market_amount(value):
+    # CLOB marketable BUY orders accept maker USDC with at most two decimals.
+    return _round_down(value, 2)
 
 
 def _normalize_order_status(status):
@@ -610,18 +627,37 @@ def execute_trade(signal):
         return {"status": "error", "reason": "CLOB client not available"}
 
     try:
-        from py_clob_client.clob_types import OrderArgs, OrderType
+        from py_clob_client.clob_types import MarketOrderArgs, OrderArgs, OrderType
         from py_clob_client.order_builder.constants import BUY, SELL
 
         side = BUY if signal["side"].upper() == "BUY" else SELL
-        order = client.create_order(
-            OrderArgs(
-                token_id=signal["token_id"],
-                price=protected_price,
-                size=our_size,
-                side=side,
+        if side == BUY:
+            order_value = _buy_market_amount(our_value)
+            if order_value <= 0:
+                return {"status": "skipped", "reason": "live buy amount rounds to 0"}
+            if protected_price > 0:
+                our_size = round(order_value / protected_price, 4)
+            our_value = order_value
+            signal["_planned_size"] = our_size
+            signal["_planned_value"] = our_value
+            order = client.create_market_order(
+                MarketOrderArgs(
+                    token_id=signal["token_id"],
+                    amount=order_value,
+                    side=side,
+                    price=protected_price,
+                    order_type=OrderType.FAK,
+                )
             )
-        )
+        else:
+            order = client.create_order(
+                OrderArgs(
+                    token_id=signal["token_id"],
+                    price=protected_price,
+                    size=our_size,
+                    side=side,
+                )
+            )
         resp = client.post_order(order, orderType=OrderType.FAK)
 
         order_id = resp.get("orderID", resp.get("id", "unknown"))

@@ -62,6 +62,8 @@ Use this skill as the repo's governance entrypoint for research and execution ch
    Repo-level defects in code, docs, this skill, frontend, reports, dashboard, and runtime helper scripts may be repaired, minimally tested, committed, and pushed to GitHub `main` without a separate user review step.
    This includes restarting `web.py` and clearing duplicate `web.py` / UI-only / stale `start.bat` processes when they are causing DB/socket pressure or stale execution behavior.
    This authority never includes editing local personal account configuration or secrets such as real `.env`, private keys, `POLY_FUNDER`, API credentials, wallet settings, or other secret values.
+20. For live FAK `BUY` orders, treat the exchange precision contract as part of risk control.
+   Marketable BUYs should be built from a USDC `amount` rounded down to two decimals, not from a share `size` whose implied maker amount can carry too many decimals and be rejected by CLOB.
 
 ## Guardrails
 
@@ -93,6 +95,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never let a sandbox/automation blackhole proxy make Gamma, Data API, or CLOB calls fail while reporting the bot as merely having no eligible markets.
 - Never pause on a repo-level live runtime defect solely because manual review is unavailable when the operator has explicitly granted autonomous repair authority; fix, test, commit, push, and report the result.
 - Never treat autonomous repair authority as permission to edit real `.env`, private keys, `POLY_FUNDER`, API credentials, wallet settings, or any other personal secret.
+- Never send live FAK `BUY` orders as raw share-sized `OrderArgs` when CLOB is enforcing market-buy maker/taker precision; use a two-decimal USDC amount so precision rejects do not masquerade as strategy failures.
 
 ## References
 
