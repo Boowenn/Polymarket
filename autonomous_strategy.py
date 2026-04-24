@@ -420,6 +420,7 @@ def build_autonomous_signals():
 
     built = []
     skipped = 0
+    buildable_count = 0
     rejection_reasons = {}
     retry_gate_reasons = {}
     for row in candidates.values():
@@ -429,6 +430,7 @@ def build_autonomous_signals():
             reason_key = str(reason or "unknown build rejection")
             rejection_reasons[reason_key] = rejection_reasons.get(reason_key, 0) + 1
             continue
+        buildable_count += 1
         allowed, retry_reason = _can_retry_candidate(
             signal.get("condition_id", ""),
             signal.get("outcome", ""),
@@ -439,6 +441,7 @@ def build_autonomous_signals():
             continue
         built.append(signal)
 
+    allowed_count = len(built)
     built.sort(
         key=lambda signal: (
             -float(signal.get("signal_score", 0) or 0),
@@ -449,13 +452,17 @@ def build_autonomous_signals():
         )
     )
     built = built[: config.AUTONOMOUS_MAX_SIGNALS_PER_CYCLE]
+    selected_count = len(built)
 
     recorded = []
+    record_error_reasons = {}
     for signal in built:
         try:
             models.insert_trade(signal)
             recorded.append(signal)
         except Exception as exc:
+            record_reason = str(exc or "unknown record error")
+            record_error_reasons[record_reason] = record_error_reasons.get(record_reason, 0) + 1
             logger.warning(
                 "Failed to record autonomous signal %s / %s: %s",
                 signal.get("market_slug", ""),
@@ -483,6 +490,14 @@ def build_autonomous_signals():
             "Autonomous strategy found %s candidate market(s) but nothing executable",
             len(candidates),
         )
+        logger.info(
+            "Autonomous executable pipeline summary: buildable=%s, allowed=%s, selected=%s, recorded=%s, skipped=%s",
+            buildable_count,
+            allowed_count,
+            selected_count,
+            len(recorded),
+            skipped,
+        )
         if rejection_reasons:
             top_rejections = dict(
                 sorted(
@@ -497,6 +512,14 @@ def build_autonomous_signals():
             )
         if retry_gate_reasons:
             logger.info("Autonomous retry gate summary: %s", retry_gate_reasons)
+        if record_error_reasons:
+            top_record_errors = dict(
+                sorted(
+                    record_error_reasons.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )[:5]
+            )
+            logger.info("Autonomous record error summary: %s", top_record_errors)
     else:
         logger.info("Autonomous strategy found no eligible markets in current window")
 
