@@ -88,6 +88,7 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - for autonomous non-single-game `Match Winner` positions, keep a separate gentle protective exit so a small live bankroll does not have to hold every weakening position all the way to settlement
 - when an active exit prepares a live SELL, clip it to real conditional-token balance / allowance first; if only part of the position is sellable, close only the matched size instead of repeatedly failing the whole exit
 - before a live `BUY` is allowed through, make sure the planned size is not only above the raw `min_order_size`, but also above a small exit-safe buffer such as `5.25` shares for a `5`-share market; otherwise the bot can create a position that was buyable but is too small to sell back out cleanly later
+- when that exit-safe buffer is affordable under the current single-trade cap, plan the BUY directly at the buffered size instead of planning exactly `5` shares and letting the safety check reject it
 - if a live fill still lands below the market minimum and becomes temporarily unexitable, log it as an exit-safety breach and slow the active-exit retry cadence instead of hammering the same impossible SELL every minute
 - if you manually trade from the same live wallet in the Polymarket UI, reconcile that wallet activity back into `trade_journal` before reading open positions or realized PnL; manual sells should shrink or close the bot journal instead of leaving ghost live exposure behind
 - if that reconciliation leaves only tiny sub-cent / sub-share residue, treat it as `dust residual` instead of a full live position; keep the raw row for auditability, but exclude it from primary open-position and deployed-risk views
@@ -97,6 +98,7 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - if automation or a sandboxed shell starts the runtime with a blackhole proxy such as `127.0.0.1:9`, clear that inherited proxy before API calls; otherwise the dashboard can stay up while CLOB/Gamma/Data API reconciliation is silently offline
 - if an observer/report starts while the live runtime is writing, it should continue with SQLite busy-timeout settings instead of crashing just because the one-time WAL setup is locked
 - if the active DB is already initialized and temporarily busy, report/dashboard observers may skip schema initialization and continue with read-only analysis instead of interrupting the live runtime
+- if a live writer still holds SQLite during a report read, the report should retry with bounded backoff instead of turning a temporary lock into a failed heartbeat
 - serialize SQLite work inside each process so dashboard socket refreshes cannot race active exits or live reconciliation into avoidable `database is locked` errors
 - coalesce concurrent dashboard snapshot refreshes; many stale browser socket sessions should reuse a fresh cached payload instead of launching parallel DB and CLOB reads
 - if you use synthetic engines such as autonomous or consensus, keep their system wallets registered in SQLite before recording `trades`, otherwise foreign-key enforcement can kill live sample collection

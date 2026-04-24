@@ -15,6 +15,8 @@ _DB_OPERATION_LOCK = threading.RLock()
 _DB_TIMEOUT_SEC = 30.0
 _DB_BUSY_TIMEOUT_MS = 30_000
 _WAL_INITIALIZED = False
+_WAL_RETRY_AFTER = 0.0
+_WAL_RETRY_DELAY_SEC = 60.0
 _SQLITE_WRITE_RETRIES = 3
 _SQLITE_WRITE_RETRY_BASE_SEC = 0.15
 
@@ -184,11 +186,15 @@ def _configure_connection(conn, apply_write_pragmas=False):
 
 
 def _ensure_wal_mode():
-    global _WAL_INITIALIZED
+    global _WAL_INITIALIZED, _WAL_RETRY_AFTER
     if _WAL_INITIALIZED:
+        return
+    if time.time() < _WAL_RETRY_AFTER:
         return
     with _DB_CONNECT_LOCK:
         if _WAL_INITIALIZED:
+            return
+        if time.time() < _WAL_RETRY_AFTER:
             return
         conn = sqlite3.connect(config.DB_PATH, timeout=_DB_TIMEOUT_SEC)
         try:
@@ -196,15 +202,15 @@ def _ensure_wal_mode():
                 _configure_connection(conn, apply_write_pragmas=True)
                 conn.execute("PRAGMA journal_mode=WAL")
                 conn.commit()
+                _WAL_INITIALIZED = True
             except sqlite3.OperationalError as exc:
                 if "locked" not in str(exc).lower():
                     raise
+                _WAL_RETRY_AFTER = time.time() + _WAL_RETRY_DELAY_SEC
                 logger.warning(
                     "Skipping WAL initialization because database is locked; "
-                    "continuing with busy-timeout connection settings"
+                    "continuing with busy-timeout connection settings and retrying later"
                 )
-            finally:
-                _WAL_INITIALIZED = True
         finally:
             conn.close()
 

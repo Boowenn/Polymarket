@@ -2,6 +2,7 @@
 """Analyze recent sports and esports trading results and highlight what to improve next."""
 
 import argparse
+import sqlite3
 import sys
 import time
 from collections import Counter, defaultdict
@@ -28,9 +29,28 @@ def _fmt_pct(value):
     return f"{float(value or 0) * 100:.1f}%"
 
 
+def _read_with_retry(fn, label, attempts=6, base_delay_sec=2.0):
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn()
+        except sqlite3.OperationalError as exc:
+            if "locked" not in str(exc).lower() or attempt >= attempts:
+                raise
+            wait_sec = min(base_delay_sec * attempt, 10.0)
+            print(
+                f"Report read waiting for live DB lock: {label} "
+                f"(attempt {attempt}/{attempts}, retry in {wait_sec:.1f}s)",
+                file=sys.stderr,
+            )
+            time.sleep(wait_sec)
+
+
 def _rows(query, params=()):
-    with models.db() as conn:
-        return [dict(row) for row in conn.execute(query, params).fetchall()]
+    def _load():
+        with models.db() as conn:
+            return [dict(row) for row in conn.execute(query, params).fetchall()]
+
+    return _read_with_retry(_load, "sql")
 
 
 def _sample_type(row):
@@ -64,7 +84,10 @@ def load_window_data(since_ts):
         """,
         (since_ts,),
     )
-    profile_history = models.get_trader_profile_history(since_ts=since_ts)
+    profile_history = _read_with_retry(
+        lambda: models.get_trader_profile_history(since_ts=since_ts),
+        "trader_profile_history",
+    )
     risk_logs = _rows(
         """
         SELECT *

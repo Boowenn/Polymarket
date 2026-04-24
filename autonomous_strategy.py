@@ -334,7 +334,8 @@ def _build_signal_from_market(row):
         return None, f"book unavailable: {exc}"
 
     min_order_size = float(getattr(book, "min_order_size", 0) or 0)
-    min_order_value = round(min_order_size * price_value, 4) if min_order_size > 0 else round(price_value, 4)
+    entry_min_size = config.live_exit_safe_min_order_size(min_order_size)
+    min_order_value = round(entry_min_size * price_value, 4) if entry_min_size > 0 else round(price_value, 4)
     min_order_value = max(min_order_value, float(config.MARKETABLE_BUY_MIN_VALUE_USDC or 0))
     trade_floor = max(config.effective_autonomous_trade_floor(), min_order_value)
     trade_ceiling = config.effective_autonomous_trade_ceiling()
@@ -347,8 +348,8 @@ def _build_signal_from_market(row):
 
     target_value = round(trade_floor, 4)
     planned_size = round(target_value / price_value, 4) if price_value > 0 else 0
-    if min_order_size > 0 and planned_size + 1e-9 < min_order_size:
-        planned_size = round(min_order_size, 4)
+    if entry_min_size > 0 and planned_size + 1e-9 < entry_min_size:
+        planned_size = round(entry_min_size, 4)
         target_value = round(planned_size * price_value, 4)
 
     condition_id = row.get("conditionId", "")

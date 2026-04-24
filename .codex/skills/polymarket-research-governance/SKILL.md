@@ -50,11 +50,13 @@ Use this skill as the repo's governance entrypoint for research and execution ch
    If the operator manually trades from the same live wallet, reconcile that wallet activity back into the open journal by token before trusting open-position counts, realized PnL, or active-exit decisions.
    If that reconciliation leaves only sub-cent / sub-share dust, keep the dust row for auditability but exclude it from primary live exposure, deployed-value, and open-position metrics.
    If you want to move away from deep-underdog behavior, raise the executable autonomous band and the tiny-bankroll trade ceiling together; a `5`-share market around `0.50` needs roughly `$2.50`, so a hard `$1.50` ceiling structurally pushes the engine back toward cheap underdogs.
+   When live autonomous entry requires an exit-safe buffer above the raw exchange minimum, size the planned BUY to that buffered minimum when the current trade ceiling can afford it; do not generate a raw-minimum entry that is guaranteed to be rejected by the later exit-safety check.
 15. When governance changes land, update this skill and the repo README in the same change.
 16. In live mode, keep exactly one active execution loop per runtime DB.
    If a second `main.py` or `web.py` is started, it should not launch another trading loop against the same `copybot.db`; secondary processes should degrade to UI-only / observer mode instead of racing SQLite writes.
 17. If a live runtime is started from automation, do not let inherited blackhole proxy variables such as `127.0.0.1:9` break Polymarket API calls while the local dashboard still looks healthy.
    Clear only known bad proxy env values, never user secrets or wallet settings.
+18. If a live writer temporarily locks SQLite, reports and observers should wait and retry reads instead of failing the heartbeat; WAL initialization may skip a locked moment, but it should retry later rather than permanently giving up for the process.
 
 ## Guardrails
 
@@ -75,11 +77,13 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never re-apply `PRAGMA journal_mode=WAL` on every SQLite connection in the live runtime; initialize WAL once and let later connections use busy timeouts instead of turning read paths into extra write-lock attempts.
 - Never let a one-time WAL initialization lock abort dashboard/report observer reads; if the runtime DB is already busy, continue with busy-timeout connection settings rather than crashing the UI path.
 - Never let report/dashboard observer startup re-run schema work in a way that blocks or crashes against an already-busy live DB; if the schema exists, fail open for reads and alert only when real reads still fail.
+- Never let a transient live SQLite writer lock make the governance report crash immediately; observer reads should retry with bounded backoff before surfacing a real failure.
 - Never allow dashboard socket refreshes, active exits, and live reconciliation threads inside the same process to race SQLite writes; serialize local DB access before loosening strategy or risk settings.
 - Never let many stale browser socket sessions trigger parallel dashboard snapshots that stampede SQLite, CLOB, or Gamma; coalesce refreshes and return a fresh cached snapshot when one is already in progress.
 - Never let a temporary orderbook fetch blip zero-out live drawdown back to `entry_basis` when a cached/stale market mark is still available; keep execution gating strict, but preserve the best recent live mark for risk visibility.
 - Never keep that cached/stale live mark only in a single Python process; live drawdown fallback should survive process restarts and observer-mode checks.
 - Never approve a live `BUY` that only barely clears the raw `min_order_size` if that leaves no buffer for a later executable SELL; tiny live fills must stay exitable, not just buyable.
+- Never let autonomous sizing compute only the raw `min_order_size` and then reject every candidate against a higher exit-safe minimum; either buy the buffered size within the existing cap or skip the market as too expensive.
 - Never let a sandbox/automation blackhole proxy make Gamma, Data API, or CLOB calls fail while reporting the bot as merely having no eligible markets.
 
 ## References
