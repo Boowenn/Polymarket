@@ -2,6 +2,7 @@
 """Analyze recent sports and esports trading results and highlight what to improve next."""
 
 import argparse
+import os
 import sqlite3
 import sys
 import time
@@ -715,7 +716,10 @@ def main():
     parser.add_argument("--top", type=int, default=5, help="How many traders to show in each ranking.")
     args = parser.parse_args()
 
-    models.init_db()
+    if config.DRY_RUN or not os.path.exists(config.DB_PATH):
+        models.init_db()
+    else:
+        models.use_observer_read_only_connections(True)
 
     now = time.time()
     since_ts = now - max(args.days, 1) * 86400

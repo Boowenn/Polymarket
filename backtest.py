@@ -2,6 +2,7 @@
 """Summarize settled journal samples without mixing live, shadow, and experiments."""
 
 import argparse
+import os
 import sqlite3
 import sys
 import time
@@ -9,6 +10,7 @@ from collections import defaultdict
 from datetime import datetime
 
 import models
+import config
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -101,6 +103,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--days", type=float, default=7)
     args = parser.parse_args()
+
+    if config.DRY_RUN or not os.path.exists(config.DB_PATH):
+        models.init_db()
+    else:
+        models.use_observer_read_only_connections(True)
 
     rows = _rows(args.days)
     print("Polymarket Journal Backtest")

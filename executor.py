@@ -304,6 +304,22 @@ def reconcile_delayed_orders(limit=None, min_age_sec=None):
         normalized = _normalize_order_status(status)
 
         if normalized == "delayed":
+            if str(trade.get("signal_source") or "").lower() == "bot_exit" and models.has_later_matched_bot_exit(trade):
+                models.mark_trade_mirrored(
+                    trade["id"],
+                    order_id,
+                    side,
+                    0.0,
+                    fallback_price,
+                    "superseded",
+                )
+                summary["updated"] += 1
+                summary["closed"] += 1
+                logger.info(
+                    "[LIVE RECONCILE] order %s delayed -> superseded by later matched active exit",
+                    order_id,
+                )
+                continue
             continue
 
         models.mark_trade_mirrored(

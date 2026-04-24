@@ -6,6 +6,44 @@ import models
 import portfolio
 
 
+def autonomous_loss_probation_state():
+    if config.DRY_RUN or not config.ENABLE_AUTONOMOUS_LOSS_PROBATION:
+        return {"active": False, "blocks_new_entries": False, "reason": ""}
+
+    lookback_sec = float(config.AUTONOMOUS_LOSS_PROBATION_LOOKBACK_DAYS or 0) * 86400
+    since_ts = time.time() - lookback_sec if lookback_sec > 0 else None
+    summary = models.get_live_source_decision_summary("autonomous", since_ts=since_ts)
+    decisions = int(summary.get("decision_count", 0) or 0)
+    min_decisions = int(config.AUTONOMOUS_LOSS_PROBATION_MIN_DECISIONS or 0)
+    if decisions < min_decisions:
+        return {"active": False, "blocks_new_entries": False, "reason": ""}
+
+    realized_pnl = float(summary.get("realized_pnl", 0) or 0)
+    win_rate = summary.get("win_rate")
+    if win_rate is None:
+        return {"active": False, "blocks_new_entries": False, "reason": ""}
+    if realized_pnl >= 0 or float(win_rate) > float(config.AUTONOMOUS_LOSS_PROBATION_MAX_WIN_RATE or 0):
+        return {"active": False, "blocks_new_entries": False, "reason": ""}
+
+    open_count = models.get_open_position_count()
+    max_open = int(config.AUTONOMOUS_LOSS_PROBATION_MAX_OPEN_POSITIONS or 0)
+    reason = (
+        "autonomous loss probation active "
+        f"(decisions={decisions}, win_rate={float(win_rate) * 100:.1f}%, "
+        f"pnl=${realized_pnl:.2f}, open_positions={open_count}/{max_open})"
+    )
+    return {
+        "active": True,
+        "blocks_new_entries": open_count >= max_open,
+        "reason": reason,
+        "decisions": decisions,
+        "win_rate": float(win_rate),
+        "realized_pnl": realized_pnl,
+        "open_positions": open_count,
+        "max_open_positions": max_open,
+    }
+
+
 class RiskCheck:
     """Hard risk gate for copy and strategy signals."""
 
@@ -190,33 +228,12 @@ class RiskCheck:
         return True, ""
 
     def _check_autonomous_loss_probation(self, signal):
-        if config.DRY_RUN or not config.ENABLE_AUTONOMOUS_LOSS_PROBATION:
-            return True, ""
         if signal.get("signal_source", "copy") != "autonomous":
             return True, ""
 
-        lookback_sec = float(config.AUTONOMOUS_LOSS_PROBATION_LOOKBACK_DAYS or 0) * 86400
-        since_ts = time.time() - lookback_sec if lookback_sec > 0 else None
-        summary = models.get_live_source_decision_summary("autonomous", since_ts=since_ts)
-        decisions = int(summary.get("decision_count", 0) or 0)
-        if decisions < int(config.AUTONOMOUS_LOSS_PROBATION_MIN_DECISIONS or 0):
-            return True, ""
-
-        realized_pnl = float(summary.get("realized_pnl", 0) or 0)
-        win_rate = summary.get("win_rate")
-        if win_rate is None:
-            return True, ""
-        if realized_pnl >= 0 or float(win_rate) > float(config.AUTONOMOUS_LOSS_PROBATION_MAX_WIN_RATE or 0):
-            return True, ""
-
-        open_count = models.get_open_position_count()
-        max_open = int(config.AUTONOMOUS_LOSS_PROBATION_MAX_OPEN_POSITIONS or 0)
-        if open_count >= max_open:
-            return False, (
-                "autonomous loss probation active "
-                f"(decisions={decisions}, win_rate={float(win_rate) * 100:.1f}%, "
-                f"pnl=${realized_pnl:.2f}, open_positions={open_count}/{max_open})"
-            )
+        state = autonomous_loss_probation_state()
+        if state.get("blocks_new_entries"):
+            return False, state.get("reason", "autonomous loss probation active")
         return True, ""
 
     def _check_market_exposure(self, signal):

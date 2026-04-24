@@ -114,12 +114,14 @@ Allowed autonomous actions:
 - commit and push the focused fix to GitHub `main`
 - after local validation passes, keep local and GitHub state aligned by pushing the focused commit in the same round; do not leave verified autonomous fixes, deployments, or behavior-rule changes only in the local worktree
 - restart `web.py` or clear duplicate UI-only / stale launcher processes when the runtime has drifted into multiple competing loops
+- handle every actionable repo/runtime risk detected in the current heartbeat or diagnostic round when it can be fixed without violating sample isolation, real-money risk limits, or key protection
 
 Still forbidden:
 
 - do not edit real `.env`, private keys, `POLY_FUNDER`, API credentials, wallet settings, or any personal secret
 - do not silently loosen real-money risk budgets stored only in local operator configuration
 - do not treat normal price movement, a single API blip, or one isolated small loss as a code defect
+- do not weaken intended hard stops such as session stop or loss probation to make risk disappear
 
 For small non-urgent issues, require repeated evidence across heartbeats before changing code. For major live-risk, accounting, reconciliation, or exit defects, repair immediately and report the result.
 
@@ -176,6 +178,10 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
 - if that reconciliation leaves only negligible residual dust:
   preserve the raw residual row, but exclude it from primary live position counts, deployed value, and exposure gates so the UI reflects economically meaningful risk rather than wallet rounding residue
 - keep live report source and trader tables on the same dust-excluded primary live-execution basis as the overview, dashboard exposure, and risk gates, while preserving dust rows in SQLite for auditability
+- when session stop is active, pause new entry scanning entirely while continuing settlement, wallet reconciliation, delayed-order reconciliation, active exits, dashboard updates, and reports
+- when autonomous loss probation is active and open positions are already at the probation cap, pause autonomous candidate scanning instead of continuing to generate candidates that can only be blocked
+- when `report.py` or `backtest.py` runs against an existing live DB, use read-only observer connections so monitoring does not attempt schema/WAL writes against the active runtime
+- if a delayed active-exit order is later superseded by another matched active exit for the same wallet/market/outcome, mark the older delayed row as `superseded` during reconciliation so it no longer appears as a pending live-order risk
 
 This avoids disguising a sizing problem as successful live execution.
 

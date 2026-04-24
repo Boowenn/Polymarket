@@ -50,6 +50,9 @@ Use this skill as the repo's governance entrypoint for research and execution ch
    If the operator manually trades from the same live wallet, reconcile that wallet activity back into the open journal by token before trusting open-position counts, realized PnL, or active-exit decisions.
    If that reconciliation leaves only sub-cent / sub-share dust, keep the dust row for auditability but exclude it from primary live exposure, deployed-value, and open-position metrics.
    Keep live report source/trader tables on the same dust-excluded primary live-execution basis as the live overview, so residual dust cannot make report sections disagree with each other.
+   If session stop is active, pause new entry scanning entirely while still allowing settlement, wallet reconciliation, delayed-order reconciliation, active exits, dashboard updates, and reports to run.
+   If autonomous loss probation is active and current open positions are already at the probation cap, pause autonomous candidate scanning instead of continuing to generate candidates that can only be blocked.
+   If a delayed active-exit order is later superseded by another matched active exit for the same wallet/market/outcome, mark the older delayed row as `superseded` during reconciliation so it does not remain a false pending-risk signal.
    If you want to move away from deep-underdog behavior, raise the executable autonomous band and the tiny-bankroll trade ceiling together; a `5`-share market around `0.50` needs roughly `$2.50`, so a hard `$1.50` ceiling structurally pushes the engine back toward cheap underdogs.
    When live autonomous entry requires an exit-safe buffer above the raw exchange minimum, size the planned BUY to that buffered minimum when the current trade ceiling can afford it; do not generate a raw-minimum entry that is guaranteed to be rejected by the later exit-safety check.
    If autonomous candidate scanning or sequential live execution takes longer than the live signal age limit, refresh the final selected signal timestamp at record time and again immediately before each execution attempt so fresh market-first signals are not discarded as stale before they can place.
@@ -59,8 +62,10 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 17. If a live runtime is started from automation, do not let inherited blackhole proxy variables such as `127.0.0.1:9` break Polymarket API calls while the local dashboard still looks healthy.
    Clear only known bad proxy env values, never user secrets or wallet settings.
 18. If a live writer temporarily locks SQLite, reports and observers should wait and retry reads instead of failing the heartbeat; WAL initialization may skip a locked moment, but it should retry later rather than permanently giving up for the process.
+   CLI observers such as `report.py` and `backtest.py` should use read-only SQLite connections when the live DB already exists, so monitoring does not attempt schema/WAL writes against the active runtime.
 19. For live heartbeat custody, use the operator's explicit autonomous repair grant instead of waiting for manual review.
    Repo-level defects in code, docs, this skill, frontend, reports, dashboard, and runtime helper scripts may be repaired, minimally tested, committed, and pushed to GitHub `main` without a separate user review step.
+   When a heartbeat or local diagnostic detects actionable repo/runtime risk, handle every actionable item in the same round when it can be fixed without violating sample isolation, real-money risk limits, or key protection. If a risk is an intended hard stop or market outcome rather than a code/runtime defect, preserve the stop, pause new entries as appropriate, and report it instead of weakening the guard.
    After a repo-level autonomous change passes its smallest sufficient local validation, keep local and GitHub state aligned by committing the focused change and pushing it to `main` in the same round; do not leave verified fixes or behavior-rule changes only in the local worktree.
    This includes restarting `web.py` and clearing duplicate `web.py` / UI-only / stale `start.bat` processes when they are causing DB/socket pressure or stale execution behavior.
    This authority never includes editing local personal account configuration or secrets such as real `.env`, private keys, `POLY_FUNDER`, API credentials, wallet settings, or other secret values.
@@ -89,6 +94,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never let a one-time WAL initialization lock abort dashboard/report observer reads; if the runtime DB is already busy, continue with busy-timeout connection settings rather than crashing the UI path.
 - Never let report/dashboard observer startup re-run schema work in a way that blocks or crashes against an already-busy live DB; if the schema exists, fail open for reads and alert only when real reads still fail.
 - Never let a transient live SQLite writer lock make the governance report crash immediately; observer reads should retry with bounded backoff before surfacing a real failure.
+- Never let CLI observers create extra WAL/schema write pressure against an already-running live DB; use read-only observer connections when the live DB exists.
 - Never allow dashboard socket refreshes, active exits, and live reconciliation threads inside the same process to race SQLite writes; serialize local DB access before loosening strategy or risk settings.
 - Never let many stale browser socket sessions trigger parallel dashboard snapshots that stampede SQLite, CLOB, or Gamma; coalesce refreshes and return a fresh cached snapshot when one is already in progress.
 - Never let a temporary orderbook fetch blip zero-out live drawdown back to `entry_basis` when a cached/stale market mark is still available; keep execution gating strict, but preserve the best recent live mark for risk visibility.
@@ -99,10 +105,12 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never allow a slow autonomous scan or earlier order confirmation to make newly selected signals stale before execution; timestamp the final selected attempt at record time and refresh it again at executor entry.
 - Never let a sandbox/automation blackhole proxy make Gamma, Data API, or CLOB calls fail while reporting the bot as merely having no eligible markets.
 - Never pause on a repo-level live runtime defect solely because manual review is unavailable when the operator has explicitly granted autonomous repair authority; fix, test, commit, push, and report the result.
+- Never leave actionable detected repo/runtime risks untreated in a heartbeat; handle all safe actionable items, and explicitly report any remaining risk that is an intended stop, market exposure, or blocked by key/risk guardrails.
 - Never leave a verified autonomous repo change local-only after tests pass; if it is safe enough to deploy, commit and push it to GitHub `main` in the same round so local and remote do not drift.
 - Never treat autonomous repair authority as permission to edit real `.env`, private keys, `POLY_FUNDER`, API credentials, wallet settings, or any other personal secret.
 - Never send live FAK `BUY` orders as raw share-sized `OrderArgs` when CLOB is enforcing market-buy maker/taker precision; use a two-decimal USDC amount so precision rejects do not masquerade as strategy failures.
 - Never leave a submitted live `BUY` in a zero-filled delayed/matched limbo without reserving risk budget; pending orders must block further entries until reconciled.
+- Never leave an old delayed active-exit row marked as pending after a later active-exit order has already matched the same wallet/market/outcome; reconcile it as superseded instead of repeatedly alerting.
 
 ## References
 

@@ -91,6 +91,7 @@ import strategy
 import autonomous_strategy
 import settlement
 import wallet_reconcile
+import risk
 
 logging.basicConfig(
     level=logging.INFO,
@@ -112,6 +113,7 @@ _account_snapshot_lock = threading.Lock()
 _dashboard_snapshot = {"ts": 0.0, "data": None}
 _dashboard_snapshot_lock = threading.Lock()
 _execution_loop_lease = runtime_control.ProcessLease("execution_loop")
+_entry_pause_log = {"key": "", "ts": 0.0}
 
 
 def ts_fmt(ts):
@@ -538,6 +540,43 @@ def push_update():
         pass
 
 
+def _log_entry_pause(kind, reason):
+    now_ts = time.time()
+    key = f"{kind}:{reason}"
+    if _entry_pause_log.get("key") == key and now_ts - float(_entry_pause_log.get("ts", 0) or 0) < config.ENTRY_RISK_PAUSE_LOG_SEC:
+        return
+    _entry_pause_log["key"] = key
+    _entry_pause_log["ts"] = now_ts
+    logger.warning("Entry scanning paused by %s: %s", kind, reason)
+    models.log_risk_event("ENTRY_SCAN_PAUSED", kind, reason)
+
+
+def _entry_pause_state():
+    if config.DRY_RUN:
+        return {"pause_all": False, "pause_autonomous": False, "reason": ""}
+
+    if config.session_stop_loss_enabled():
+        drawdown = portfolio.get_live_drawdown_snapshot()
+        if drawdown.get("stop_active"):
+            return {
+                "pause_all": True,
+                "pause_autonomous": True,
+                "kind": "session_stop",
+                "reason": drawdown.get("stop_reason") or "session stop active",
+            }
+
+    probation = risk.autonomous_loss_probation_state()
+    if probation.get("blocks_new_entries"):
+        return {
+            "pause_all": False,
+            "pause_autonomous": True,
+            "kind": "autonomous_loss_probation",
+            "reason": probation.get("reason", "autonomous loss probation active"),
+        }
+
+    return {"pause_all": False, "pause_autonomous": False, "reason": ""}
+
+
 def _port_in_use(port):
     try:
         with socket.create_connection(("127.0.0.1", int(port)), timeout=0.5):
@@ -580,8 +619,11 @@ def bot_loop():
                 logger.error(f"Leaderboard: {e}")
 
         # Fast copy scan every POLL_INTERVAL
+        entry_pause = _entry_pause_state()
         signals = []
-        if config.copy_strategy_enabled():
+        if entry_pause.get("pause_all"):
+            _log_entry_pause(entry_pause.get("kind", "risk"), entry_pause.get("reason", "risk pause active"))
+        elif config.copy_strategy_enabled():
             try:
                 signals = monitor.scan_all_traders()
                 if signals:
@@ -589,7 +631,7 @@ def bot_loop():
             except Exception as e:
                 logger.error(f"Scan: {e}")
 
-        if config.copy_strategy_enabled() and config.ENABLE_CONSENSUS_STRATEGY and not signals:
+        if not entry_pause.get("pause_all") and config.copy_strategy_enabled() and config.ENABLE_CONSENSUS_STRATEGY and not signals:
             try:
                 signals = strategy.build_consensus_signals()
                 if signals:
@@ -599,7 +641,10 @@ def bot_loop():
                 models.log_risk_event("STRATEGY_ERROR", str(e), "skipped")
 
         autonomous_signals = []
-        if config.autonomous_strategy_enabled():
+        if entry_pause.get("pause_all") or entry_pause.get("pause_autonomous"):
+            if entry_pause.get("pause_autonomous"):
+                _log_entry_pause(entry_pause.get("kind", "risk"), entry_pause.get("reason", "risk pause active"))
+        elif config.autonomous_strategy_enabled():
             try:
                 autonomous_signals = autonomous_strategy.build_autonomous_signals()
                 if autonomous_signals:

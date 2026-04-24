@@ -19,6 +19,7 @@ _WAL_RETRY_AFTER = 0.0
 _WAL_RETRY_DELAY_SEC = 60.0
 _SQLITE_WRITE_RETRIES = 3
 _SQLITE_WRITE_RETRY_BASE_SEC = 0.15
+_OBSERVER_READ_ONLY = False
 
 
 BLOCK_REASON_META = {
@@ -221,7 +222,18 @@ def _ensure_wal_mode():
             conn.close()
 
 
+def use_observer_read_only_connections(enabled=True):
+    global _OBSERVER_READ_ONLY
+    _OBSERVER_READ_ONLY = bool(enabled)
+
+
 def get_connection():
+    if _OBSERVER_READ_ONLY:
+        db_path = os.path.abspath(config.DB_PATH).replace("\\", "/")
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=_DB_TIMEOUT_SEC)
+        _configure_connection(conn)
+        return conn
+
     _ensure_wal_mode()
     conn = sqlite3.connect(config.DB_PATH, timeout=_DB_TIMEOUT_SEC)
     _configure_connection(conn)
@@ -234,7 +246,8 @@ def db():
         conn = get_connection()
         try:
             yield conn
-            conn.commit()
+            if not _OBSERVER_READ_ONLY:
+                conn.commit()
         finally:
             conn.close()
 
@@ -1186,6 +1199,31 @@ def get_delayed_trades_for_reconciliation(limit=10, min_age_sec=0):
             (cutoff_ts, int(limit)),
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def has_later_matched_bot_exit(trade):
+    with db() as conn:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM trades
+            WHERE COALESCE(signal_source, '') = 'bot_exit'
+              AND trader_wallet = ?
+              AND condition_id = ?
+              AND outcome = ?
+              AND timestamp > ?
+              AND LOWER(COALESCE(our_status, '')) IN ('matched', 'order_status_matched')
+              AND COALESCE(our_size, 0) > 0
+            LIMIT 1
+            """,
+            (
+                trade.get("trader_wallet", ""),
+                trade.get("condition_id", ""),
+                trade.get("outcome", ""),
+                float(trade.get("timestamp", 0) or 0),
+            ),
+        ).fetchone()
+    return row is not None
 
 
 def get_mirrored_trades():

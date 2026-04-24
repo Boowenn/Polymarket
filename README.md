@@ -99,12 +99,16 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - if you manually trade from the same live wallet in the Polymarket UI, reconcile that wallet activity back into `trade_journal` before reading open positions or realized PnL; manual sells should shrink or close the bot journal instead of leaving ghost live exposure behind
 - if that reconciliation leaves only tiny sub-cent / sub-share residue, treat it as `dust residual` instead of a full live position; keep the raw row for auditability, but exclude it from primary open-position and deployed-risk views
 - keep live report source and trader tables on the same dust-excluded primary live basis as the overview and dashboard, so tiny residual rows do not make sections disagree
+- if session stop is active, pause new entry scanning entirely while settlement, wallet reconciliation, delayed-order reconciliation, active exits, dashboard updates, and reports continue
+- if autonomous loss probation is active and current open positions are already at the probation cap, pause autonomous candidate scanning instead of generating candidates that can only be blocked
+- if a delayed active-exit order is later superseded by a matched active exit for the same wallet/market/outcome, reconcile the older row as `superseded` instead of showing it as pending forever
 - keep the real `.env` local-only; do not commit private keys or live wallet settings
 - read the dashboard as a live-only view: real account cash, current guardrails, and true executed fills
 - keep only one active execution loop writing to the live DB; if you need another browser/view process, let it attach in dashboard-only mode instead of starting a second trader loop
 - if automation or a sandboxed shell starts the runtime with a blackhole proxy such as `127.0.0.1:9`, clear that inherited proxy before API calls; otherwise the dashboard can stay up while CLOB/Gamma/Data API reconciliation is silently offline
 - if an observer/report starts while the live runtime is writing, it should continue with SQLite busy-timeout settings instead of crashing just because the one-time WAL setup is locked
 - if the active DB is already initialized and temporarily busy, report/dashboard observers may skip schema initialization and continue with read-only analysis instead of interrupting the live runtime
+- when `report.py` or `backtest.py` runs against an existing live DB, use read-only observer connections so monitoring does not add schema/WAL write pressure
 - if a live writer still holds SQLite during a report read, the report should retry with bounded backoff instead of turning a temporary lock into a failed heartbeat
 - serialize SQLite work inside each process so dashboard socket refreshes cannot race active exits or live reconciliation into avoidable `database is locked` errors
 - coalesce concurrent dashboard snapshot refreshes; many stale browser socket sessions should reuse a fresh cached payload instead of launching parallel DB and CLOB reads
@@ -187,7 +191,7 @@ Long-term maintenance, metric definitions, live cutover rules, autonomous rollou
 - `.codex/skills/polymarket-research-governance/SKILL.md`
 - `.codex/skills/polymarket-research-governance/references/governance.md`
 
-For live-only custody, this skill is also the operational authority record. When the operator explicitly grants autonomous repair permission in the active thread, repo-level defects in code, docs, skill files, frontend, reports, dashboard logic, and runtime helper scripts can be fixed, tested, committed, and pushed to GitHub `main` without a separate review gate. After the smallest sufficient local validation passes, verified repo changes should be pushed in the same round so local and GitHub `main` stay aligned instead of leaving fixes local-only. Personal account configuration stays outside that authority: real `.env`, private keys, `POLY_FUNDER`, API credentials, wallet settings, and other secrets must remain local and are never changed automatically.
+For live-only custody, this skill is also the operational authority record. When the operator explicitly grants autonomous repair permission in the active thread, repo-level defects in code, docs, skill files, frontend, reports, dashboard logic, and runtime helper scripts can be fixed, tested, committed, and pushed to GitHub `main` without a separate review gate. After the smallest sufficient local validation passes, verified repo changes should be pushed in the same round so local and GitHub `main` stay aligned instead of leaving fixes local-only. If a heartbeat or diagnostic detects actionable repo/runtime risk, handle every safe actionable item in the same round; intended hard stops and market losses should be preserved, paused, and reported rather than weakened. Personal account configuration stays outside that authority: real `.env`, private keys, `POLY_FUNDER`, API credentials, wallet settings, and other secrets must remain local and are never changed automatically.
 
 Authoritative rules:
 
