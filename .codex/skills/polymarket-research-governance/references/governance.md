@@ -101,6 +101,7 @@ While quarantine is active:
 
 - keep default autonomous real-money entries paused in every runner
 - continue settlement, wallet reconciliation, delayed-order reconciliation, active exits, dashboard, reports, backtests, and shadow-only observation
+- if session-stop or drawdown state cannot be read because SQLite is temporarily locked, fail closed for new entries and keep maintenance tasks running
 - use shadow and backtest output only to propose hypotheses, not to restart the default live strategy
 - do not raise bankroll, single-trade cap, max positions, price band, liquidity limits, session stop, probation, or quarantine thresholds to force new fills
 - do not restart autonomous live entries just because the calendar day changed or the open-position count drops to zero

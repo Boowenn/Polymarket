@@ -51,6 +51,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
    If that reconciliation leaves only sub-cent / sub-share dust, keep the dust row for auditability but exclude it from primary live exposure, deployed-value, and open-position metrics.
    Keep live report source/trader tables on the same dust-excluded primary live-execution basis as the live overview, so residual dust cannot make report sections disagree with each other.
    If session stop is active, pause new entry scanning entirely while still allowing settlement, wallet reconciliation, delayed-order reconciliation, active exits, dashboard updates, and reports to run.
+   If session-stop or drawdown state cannot be read because SQLite is temporarily locked, fail closed for new entries and keep non-entry maintenance running instead of letting the cycle crash or assume risk is clear.
    If autonomous loss probation is active and current open positions are already at the probation cap, pause autonomous candidate scanning instead of continuing to generate candidates that can only be blocked.
    If the executed autonomous live sample becomes severely bad, pause autonomous new entries entirely with loss quarantine; keep exits, settlement, reconciliation, dashboard, report, backtest, and shadow observation running instead of continuing one-at-a-time real-money probing.
    Loss quarantine recovery must be explicit: keep real-money autonomous entries paused in every runner, attribute the executed losses first, and only replace the failed default rule through a named narrow experiment with a sample cap and rollback condition.
@@ -96,6 +97,7 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never let a one-time WAL initialization lock abort dashboard/report observer reads; if the runtime DB is already busy, continue with busy-timeout connection settings rather than crashing the UI path.
 - Never let report/dashboard observer startup re-run schema work in a way that blocks or crashes against an already-busy live DB; if the schema exists, fail open for reads and alert only when real reads still fail.
 - Never let a transient live SQLite writer lock make the governance report crash immediately; observer reads should retry with bounded backoff before surfacing a real failure.
+- Never treat an unavailable session-stop/drawdown read as permission to continue new entries; entry loops must fail closed while maintenance tasks continue.
 - Never let CLI observers create extra WAL/schema write pressure against an already-running live DB; use read-only observer connections when the live DB exists.
 - Never allow dashboard socket refreshes, active exits, and live reconciliation threads inside the same process to race SQLite writes; serialize local DB access before loosening strategy or risk settings.
 - Never let many stale browser socket sessions trigger parallel dashboard snapshots that stampede SQLite, CLOB, or Gamma; coalesce refreshes and return a fresh cached snapshot when one is already in progress.

@@ -101,6 +101,7 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - if that reconciliation leaves only tiny sub-cent / sub-share residue, treat it as `dust residual` instead of a full live position; keep the raw row for auditability, but exclude it from primary open-position and deployed-risk views
 - keep live report source and trader tables on the same dust-excluded primary live basis as the overview and dashboard, so tiny residual rows do not make sections disagree
 - if session stop is active, pause new entry scanning entirely while settlement, wallet reconciliation, delayed-order reconciliation, active exits, dashboard updates, and reports continue
+- if session-stop or drawdown state cannot be read because the live DB is temporarily locked, fail closed and pause new entries while maintenance tasks continue
 - if autonomous loss probation is active and current open positions are already at the probation cap, pause autonomous candidate scanning instead of generating candidates that can only be blocked
 - if a delayed active-exit order is later superseded by a matched active exit for the same wallet/market/outcome, reconcile the older row as `superseded` instead of showing it as pending forever
 - keep the real `.env` local-only; do not commit private keys or live wallet settings

@@ -207,7 +207,17 @@ def _entry_pause_state():
         return {"pause_all": False, "pause_autonomous": False, "reason": ""}
 
     if config.session_stop_loss_enabled():
-        drawdown = portfolio.get_live_drawdown_snapshot()
+        try:
+            drawdown = portfolio.get_live_drawdown_snapshot()
+        except Exception as exc:
+            reason = f"session stop check unavailable: {exc}"
+            logger.warning("Entry scanning paused by session_stop_check_error: %s", reason)
+            return {
+                "pause_all": True,
+                "pause_autonomous": True,
+                "kind": "session_stop_check_error",
+                "reason": reason,
+            }
         if drawdown.get("stop_active"):
             return {
                 "pause_all": True,
