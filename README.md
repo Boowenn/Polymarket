@@ -181,6 +181,8 @@ Long-term maintenance, metric definitions, live cutover rules, autonomous rollou
 - `.codex/skills/polymarket-research-governance/SKILL.md`
 - `.codex/skills/polymarket-research-governance/references/governance.md`
 
+For live-only custody, this skill is also the operational authority record. When the operator explicitly grants autonomous repair permission in the active thread, repo-level defects in code, docs, skill files, frontend, reports, dashboard logic, and runtime helper scripts can be fixed, tested, committed, and pushed to GitHub `main` without a separate review gate. Personal account configuration stays outside that authority: real `.env`, private keys, `POLY_FUNDER`, API credentials, wallet settings, and other secrets must remain local and are never changed automatically.
+
 Authoritative rules:
 
 - keep `executed`, `shadow`, and `experiment` separated during research, then archive non-live samples out of the active DB once you cut over to live

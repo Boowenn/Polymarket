@@ -58,6 +58,10 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 17. If a live runtime is started from automation, do not let inherited blackhole proxy variables such as `127.0.0.1:9` break Polymarket API calls while the local dashboard still looks healthy.
    Clear only known bad proxy env values, never user secrets or wallet settings.
 18. If a live writer temporarily locks SQLite, reports and observers should wait and retry reads instead of failing the heartbeat; WAL initialization may skip a locked moment, but it should retry later rather than permanently giving up for the process.
+19. For live heartbeat custody, use the operator's explicit autonomous repair grant instead of waiting for manual review.
+   Repo-level defects in code, docs, this skill, frontend, reports, dashboard, and runtime helper scripts may be repaired, minimally tested, committed, and pushed to GitHub `main` without a separate user review step.
+   This includes restarting `web.py` and clearing duplicate `web.py` / UI-only / stale `start.bat` processes when they are causing DB/socket pressure or stale execution behavior.
+   This authority never includes editing local personal account configuration or secrets such as real `.env`, private keys, `POLY_FUNDER`, API credentials, wallet settings, or other secret values.
 
 ## Guardrails
 
@@ -87,6 +91,8 @@ Use this skill as the repo's governance entrypoint for research and execution ch
 - Never let autonomous sizing compute only the raw `min_order_size` and then reject every candidate against a higher exit-safe minimum; either buy the buffered size within the existing cap or skip the market as too expensive.
 - Never allow a slow autonomous scan or earlier order confirmation to make newly selected signals stale before execution; timestamp the final selected attempt at record time and refresh it again at executor entry.
 - Never let a sandbox/automation blackhole proxy make Gamma, Data API, or CLOB calls fail while reporting the bot as merely having no eligible markets.
+- Never pause on a repo-level live runtime defect solely because manual review is unavailable when the operator has explicitly granted autonomous repair authority; fix, test, commit, push, and report the result.
+- Never treat autonomous repair authority as permission to edit real `.env`, private keys, `POLY_FUNDER`, API credentials, wallet settings, or any other personal secret.
 
 ## References
 

@@ -6,14 +6,14 @@ Verified local baseline:
 
 - Date: `2026-04-24` JST
 - Command: `python report.py --days 3 --top 5`
-- `live_entries = 7`
+- `live_entries = 8`
 - `live_closed = 7`
-- `live_open = 0`
+- `live_open = 1`
 - `live_decision_count = 7`
-- `live_close_rate = 100.0%`
+- `live_close_rate = 87.5%`
 - `live_win_rate = 14.3%`
 - `live_realized_pnl = -7.86`
-- `autonomous_live_entries = 9`
+- `autonomous_live_entries = 10`
 - `autonomous_live_closed = 7`
 - `autonomous_live_realized_pnl = -0.78`
 - `copy_live_entries = 2`
@@ -100,6 +100,25 @@ Do not claim stable live-readiness until all of the following are true:
 - experiments stay isolated from default policy until reviewed
 - wallet auth is verified with a read-only authenticated CLOB call, not just local client initialization
 - proxy wallet users set the correct `POLY_SIGNATURE_TYPE` and `POLY_FUNDER` from Polymarket account settings before any live canary
+
+## Autonomous Live Custody
+
+When the operator has explicitly granted autonomous repair authority in the active thread, use that authority for repo-level live-runtime defects instead of waiting for a separate manual review. This applies to code, docs, skills, frontend, reports, dashboard logic, and runtime helper scripts.
+
+Allowed autonomous actions:
+
+- repair defects that distort live execution, wallet reconciliation, active exits, risk gates, dashboard/report metrics, or SQLite/runtime stability
+- run the smallest sufficient tests for the touched area
+- commit and push the focused fix to GitHub `main`
+- restart `web.py` or clear duplicate UI-only / stale launcher processes when the runtime has drifted into multiple competing loops
+
+Still forbidden:
+
+- do not edit real `.env`, private keys, `POLY_FUNDER`, API credentials, wallet settings, or any personal secret
+- do not silently loosen real-money risk budgets stored only in local operator configuration
+- do not treat normal price movement, a single API blip, or one isolated small loss as a code defect
+
+For small non-urgent issues, require repeated evidence across heartbeats before changing code. For major live-risk, accounting, reconciliation, or exit defects, repair immediately and report the result.
 
 ### Small-Bankroll Canary Policy
 
