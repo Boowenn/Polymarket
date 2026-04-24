@@ -582,6 +582,18 @@ def build_live_recommendations(journal_summary, risk_counts, trader_rows, source
         autonomous_decisions = int(autonomous_source.get("decision_count", 0) or 0)
         autonomous_win_rate = autonomous_source.get("win_rate")
         autonomous_pnl = float(autonomous_source.get("realized_pnl", 0) or 0)
+        quarantine_win_rate_pct = float(config.AUTONOMOUS_LOSS_QUARANTINE_MAX_WIN_RATE or 0) * 100
+        if (
+            config.ENABLE_AUTONOMOUS_LOSS_QUARANTINE
+            and autonomous_decisions >= int(config.AUTONOMOUS_LOSS_QUARANTINE_MIN_DECISIONS or 0)
+            and autonomous_win_rate is not None
+            and float(autonomous_win_rate) <= quarantine_win_rate_pct
+            and autonomous_pnl <= -float(config.AUTONOMOUS_LOSS_QUARANTINE_MIN_REALIZED_LOSS_USDC or 0)
+        ):
+            recommendations.append(
+                "autonomous live is in loss quarantine. Pause new autonomous entries entirely; "
+                "keep exits, settlement, reconciliation, dashboard, report, and shadow observation running."
+            )
         probation_win_rate_pct = float(config.AUTONOMOUS_LOSS_PROBATION_MAX_WIN_RATE or 0) * 100
         if (
             config.ENABLE_AUTONOMOUS_LOSS_PROBATION

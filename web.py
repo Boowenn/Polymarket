@@ -45,13 +45,13 @@ if not os.path.exists(env_path):
         f.write("GAME_MARKET_ACTIVE_EXIT_ABS_DROP=0.15\n")
         f.write("GAME_MARKET_ACTIVE_EXIT_COOLDOWN_SEC=60\n")
         f.write("ENABLE_AUTONOMOUS_PROTECTIVE_EXIT=true\n")
-        f.write("AUTONOMOUS_PROTECTIVE_EXIT_PRICE_RATIO=0.82\n")
-        f.write("AUTONOMOUS_PROTECTIVE_EXIT_ABS_DROP=0.08\n")
-        f.write("AUTONOMOUS_PROTECTIVE_EXIT_MIN_LOSS_USDC=0.18\n")
+        f.write("AUTONOMOUS_PROTECTIVE_EXIT_PRICE_RATIO=0.90\n")
+        f.write("AUTONOMOUS_PROTECTIVE_EXIT_ABS_DROP=0.04\n")
+        f.write("AUTONOMOUS_PROTECTIVE_EXIT_MIN_LOSS_USDC=0.10\n")
         f.write("ENABLE_AUTONOMOUS_TAKE_PROFIT=true\n")
-        f.write("AUTONOMOUS_TAKE_PROFIT_PRICE_RATIO=1.60\n")
-        f.write("AUTONOMOUS_TAKE_PROFIT_ABS_GAIN=0.12\n")
-        f.write("AUTONOMOUS_TAKE_PROFIT_MIN_PNL_USDC=0.35\n")
+        f.write("AUTONOMOUS_TAKE_PROFIT_PRICE_RATIO=1.20\n")
+        f.write("AUTONOMOUS_TAKE_PROFIT_ABS_GAIN=0.05\n")
+        f.write("AUTONOMOUS_TAKE_PROFIT_MIN_PNL_USDC=0.10\n")
         f.write("DAILY_RISK_BUDGET=50\nPAPER_BANKROLL=250\nPAPER_DAILY_RISK_BUDGET=250\n")
         f.write("PAPER_IGNORE_CAPITAL_GATES=true\nMAX_TRADER_EXPOSURE_PCT=0.12\n")
         f.write("MAX_MARKET_EXPOSURE_PCT=0.15\nMIN_SIGNAL_CONFIRM_SEC=20\nMAX_SIGNAL_AGE_SEC=90\n")
@@ -69,14 +69,23 @@ if not os.path.exists(env_path):
         f.write("ENABLE_CONSENSUS_STRATEGY=false\nCONSENSUS_WINDOW_SEC=600\n")
         f.write("MIN_CONSENSUS_TRADERS=2\nMIN_CONSENSUS_SCORE=72\nCONSENSUS_TRADE_PCT=0.015\n")
         f.write("AUTONOMOUS_SPORT_CODES=dota2,cs2,lol,val,nfl,nba,mlb,nhl,epl,cfb,ncaab\n")
-        f.write("AUTONOMOUS_MIN_TRADE_VALUE_USDC=0.60\nAUTONOMOUS_MAX_TRADE_VALUE_USDC=1.50\n")
-        f.write("AUTONOMOUS_MIN_PRICE=0.18\nAUTONOMOUS_MAX_PRICE=0.45\n")
-        f.write("AUTONOMOUS_TARGET_PRICE=0.32\n")
+        f.write("AUTONOMOUS_MIN_TRADE_VALUE_USDC=0.60\nAUTONOMOUS_MAX_TRADE_VALUE_USDC=2.50\n")
+        f.write("AUTONOMOUS_MIN_PRICE=0.26\nAUTONOMOUS_MAX_PRICE=0.50\n")
+        f.write("AUTONOMOUS_TARGET_PRICE=0.38\n")
         f.write("AUTONOMOUS_MIN_MARKET_LIQUIDITY=750\n")
         f.write("AUTONOMOUS_MIN_EVENT_LEAD_SEC=900\nAUTONOMOUS_MAX_EVENT_LEAD_SEC=172800\n")
         f.write("AUTONOMOUS_MAX_CANDIDATES_PER_TAG=80\nAUTONOMOUS_MAX_SIGNALS_PER_CYCLE=3\n")
         f.write("AUTONOMOUS_REQUIRE_ESPORTS_SERIES=true\nMIN_AUTONOMOUS_SCORE=68\n")
         f.write("AUTONOMOUS_RETRY_COOLDOWN_SEC=1200\n")
+        f.write("ENABLE_AUTONOMOUS_LOSS_PROBATION=true\n")
+        f.write("AUTONOMOUS_LOSS_PROBATION_LOOKBACK_DAYS=3\n")
+        f.write("AUTONOMOUS_LOSS_PROBATION_MIN_DECISIONS=8\n")
+        f.write("AUTONOMOUS_LOSS_PROBATION_MAX_WIN_RATE=0.20\n")
+        f.write("AUTONOMOUS_LOSS_PROBATION_MAX_OPEN_POSITIONS=1\n")
+        f.write("ENABLE_AUTONOMOUS_LOSS_QUARANTINE=true\n")
+        f.write("AUTONOMOUS_LOSS_QUARANTINE_MIN_DECISIONS=8\n")
+        f.write("AUTONOMOUS_LOSS_QUARANTINE_MAX_WIN_RATE=0.12\n")
+        f.write("AUTONOMOUS_LOSS_QUARANTINE_MIN_REALIZED_LOSS_USDC=1.00\n")
         f.write("REPORT_DEFAULT_DAYS=3\n")
 
 import config
@@ -287,7 +296,7 @@ def get_dashboard_data():
         blocked_reasons = []
         repeat_entry_experiment = {}
         no_book_recheck_experiment = {}
-    risk = models.get_recent_risk_logs(20)
+    risk_logs = models.get_recent_risk_logs(20)
     mirrored = models.get_mirrored_trades()
     pnl_curve = models.get_recent_pnl_log(limit=120)
     effective_bankroll = config.effective_bankroll()
@@ -295,6 +304,8 @@ def get_dashboard_data():
     deployed_value = float(models.get_open_deployed_value() or 0)
     open_position_count = int(models.get_open_position_count() or 0)
     account_snapshot = get_live_account_snapshot()
+    quarantine_state = risk.autonomous_loss_quarantine_state()
+    probation_state = risk.autonomous_loss_probation_state()
 
     buy_count = sum(1 for t in recent if t["side"] == "BUY")
     sell_count = len(recent) - buy_count
@@ -349,7 +360,7 @@ def get_dashboard_data():
         "blocked_reasons": blocked_reasons,
         "repeat_entry_experiment": repeat_entry_experiment,
         "no_book_recheck_experiment": no_book_recheck_experiment,
-        "risk_logs": [{**r, "time_str": ts_fmt(r["timestamp"])} for r in risk],
+        "risk_logs": [{**r, "time_str": ts_fmt(r["timestamp"])} for r in risk_logs],
         "config": {
             "dry_run": config.DRY_RUN,
             "bankroll": effective_bankroll,
@@ -379,6 +390,12 @@ def get_dashboard_data():
             "autonomous_trade_ceiling": config.effective_autonomous_trade_ceiling(),
             "autonomous_max_signals_per_cycle": config.AUTONOMOUS_MAX_SIGNALS_PER_CYCLE,
             "autonomous_require_esports_series": config.AUTONOMOUS_REQUIRE_ESPORTS_SERIES,
+            "autonomous_loss_quarantine_enabled": config.ENABLE_AUTONOMOUS_LOSS_QUARANTINE,
+            "autonomous_loss_quarantine_active": quarantine_state.get("active", False),
+            "autonomous_loss_quarantine_reason": quarantine_state.get("reason", ""),
+            "autonomous_loss_probation_enabled": config.ENABLE_AUTONOMOUS_LOSS_PROBATION,
+            "autonomous_loss_probation_active": probation_state.get("active", False),
+            "autonomous_loss_probation_reason": probation_state.get("reason", ""),
             "paper_daily_risk_budget": config.PAPER_DAILY_RISK_BUDGET,
             "paper_ignore_capital_gates": config.PAPER_IGNORE_CAPITAL_GATES,
             "daily_risk_budget": open_deployed_budget,
@@ -564,6 +581,15 @@ def _entry_pause_state():
                 "kind": "session_stop",
                 "reason": drawdown.get("stop_reason") or "session stop active",
             }
+
+    quarantine = risk.autonomous_loss_quarantine_state()
+    if quarantine.get("blocks_new_entries"):
+        return {
+            "pause_all": False,
+            "pause_autonomous": True,
+            "kind": "autonomous_loss_quarantine",
+            "reason": quarantine.get("reason", "autonomous loss quarantine active"),
+        }
 
     probation = risk.autonomous_loss_probation_state()
     if probation.get("blocks_new_entries"):

@@ -6,14 +6,59 @@ import models
 import portfolio
 
 
+def _autonomous_loss_summary():
+    lookback_sec = float(config.AUTONOMOUS_LOSS_PROBATION_LOOKBACK_DAYS or 0) * 86400
+    since_ts = time.time() - lookback_sec if lookback_sec > 0 else None
+    summary = models.get_live_source_decision_summary("autonomous", since_ts=since_ts)
+    return {
+        "decisions": int(summary.get("decision_count", 0) or 0),
+        "win_rate": summary.get("win_rate"),
+        "realized_pnl": float(summary.get("realized_pnl", 0) or 0),
+    }
+
+
+def autonomous_loss_quarantine_state():
+    if config.DRY_RUN or not config.ENABLE_AUTONOMOUS_LOSS_QUARANTINE:
+        return {"active": False, "blocks_new_entries": False, "reason": ""}
+
+    summary = _autonomous_loss_summary()
+    decisions = int(summary.get("decisions", 0) or 0)
+    min_decisions = int(config.AUTONOMOUS_LOSS_QUARANTINE_MIN_DECISIONS or 0)
+    if decisions < min_decisions:
+        return {"active": False, "blocks_new_entries": False, "reason": ""}
+
+    realized_pnl = float(summary.get("realized_pnl", 0) or 0)
+    win_rate = summary.get("win_rate")
+    if win_rate is None:
+        return {"active": False, "blocks_new_entries": False, "reason": ""}
+    if float(win_rate) > float(config.AUTONOMOUS_LOSS_QUARANTINE_MAX_WIN_RATE or 0):
+        return {"active": False, "blocks_new_entries": False, "reason": ""}
+    loss_floor = float(config.AUTONOMOUS_LOSS_QUARANTINE_MIN_REALIZED_LOSS_USDC or 0)
+    if realized_pnl > -loss_floor:
+        return {"active": False, "blocks_new_entries": False, "reason": ""}
+
+    reason = (
+        "autonomous loss quarantine active "
+        f"(decisions={decisions}, win_rate={float(win_rate) * 100:.1f}%, "
+        f"pnl=${realized_pnl:.2f}, loss_floor=${loss_floor:.2f})"
+    )
+    return {
+        "active": True,
+        "blocks_new_entries": True,
+        "reason": reason,
+        "decisions": decisions,
+        "win_rate": float(win_rate),
+        "realized_pnl": realized_pnl,
+        "loss_floor": loss_floor,
+    }
+
+
 def autonomous_loss_probation_state():
     if config.DRY_RUN or not config.ENABLE_AUTONOMOUS_LOSS_PROBATION:
         return {"active": False, "blocks_new_entries": False, "reason": ""}
 
-    lookback_sec = float(config.AUTONOMOUS_LOSS_PROBATION_LOOKBACK_DAYS or 0) * 86400
-    since_ts = time.time() - lookback_sec if lookback_sec > 0 else None
-    summary = models.get_live_source_decision_summary("autonomous", since_ts=since_ts)
-    decisions = int(summary.get("decision_count", 0) or 0)
+    summary = _autonomous_loss_summary()
+    decisions = int(summary.get("decisions", 0) or 0)
     min_decisions = int(config.AUTONOMOUS_LOSS_PROBATION_MIN_DECISIONS or 0)
     if decisions < min_decisions:
         return {"active": False, "blocks_new_entries": False, "reason": ""}
@@ -56,6 +101,7 @@ class RiskCheck:
             self._check_whipsaw_trap,
             self._check_orderbook_liquidity,
             self._check_price_band,
+            self._check_autonomous_loss_quarantine,
             self._check_autonomous_loss_probation,
             self._check_repeat_harvest,
             self._check_daily_risk_budget,
@@ -234,6 +280,15 @@ class RiskCheck:
         state = autonomous_loss_probation_state()
         if state.get("blocks_new_entries"):
             return False, state.get("reason", "autonomous loss probation active")
+        return True, ""
+
+    def _check_autonomous_loss_quarantine(self, signal):
+        if signal.get("signal_source", "copy") != "autonomous":
+            return True, ""
+
+        state = autonomous_loss_quarantine_state()
+        if state.get("blocks_new_entries"):
+            return False, state.get("reason", "autonomous loss quarantine active")
         return True, ""
 
     def _check_market_exposure(self, signal):

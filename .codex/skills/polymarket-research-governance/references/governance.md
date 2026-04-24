@@ -88,6 +88,7 @@ When copy-trading is not trusted enough for live capital, default to a narrow ma
   an earlier protective exit once the marked loss is already meaningful in dollars on a tiny bankroll, and a separate take-profit rule that is willing to bank smaller wins instead of waiting for a huge repricing
 - if an autonomous candidate was only blocked, unmirrored, or execution-error'd, allow it to retry after a short cooldown such as `10-30` minutes instead of treating the first row in `trades` as a permanent ban
 - when the recent autonomous live decision sample is both losing and below the configured probation win-rate threshold, reduce autonomous concurrency to a one-position probation mode before allowing fresh entries; this is a defensive brake, not proof that the strategy has recovered
+- when the executed autonomous live sample is severely bad, default to loss quarantine: pause autonomous new entries entirely while exits, settlement, reconciliation, dashboard, report, backtest, and shadow observation continue; current defaults trigger at 8 dust-excluded live decisions, win rate at or below 12%, and at least `$1.00` realized loss
 
 This is a rollout policy, not proof of edge. Promotion still requires executed evidence.
 
@@ -180,6 +181,7 @@ If live bankroll is extremely small (for example, around `$20`), treat the run a
 - keep live report source and trader tables on the same dust-excluded primary live-execution basis as the overview, dashboard exposure, and risk gates, while preserving dust rows in SQLite for auditability
 - when session stop is active, pause new entry scanning entirely while continuing settlement, wallet reconciliation, delayed-order reconciliation, active exits, dashboard updates, and reports
 - when autonomous loss probation is active and open positions are already at the probation cap, pause autonomous candidate scanning instead of continuing to generate candidates that can only be blocked
+- when autonomous loss quarantine is active, pause autonomous candidate scanning even if there are zero open positions; shadow and backtest data can only propose a later narrow experiment, not restart default live entries by themselves
 - when `report.py` or `backtest.py` runs against an existing live DB, use read-only observer connections so monitoring does not attempt schema/WAL writes against the active runtime
 - if a delayed active-exit order is later superseded by another matched active exit for the same wallet/market/outcome, mark the older delayed row as `superseded` during reconciliation so it no longer appears as a pending live-order risk
 

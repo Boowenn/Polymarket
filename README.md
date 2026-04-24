@@ -93,6 +93,7 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - when that exit-safe buffer is affordable under the current single-trade cap, plan the BUY directly at the buffered size instead of planning exactly `5` shares and letting the safety check reject it
 - because a full autonomous scan and sequential order confirmation can take longer than the live signal age limit, refresh autonomous attempt timestamps at record time and again at executor entry so brand-new candidates are not blocked as stale
 - when the recent autonomous live decision sample is both losing and below the probation win-rate threshold, automatically reduce autonomous concurrency to a one-position probation mode before allowing fresh entries
+- when the autonomous live decision sample is severely bad, such as at least 8 dust-excluded live decisions, win rate at or below 12%, and realized loss of at least `$1`, enter loss quarantine and fully pause new autonomous entries while exits, settlement, reconciliation, reporting, dashboard, and shadow observation continue
 - for live FAK `BUY` orders, send a two-decimal USDC amount instead of a raw share-sized limit order; otherwise CLOB can reject otherwise valid tiny-bankroll buys because the implied maker amount has too many decimals
 - if a live BUY is accepted by CLOB but the immediate order read does not yet expose a filled size, reserve it as `pending_live_order` exposure until reconciliation proves the final fill or no-fill status
 - if a live fill still lands below the market minimum and becomes temporarily unexitable, log it as an exit-safety breach and slow the active-exit retry cadence instead of hammering the same impossible SELL every minute
@@ -148,6 +149,7 @@ The default autonomous live path is intentionally narrow:
 - if manual reconciliation leaves a tiny residual below a dust threshold, hide that dust from the main live dashboard, deployed-risk, and open-position counts so the UI reflects economically meaningful exposure
 - do not permanently dedupe blocked autonomous candidates by market/outcome alone; use a short retry cooldown instead so improved capital or position settings can unlock the same candidate later in the day
 - if you want to move away from deep-underdog behavior on a tiny bankroll, remember that the execution ceiling has to move with the price band; a `5`-share market priced around `0.50` needs about `$2.50`, so a hard `$1.50` cap structurally forces the engine back toward cheaper contracts
+- if the live autonomous sample falls into severe loss quarantine, do not keep taking one-at-a-time real-money entries; pause default autonomous entries and use shadow/backtest data only for hypotheses until a reviewed narrow experiment replaces the failed rule
 
 This setup was chosen because Polymarket exposes enough public sports metadata and market data to build a market-first strategy without relying on trader activity, while official order book endpoints expose `min_order_size`, making sub-dollar sizing infeasible for many contracts on tiny bankrolls.
 
@@ -212,6 +214,7 @@ Relevant scope controls:
 - `AUTONOMOUS_TARGET_PRICE` to prefer the middle of that band instead of mechanically choosing the lowest price.
 - `AUTONOMOUS_MIN_TRADE_VALUE_USDC` / `AUTONOMOUS_MAX_TRADE_VALUE_USDC` to keep autonomous sizing executable but small.
 - `AUTONOMOUS_REQUIRE_ESPORTS_SERIES=true` to avoid single-map or child-game entry markets.
+- `ENABLE_AUTONOMOUS_LOSS_QUARANTINE=true` to stop autonomous new entries entirely after a severe losing live decision sample instead of continuing one-at-a-time real-money probing.
 - `LEADERBOARD_CANDIDATE_MULTIPLIER` to widen the sports leaderboard candidate pool before trader-quality filtering.
 - `LEADERBOARD_DISCOVERY_PERIODS=day,week,month` and `LEADERBOARD_DISCOVERY_ORDER_BY=pnl,vol` to merge multiple sports leaderboard slices into one larger monitored pool.
 - `MONITOR_FETCH_WORKERS=12` to fetch trader activity in parallel so the bot can scan a larger pool without aging signals out.

@@ -2403,6 +2403,7 @@ def get_daily_pnl():
 
 def get_live_source_decision_summary(signal_source, since_ts=None):
     status_clause = _active_executed_status_clause()
+    dust_clause = _dust_position_clause()
     sql = f"""
         SELECT
             COUNT(*) AS closed_entries,
@@ -2417,6 +2418,8 @@ def get_live_source_decision_summary(signal_source, since_ts=None):
           AND {status_clause}
     """
     params = [str(signal_source or "").strip().lower()]
+    if dust_clause != "0":
+        sql += f" AND NOT {dust_clause}"
     if since_ts is not None:
         sql += " AND entry_timestamp >= ?"
         params.append(float(since_ts))
