@@ -1,4 +1,5 @@
 import logging
+import os
 import sqlite3
 import threading
 import time
@@ -324,9 +325,8 @@ def _backfill_missing_trader_references(conn):
         _ensure_trader_reference(conn, row["wallet"], row["username"])
 
 
-def init_db():
+def _init_db_inner():
     with db() as conn:
-        conn.execute("PRAGMA journal_mode=WAL")
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS traders (
@@ -506,6 +506,19 @@ def init_db():
             """
         )
         _backfill_missing_trader_references(conn)
+
+
+def init_db():
+    try:
+        _init_db_inner()
+    except sqlite3.OperationalError as exc:
+        if _is_sqlite_locked(exc) and config.DB_PATH and os.path.exists(config.DB_PATH):
+            logger.warning(
+                "Skipping DB schema initialization because database is locked; "
+                "assuming existing live schema"
+            )
+            return
+        raise
 
 
 def upsert_position_mark_cache(position):

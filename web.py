@@ -109,6 +109,7 @@ LEADERBOARD_INTERVAL = 300  # refresh leaderboard every 5 min
 _account_snapshot = {"ts": 0.0, "data": None}
 _account_snapshot_lock = threading.Lock()
 _dashboard_snapshot = {"ts": 0.0, "data": None}
+_dashboard_snapshot_lock = threading.Lock()
 _execution_loop_lease = runtime_control.ProcessLease("execution_loop")
 
 
@@ -469,6 +470,28 @@ def get_dashboard_data():
 
 
 def safe_dashboard_data():
+    cached = _dashboard_snapshot.get("data")
+    cached_ts = float(_dashboard_snapshot.get("ts", 0) or 0)
+    now_ts = time.time()
+    min_refresh_sec = max(float(config.ORDERBOOK_CACHE_SEC or 0), 2.0)
+    if cached and now_ts - cached_ts < min_refresh_sec:
+        return dict(cached)
+
+    lock_acquired = _dashboard_snapshot_lock.acquire(blocking=False)
+    if not lock_acquired:
+        if cached:
+            payload = dict(cached)
+            payload["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            payload["snapshot_warning"] = "dashboard_refresh_in_progress"
+            return payload
+        _dashboard_snapshot_lock.acquire()
+        lock_acquired = True
+        cached = _dashboard_snapshot.get("data")
+        cached_ts = float(_dashboard_snapshot.get("ts", 0) or 0)
+        if cached and time.time() - cached_ts < min_refresh_sec:
+            _dashboard_snapshot_lock.release()
+            return dict(cached)
+
     try:
         payload = get_dashboard_data()
         _dashboard_snapshot["ts"] = time.time()
@@ -483,6 +506,9 @@ def safe_dashboard_data():
             payload["snapshot_warning"] = f"stale_dashboard_snapshot:{exc}"
             return payload
         raise
+    finally:
+        if lock_acquired:
+            _dashboard_snapshot_lock.release()
 
 
 # ── routes ──
