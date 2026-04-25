@@ -225,13 +225,23 @@ def _candidate_pairs(row):
     return pairs
 
 
-def _score_candidate(row, price_value, min_order_value, assessment):
+def _score_candidate(
+    row,
+    price_value,
+    min_order_value,
+    assessment,
+    price_target=None,
+    min_price=None,
+    max_price=None,
+):
     score = 62.0
     liquidity_usdc = float(row.get("liquidity") or 0)
     lead_sec = (_market_start_ts(row) or time.time()) - time.time()
     spread = float(assessment.get("spread", 1) or 1)
-    price_target = config.autonomous_price_target()
-    band_half_width = max((config.AUTONOMOUS_MAX_PRICE - config.AUTONOMOUS_MIN_PRICE) / 2, 0.01)
+    price_target = float(price_target if price_target is not None else config.autonomous_price_target())
+    min_price = float(min_price if min_price is not None else config.AUTONOMOUS_MIN_PRICE)
+    max_price = float(max_price if max_price is not None else config.AUTONOMOUS_MAX_PRICE)
+    band_half_width = max((max_price - min_price) / 2, 0.01)
     price_distance = abs(price_value - price_target)
 
     if liquidity_usdc >= 5000:
@@ -313,10 +323,46 @@ def _candidate_preference_key(pair):
     )
 
 
+def _pair_preference_key(pair, price_target):
+    price_value = float(pair.get("price") or 0)
+    return (
+        abs(price_value - price_target),
+        0 if price_value >= price_target else 1,
+        -price_value,
+        str(pair.get("outcome") or ""),
+    )
+
+
+def _edge_filter_thresholds(scope_label):
+    if str(scope_label or "").strip().lower() == "esports":
+        return {
+            "min_price": config.AUTONOMOUS_ESPORTS_EDGE_FILTER_MIN_PRICE,
+            "max_price": config.AUTONOMOUS_ESPORTS_EDGE_FILTER_MAX_PRICE,
+            "target_price": config.AUTONOMOUS_ESPORTS_EDGE_FILTER_TARGET_PRICE,
+            "min_liquidity": config.AUTONOMOUS_ESPORTS_EDGE_FILTER_MIN_LIQUIDITY,
+            "min_lead_sec": config.AUTONOMOUS_ESPORTS_EDGE_FILTER_MIN_LEAD_SEC,
+            "max_lead_sec": config.AUTONOMOUS_ESPORTS_EDGE_FILTER_MAX_LEAD_SEC,
+            "min_score": config.AUTONOMOUS_ESPORTS_EDGE_FILTER_MIN_SCORE,
+        }
+    return {
+        "min_price": config.AUTONOMOUS_EDGE_FILTER_MIN_PRICE,
+        "max_price": config.AUTONOMOUS_EDGE_FILTER_MAX_PRICE,
+        "target_price": config.AUTONOMOUS_EDGE_FILTER_TARGET_PRICE,
+        "min_liquidity": config.AUTONOMOUS_EDGE_FILTER_MIN_LIQUIDITY,
+        "min_lead_sec": config.AUTONOMOUS_EDGE_FILTER_MIN_LEAD_SEC,
+        "max_lead_sec": config.AUTONOMOUS_EDGE_FILTER_MAX_LEAD_SEC,
+        "min_score": config.AUTONOMOUS_EDGE_FILTER_MIN_SCORE,
+    }
+
+
 def _edge_filter_preference_key(signal):
     price_value = float(signal.get("price") or 0)
     score = float(signal.get("signal_score", 0) or 0)
-    target = float(config.AUTONOMOUS_EDGE_FILTER_TARGET_PRICE or config.autonomous_price_target())
+    target = float(
+        signal.get("_edge_filter_target_price")
+        or config.AUTONOMOUS_EDGE_FILTER_TARGET_PRICE
+        or config.autonomous_price_target()
+    )
     return (
         -score,
         abs(price_value - target),
@@ -325,19 +371,36 @@ def _edge_filter_preference_key(signal):
     )
 
 
-def _build_signal_from_market(row):
+def _build_signal_from_market(
+    row,
+    price_min=None,
+    price_max=None,
+    price_target=None,
+    min_score=None,
+):
     pairs = _candidate_pairs(row)
     if len(pairs) != 2:
         return None, "not binary"
 
+    price_min = float(price_min if price_min is not None else config.AUTONOMOUS_MIN_PRICE)
+    price_max = float(price_max if price_max is not None else config.AUTONOMOUS_MAX_PRICE)
+    price_target = float(price_target if price_target is not None else config.autonomous_price_target())
+    min_score = float(min_score if min_score is not None else config.MIN_AUTONOMOUS_SCORE)
     banded_pairs = [
         pair
         for pair in pairs
-        if config.AUTONOMOUS_MIN_PRICE <= float(pair.get("price") or 0) <= config.AUTONOMOUS_MAX_PRICE
+        if price_min <= float(pair.get("price") or 0) <= price_max
     ]
     if not banded_pairs:
         return None, "price outside autonomous band"
-    selected_pair = min(banded_pairs, key=_candidate_preference_key)
+    if (
+        price_min == config.AUTONOMOUS_MIN_PRICE
+        and price_max == config.AUTONOMOUS_MAX_PRICE
+        and price_target == config.autonomous_price_target()
+    ):
+        selected_pair = min(banded_pairs, key=_candidate_preference_key)
+    else:
+        selected_pair = min(banded_pairs, key=lambda pair: _pair_preference_key(pair, price_target))
     price_value = float(selected_pair["price"] or 0)
 
     try:
@@ -387,6 +450,7 @@ def _build_signal_from_market(row):
         "signal_note": "",
         "target_value": target_value,
         "_event_start_ts": event_start_ts,
+        "_edge_filter_target_price": price_target,
     }
 
     assessment = liquidity.assess_execution(signal, planned_size)
@@ -394,13 +458,21 @@ def _build_signal_from_market(row):
         return None, assessment.get("reason", "orderbook check failed")
 
     signal["_execution_assessment"] = assessment
-    signal["signal_score"] = _score_candidate(row, price_value, min_order_value, assessment)
-    if signal["signal_score"] < config.MIN_AUTONOMOUS_SCORE:
+    signal["signal_score"] = _score_candidate(
+        row,
+        price_value,
+        min_order_value,
+        assessment,
+        price_target=price_target,
+        min_price=price_min,
+        max_price=price_max,
+    )
+    if signal["signal_score"] < min_score:
         return None, f"autonomous score too low ({signal['signal_score']:.1f})"
 
     lead_min = max(int((event_start_ts - time.time()) // 60), 0)
     signal["signal_note"] = (
-        f"binary moneyline balanced probe; target~{config.autonomous_price_target():.2f}; start in {lead_min}m; "
+        f"binary moneyline balanced probe; target~{price_target:.2f}; start in {lead_min}m; "
         f"market_liquidity=${float(row.get('liquidity') or 0):.0f}; "
         f"min_order=${min_order_value:.2f}; score={signal['signal_score']:.0f}"
     )
@@ -413,25 +485,26 @@ def _edge_filter_allows(row, signal, scope_label=None):
         return False, f"not {scope_label}"
     if market_scope_label not in {"sports", "esports"}:
         return False, "not sports/esports"
+    thresholds = _edge_filter_thresholds(scope_label or market_scope_label)
 
     price_value = float(signal.get("price", 0) or 0)
-    if price_value < config.AUTONOMOUS_EDGE_FILTER_MIN_PRICE:
+    if price_value < thresholds["min_price"]:
         return False, "edge price below floor"
-    if price_value > config.AUTONOMOUS_EDGE_FILTER_MAX_PRICE:
+    if price_value > thresholds["max_price"]:
         return False, "edge price above ceiling"
 
     liquidity_usdc = float(row.get("liquidity") or 0)
-    if liquidity_usdc < config.AUTONOMOUS_EDGE_FILTER_MIN_LIQUIDITY:
+    if liquidity_usdc < thresholds["min_liquidity"]:
         return False, "edge liquidity too low"
 
     lead_sec = float(signal.get("_event_start_ts", 0) or 0) - time.time()
-    if lead_sec < config.AUTONOMOUS_EDGE_FILTER_MIN_LEAD_SEC:
+    if lead_sec < thresholds["min_lead_sec"]:
         return False, "edge lead too short"
-    if lead_sec > config.AUTONOMOUS_EDGE_FILTER_MAX_LEAD_SEC:
+    if lead_sec > thresholds["max_lead_sec"]:
         return False, "edge lead too long"
 
     score = float(signal.get("signal_score", 0) or 0)
-    if score < config.AUTONOMOUS_EDGE_FILTER_MIN_SCORE:
+    if score < thresholds["min_score"]:
         return False, "edge score too low"
 
     return True, ""
@@ -493,6 +566,7 @@ def _record_edge_filter_shadow(signal, experiment_key=None):
 
 def _record_edge_filter_shadow_observations_for_scope(ordered_codes, experiment_key, scope_label, reason):
     candidates = {}
+    thresholds = _edge_filter_thresholds(scope_label)
     for code in ordered_codes:
         try:
             rows = _markets_for_code(code)
@@ -512,7 +586,13 @@ def _record_edge_filter_shadow_observations_for_scope(ordered_codes, experiment_
     built = []
     skipped = 0
     for row in candidates.values():
-        signal, _build_reason = _build_signal_from_market(row)
+        signal, _build_reason = _build_signal_from_market(
+            row,
+            price_min=thresholds["min_price"],
+            price_max=thresholds["max_price"],
+            price_target=thresholds["target_price"],
+            min_score=thresholds["min_score"],
+        )
         if signal is None:
             skipped += 1
             continue

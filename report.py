@@ -706,13 +706,14 @@ def print_shadow_recovery_watch(rows):
         return
     if isinstance(rows, dict):
         rows = [{"experiment_key": config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEY, **rows}]
-    print("rule                           enabled  entries  closed  decs  win_rate  pnl        review")
+    print("rule                           status   entries  closed  decs  win_rate  pnl        review")
     for row in rows:
         win_rate = f"{row['win_rate']:.1f}%" if row.get("win_rate") is not None else "N/A"
         rule = str(row.get("experiment_key") or config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEY)
+        status = "active" if rule in config.AUTONOMOUS_ACTIVE_EDGE_FILTER_EXPERIMENT_KEYS else "retired"
         print(
             f"{rule[:30]:30s}  "
-            f"{'on' if config.ENABLE_AUTONOMOUS_EDGE_FILTER_SHADOW else 'off':7s}  "
+            f"{status if config.ENABLE_AUTONOMOUS_EDGE_FILTER_SHADOW else 'off':7s}  "
             f"{int(row.get('total_entries', 0) or 0):7d}  "
             f"{int(row.get('closed_entries', 0) or 0):6d}  "
             f"{int(row.get('decision_count', 0) or 0):4d}  "

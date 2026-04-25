@@ -6,22 +6,25 @@ Verified local baseline:
 
 - Date: `2026-04-25` JST
 - Command: `python report.py --days 3 --top 5`
-- `live_entries = 12`
-- `live_closed = 11`
-- `live_open = 1`
-- `live_decision_count = 11`
-- `live_close_rate = 91.7%`
-- `live_win_rate = 9.1%`
-- `live_realized_pnl = -9.72`
+- `live_entries = 10`
+- `live_closed = 10`
+- `live_open = 0`
+- `live_decision_count = 10`
+- `live_close_rate = 100.0%`
+- `live_win_rate = 10.0%`
+- `live_realized_pnl = -2.84`
 - `autonomous_live_entries = 10`
-- `autonomous_live_closed = 9`
-- `autonomous_live_realized_pnl = -2.64`
-- `copy_live_entries = 2`
-- `copy_live_closed = 2`
-- `copy_live_realized_pnl = -7.08`
-- `7d_executed_autonomous_entries = 16`
-- `7d_executed_autonomous_win_rate = 6.2%`
-- `7d_executed_autonomous_realized_pnl = -2.65`
+- `autonomous_live_closed = 10`
+- `autonomous_live_realized_pnl = -2.84`
+- `copy_live_entries = 0`
+- `copy_live_closed = 0`
+- `copy_live_realized_pnl = 0.00`
+- `7d_executed_autonomous_entries = 18`
+- `7d_executed_autonomous_win_rate = 5.6%`
+- `7d_executed_autonomous_realized_pnl = -2.85`
+- `esports_edge_filter_shadow_v1 = retired, 54 entries, 11 decisions, 9.1% win rate, -16.17 PnL`
+- `esports_edge_filter_shadow_v2 = active, 1 entry, 0 decisions`
+- `sports_edge_filter_shadow_v1 = active, 18 entries, 3 decisions, 66.7% win rate, 4.62 PnL`
 
 Use this snapshot as the current reference point until a newer report is intentionally recorded.
 
@@ -112,15 +115,16 @@ This is a rollout policy, not proof of edge. Promotion still requires executed e
 
 ### Current Quarantine Recovery Experiments
 
-The active recovery plans are `esports_edge_filter_shadow_v1` and `sports_edge_filter_shadow_v1`.
+The active recovery plans are `esports_edge_filter_shadow_v2` and `sports_edge_filter_shadow_v1`.
 
 - Failed rule being replaced: the default market-first selector that primarily used a balanced price band / target-price preference without enough executed edge evidence.
-- Sample type: `shadow`, with `experiment_key = esports_edge_filter_shadow_v1` for esports and `experiment_key = sports_edge_filter_shadow_v1` for sports.
+- Sample type: `shadow`, with `experiment_key = esports_edge_filter_shadow_v2` for active esports and `experiment_key = sports_edge_filter_shadow_v1` for sports.
 - Exposure: no-money only; maximum real-money exposure is `$0`.
-- Scope: esports `Match Winner` moneyline candidates that already pass the default BO3 / BO5 and child-game exclusions, plus sports moneyline candidates from the allowed autonomous sports universe. Both must additionally pass stricter price, liquidity, lead-time, and score thresholds.
+- Scope: esports `Match Winner` moneyline candidates that already pass the default BO3 / BO5 and child-game exclusions, plus sports moneyline candidates from the allowed autonomous sports universe. Active esports v2 additionally narrows to higher-liquidity, near-consensus pre-match moneyline candidates because the bot does not yet ingest map vetoes, drafts, roster news, patch context, or sharp closing-line value. Sports v1 keeps the original stricter price, liquidity, lead-time, and score thresholds.
 - Caps: must respect `LIVE_BLOCKED_SHADOW_MAX_OPEN`, `LIVE_BLOCKED_SHADOW_COOLDOWN_SEC`, and `AUTONOMOUS_EDGE_FILTER_MAX_SIGNALS_PER_CYCLE`.
 - Review threshold: do not consider any live recovery before at least `AUTONOMOUS_EDGE_FILTER_MIN_DECIDED_SAMPLES` decided samples, currently `50`.
 - Rollback condition: if after `AUTONOMOUS_EDGE_FILTER_ROLLBACK_MIN_DECIDED` decided samples, currently `30`, win rate is at or below `AUTONOMOUS_EDGE_FILTER_ROLLBACK_MAX_WIN_RATE`, currently `45%`, or realized PnL is negative, keep default live autonomous paused and replace or retire the experiment.
+- Retired comparison: `esports_edge_filter_shadow_v1` stays in report/dashboard summaries as old shadow evidence after its poor early read, but no new rows should be written with that key.
 
 Shadow or backtest improvement from either rule is hypothesis evidence only. A later real-money canary still requires a separate reviewed plan with explicit real-money exposure and rollback limits.
 

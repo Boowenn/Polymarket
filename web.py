@@ -40,6 +40,13 @@ if not os.path.exists(env_path):
         f.write("AUTONOMOUS_EDGE_FILTER_MIN_LEAD_SEC=3600\n")
         f.write("AUTONOMOUS_EDGE_FILTER_MAX_LEAD_SEC=129600\n")
         f.write("AUTONOMOUS_EDGE_FILTER_MIN_SCORE=74\n")
+        f.write("AUTONOMOUS_ESPORTS_EDGE_FILTER_MIN_PRICE=0.43\n")
+        f.write("AUTONOMOUS_ESPORTS_EDGE_FILTER_MAX_PRICE=0.47\n")
+        f.write("AUTONOMOUS_ESPORTS_EDGE_FILTER_TARGET_PRICE=0.46\n")
+        f.write("AUTONOMOUS_ESPORTS_EDGE_FILTER_MIN_LIQUIDITY=5000\n")
+        f.write("AUTONOMOUS_ESPORTS_EDGE_FILTER_MIN_LEAD_SEC=1800\n")
+        f.write("AUTONOMOUS_ESPORTS_EDGE_FILTER_MAX_LEAD_SEC=43200\n")
+        f.write("AUTONOMOUS_ESPORTS_EDGE_FILTER_MIN_SCORE=82\n")
         f.write("AUTONOMOUS_EDGE_FILTER_MAX_SIGNALS_PER_CYCLE=2\n")
         f.write("AUTONOMOUS_EDGE_FILTER_MIN_DECIDED_SAMPLES=50\n")
         f.write("AUTONOMOUS_EDGE_FILTER_ROLLBACK_MIN_DECIDED=30\n")
@@ -502,10 +509,14 @@ def get_dashboard_data():
             "autonomous_edge_filter_shadow_enabled": config.ENABLE_AUTONOMOUS_EDGE_FILTER_SHADOW,
             "autonomous_edge_filter_key": config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEY,
             "autonomous_edge_filter_keys": list(config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEYS),
+            "autonomous_active_edge_filter_keys": list(config.AUTONOMOUS_ACTIVE_EDGE_FILTER_EXPERIMENT_KEYS),
             "autonomous_sports_edge_filter_key": config.AUTONOMOUS_SPORTS_EDGE_FILTER_EXPERIMENT_KEY,
             "autonomous_edge_filter_min_price": config.AUTONOMOUS_EDGE_FILTER_MIN_PRICE,
             "autonomous_edge_filter_max_price": config.AUTONOMOUS_EDGE_FILTER_MAX_PRICE,
             "autonomous_edge_filter_min_liquidity": config.AUTONOMOUS_EDGE_FILTER_MIN_LIQUIDITY,
+            "autonomous_esports_edge_filter_min_price": config.AUTONOMOUS_ESPORTS_EDGE_FILTER_MIN_PRICE,
+            "autonomous_esports_edge_filter_max_price": config.AUTONOMOUS_ESPORTS_EDGE_FILTER_MAX_PRICE,
+            "autonomous_esports_edge_filter_min_liquidity": config.AUTONOMOUS_ESPORTS_EDGE_FILTER_MIN_LIQUIDITY,
             "autonomous_edge_filter_min_decided_samples": config.AUTONOMOUS_EDGE_FILTER_MIN_DECIDED_SAMPLES,
             "autonomous_edge_filter_rollback_min_decided": config.AUTONOMOUS_EDGE_FILTER_ROLLBACK_MIN_DECIDED,
             "autonomous_edge_filter_rollback_max_win_rate": config.AUTONOMOUS_EDGE_FILTER_ROLLBACK_MAX_WIN_RATE,
