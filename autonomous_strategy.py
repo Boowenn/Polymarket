@@ -143,8 +143,8 @@ def _scope_for_code(sport_code):
 def _market_start_ts(row):
     return (
         _parse_iso_ts(row.get("eventStartTime"))
-        or _parse_iso_ts(row.get("startDate"))
         or _parse_iso_ts(row.get("endDate"))
+        or _parse_iso_ts(row.get("startDate"))
     )
 
 
@@ -172,7 +172,7 @@ def _is_allowed_market(row):
         return False, "not match moneyline"
 
     group_title = str(row.get("groupItemTitle") or "").strip().lower()
-    if group_title and "match winner" not in group_title:
+    if sport_code in market_scope.get_esports_codes() and group_title and "match winner" not in group_title:
         return False, "not match-winner group"
 
     if re.search(r"-game\d+\b", slug):
@@ -407,9 +407,12 @@ def _build_signal_from_market(row):
     return signal, ""
 
 
-def _edge_filter_allows(row, signal):
-    if signal.get("market_scope") != "esports":
-        return False, "not esports"
+def _edge_filter_allows(row, signal, scope_label=None):
+    market_scope_label = str(signal.get("market_scope") or "").strip().lower()
+    if scope_label and market_scope_label != scope_label:
+        return False, f"not {scope_label}"
+    if market_scope_label not in {"sports", "esports"}:
+        return False, "not sports/esports"
 
     price_value = float(signal.get("price", 0) or 0)
     if price_value < config.AUTONOMOUS_EDGE_FILTER_MIN_PRICE:
@@ -434,7 +437,7 @@ def _edge_filter_allows(row, signal):
     return True, ""
 
 
-def _record_edge_filter_shadow(signal):
+def _record_edge_filter_shadow(signal, experiment_key=None):
     if not config.ENABLE_AUTONOMOUS_EDGE_FILTER_SHADOW:
         return False, "edge shadow disabled"
     if config.AUTONOMOUS_EDGE_FILTER_MAX_SIGNALS_PER_CYCLE <= 0:
@@ -450,13 +453,14 @@ def _record_edge_filter_shadow(signal):
     if cooldown_sec > 0 and models.get_recent_shadow_entry_count(signal, cooldown_sec) > 0:
         return False, f"live blocked shadow cooldown active ({cooldown_sec}s)"
 
+    experiment_key = experiment_key or config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEY
     assessment = signal.get("_execution_assessment") or {}
     tradable_price = assessment.get("avg_price")
     protected_price = assessment.get("limit_price")
     shadow_signal = dict(signal)
     shadow_signal["timestamp"] = time.time()
     shadow_signal["signal_note"] = (
-        f"{shadow_signal.get('signal_note', '')}; edge_filter={config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEY}"
+        f"{shadow_signal.get('signal_note', '')}; edge_filter={experiment_key}"
     ).strip("; ")
     value = float(shadow_signal.get("target_value", 0) or 0)
     size = float(shadow_signal.get("size", 0) or 0)
@@ -472,12 +476,13 @@ def _record_edge_filter_shadow(signal):
         protected_price=float(protected_price) if protected_price is not None else None,
         sample_type="shadow",
         trade_id=(
-            f"{shadow_signal['id']}::{config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEY}"
+            f"{shadow_signal['id']}::{experiment_key}"
             f"::shadow::{int(shadow_signal['timestamp'])}"
         ),
-        experiment_key=config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEY,
+        experiment_key=experiment_key,
         entry_reason=(
-            "edge_filter_shadow_v1:no_money=true; replaces=price_only_market_first_selector; "
+            f"{experiment_key}:no_money=true; market_scope={shadow_signal.get('market_scope', '')}; "
+            "replaces=price_only_market_first_selector; "
             f"min_decided={config.AUTONOMOUS_EDGE_FILTER_MIN_DECIDED_SAMPLES}; "
             f"rollback=after_{config.AUTONOMOUS_EDGE_FILTER_ROLLBACK_MIN_DECIDED}_decided_"
             f"if_win_rate<={config.AUTONOMOUS_EDGE_FILTER_ROLLBACK_MAX_WIN_RATE:.2f}_or_pnl_negative"
@@ -486,11 +491,7 @@ def _record_edge_filter_shadow(signal):
     return True, ""
 
 
-def record_edge_filter_shadow_observations(reason="risk pause active"):
-    if not config.ENABLE_AUTONOMOUS_EDGE_FILTER_SHADOW:
-        return {"recorded": 0, "candidates": 0, "skipped": 0}
-
-    ordered_codes = [code for code in _allowed_autonomous_codes() if code in market_scope.get_esports_codes()]
+def _record_edge_filter_shadow_observations_for_scope(ordered_codes, experiment_key, scope_label, reason):
     candidates = {}
     for code in ordered_codes:
         try:
@@ -515,7 +516,7 @@ def record_edge_filter_shadow_observations(reason="risk pause active"):
         if signal is None:
             skipped += 1
             continue
-        allowed, _edge_reason = _edge_filter_allows(row, signal)
+        allowed, _edge_reason = _edge_filter_allows(row, signal, scope_label=scope_label)
         if not allowed:
             skipped += 1
             continue
@@ -532,7 +533,7 @@ def record_edge_filter_shadow_observations(reason="risk pause active"):
     record_reasons = {}
     for signal in built:
         try:
-            ok, record_reason = _record_edge_filter_shadow(signal)
+            ok, record_reason = _record_edge_filter_shadow(signal, experiment_key=experiment_key)
         except Exception as exc:
             ok = False
             record_reason = str(exc)
@@ -543,19 +544,56 @@ def record_edge_filter_shadow_observations(reason="risk pause active"):
 
     if recorded:
         logger.info(
-            "Edge-filter shadow recorded %s no-money sample(s) from %s candidate market(s)",
+            "Edge-filter shadow recorded %s %s no-money sample(s) from %s candidate market(s)",
             recorded,
+            scope_label,
             len(candidates),
         )
     elif candidates:
         logger.info(
-            "Edge-filter shadow found %s candidate market(s) but recorded none (skipped=%s, reasons=%s)",
+            "Edge-filter shadow found %s %s candidate market(s) but recorded none (skipped=%s, reasons=%s)",
+            scope_label,
             len(candidates),
             skipped,
             record_reasons,
         )
 
-    return {"recorded": recorded, "candidates": len(candidates), "skipped": skipped}
+    return {
+        "experiment_key": experiment_key,
+        "scope": scope_label,
+        "recorded": recorded,
+        "candidates": len(candidates),
+        "skipped": skipped,
+    }
+
+
+def record_edge_filter_shadow_observations(reason="risk pause active"):
+    if not config.ENABLE_AUTONOMOUS_EDGE_FILTER_SHADOW:
+        return {"recorded": 0, "candidates": 0, "skipped": 0, "groups": []}
+
+    allowed_codes = _allowed_autonomous_codes()
+    esports_codes = market_scope.get_esports_codes()
+    sports_codes = market_scope.get_sport_codes()
+    groups = [
+        _record_edge_filter_shadow_observations_for_scope(
+            [code for code in allowed_codes if code in esports_codes],
+            config.AUTONOMOUS_ESPORTS_EDGE_FILTER_EXPERIMENT_KEY,
+            "esports",
+            reason,
+        ),
+        _record_edge_filter_shadow_observations_for_scope(
+            [code for code in allowed_codes if code in sports_codes and code not in esports_codes],
+            config.AUTONOMOUS_SPORTS_EDGE_FILTER_EXPERIMENT_KEY,
+            "sports",
+            reason,
+        ),
+    ]
+    return {
+        "recorded": sum(int(group.get("recorded", 0) or 0) for group in groups),
+        "candidates": sum(int(group.get("candidates", 0) or 0) for group in groups),
+        "skipped": sum(int(group.get("skipped", 0) or 0) for group in groups),
+        "groups": groups,
+    }
 
 
 def build_autonomous_signals():

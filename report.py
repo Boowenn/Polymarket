@@ -699,23 +699,27 @@ def print_experiment_watch_table(rows):
         )
 
 
-def print_shadow_recovery_watch(row):
+def print_shadow_recovery_watch(rows):
     print("Shadow-only recovery watch:")
-    if not row:
+    if not rows:
         print("none")
         return
-    win_rate = f"{row['win_rate']:.1f}%" if row.get("win_rate") is not None else "N/A"
-    print("rule                         enabled  entries  closed  decs  win_rate  pnl        review")
-    print(
-        f"{config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEY[:28]:28s}  "
-        f"{'on' if config.ENABLE_AUTONOMOUS_EDGE_FILTER_SHADOW else 'off':7s}  "
-        f"{int(row.get('total_entries', 0) or 0):7d}  "
-        f"{int(row.get('closed_entries', 0) or 0):6d}  "
-        f"{int(row.get('decision_count', 0) or 0):4d}  "
-        f"{win_rate:8s}  "
-        f"{_fmt_money(row.get('realized_pnl', 0)):>9s}  "
-        f"min_decided={config.AUTONOMOUS_EDGE_FILTER_MIN_DECIDED_SAMPLES}"
-    )
+    if isinstance(rows, dict):
+        rows = [{"experiment_key": config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEY, **rows}]
+    print("rule                           enabled  entries  closed  decs  win_rate  pnl        review")
+    for row in rows:
+        win_rate = f"{row['win_rate']:.1f}%" if row.get("win_rate") is not None else "N/A"
+        rule = str(row.get("experiment_key") or config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEY)
+        print(
+            f"{rule[:30]:30s}  "
+            f"{'on' if config.ENABLE_AUTONOMOUS_EDGE_FILTER_SHADOW else 'off':7s}  "
+            f"{int(row.get('total_entries', 0) or 0):7d}  "
+            f"{int(row.get('closed_entries', 0) or 0):6d}  "
+            f"{int(row.get('decision_count', 0) or 0):4d}  "
+            f"{win_rate:8s}  "
+            f"{_fmt_money(row.get('realized_pnl', 0)):>9s}  "
+            f"min_decided={config.AUTONOMOUS_EDGE_FILTER_MIN_DECIDED_SAMPLES}"
+        )
     print(
         "  no-money shadow only; rollback if "
         f"{config.AUTONOMOUS_EDGE_FILTER_ROLLBACK_MIN_DECIDED}+ decided and "
@@ -865,11 +869,18 @@ def main():
     else:
         live_journal_rows = [row for row in journal_rows if _is_live_journal_row(row)]
         live_summary = models.get_live_execution_summary(since_ts=since_ts)
-        edge_shadow_summary = models.get_trade_journal_summary(
-            since_ts=since_ts,
-            sample_types=("shadow",),
-            experiment_key=config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEY,
-        )
+        edge_shadow_summaries = []
+        for experiment_key in config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEYS:
+            edge_shadow_summaries.append(
+                {
+                    "experiment_key": experiment_key,
+                    **models.get_trade_journal_summary(
+                        since_ts=since_ts,
+                        sample_types=("shadow",),
+                        experiment_key=experiment_key,
+                    ),
+                }
+            )
         source_rows = [row for row in summarize_sources(live_journal_rows) if row.get("sample_type") == "executed"]
         trader_rows = summarize_traders(live_journal_rows, history_rows)
         executed_trader_rows = filter_traders_by_sample(trader_rows, "executed")
@@ -904,7 +915,7 @@ def main():
         print_source_table(source_rows, title="Live source performance:", empty_label="No live executed entries yet.")
         print()
 
-        print_shadow_recovery_watch(edge_shadow_summary)
+        print_shadow_recovery_watch(edge_shadow_summaries)
         print()
 
         print_trader_table("Best live traders:", candidates, limit=args.top)

@@ -306,6 +306,7 @@ def get_dashboard_data():
     if config.DRY_RUN:
         blocked_reasons = models.get_block_reason_analysis(sample_types=("shadow",), limit=6)
         edge_filter_shadow = {}
+        edge_filter_shadows = []
         repeat_entry_experiment = models.get_experiment_analysis(config.REPEAT_ENTRY_EXPERIMENT_KEY)
         no_book_recheck_experiment = models.get_experiment_analysis(config.NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY)
     else:
@@ -314,6 +315,16 @@ def get_dashboard_data():
             sample_types=("shadow",),
             experiment_key=config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEY,
         )
+        edge_filter_shadows = [
+            {
+                "experiment_key": experiment_key,
+                **models.get_trade_journal_summary(
+                    sample_types=("shadow",),
+                    experiment_key=experiment_key,
+                ),
+            }
+            for experiment_key in config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEYS
+        ]
         repeat_entry_experiment = {}
         no_book_recheck_experiment = {}
     risk_logs = models.get_recent_risk_logs(20)
@@ -379,6 +390,7 @@ def get_dashboard_data():
         },
         "blocked_reasons": blocked_reasons,
         "edge_filter_shadow": edge_filter_shadow,
+        "edge_filter_shadows": edge_filter_shadows,
         "repeat_entry_experiment": repeat_entry_experiment,
         "no_book_recheck_experiment": no_book_recheck_experiment,
         "risk_logs": [{**r, "time_str": ts_fmt(r["timestamp"])} for r in risk_logs],
@@ -489,6 +501,8 @@ def get_dashboard_data():
             "dry_run_record_blocked_samples": config.DRY_RUN_RECORD_BLOCKED_SAMPLES,
             "autonomous_edge_filter_shadow_enabled": config.ENABLE_AUTONOMOUS_EDGE_FILTER_SHADOW,
             "autonomous_edge_filter_key": config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEY,
+            "autonomous_edge_filter_keys": list(config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEYS),
+            "autonomous_sports_edge_filter_key": config.AUTONOMOUS_SPORTS_EDGE_FILTER_EXPERIMENT_KEY,
             "autonomous_edge_filter_min_price": config.AUTONOMOUS_EDGE_FILTER_MIN_PRICE,
             "autonomous_edge_filter_max_price": config.AUTONOMOUS_EDGE_FILTER_MAX_PRICE,
             "autonomous_edge_filter_min_liquidity": config.AUTONOMOUS_EDGE_FILTER_MIN_LIQUIDITY,
