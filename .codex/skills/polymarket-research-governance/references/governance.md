@@ -110,6 +110,20 @@ Recovery requires an explicit narrow experiment plan based on executed-loss attr
 
 This is a rollout policy, not proof of edge. Promotion still requires executed evidence.
 
+### Current Quarantine Recovery Experiment
+
+The active recovery plan is `esports_edge_filter_shadow_v1`.
+
+- Failed rule being replaced: the default esports market-first selector that primarily used a balanced price band / target-price preference without enough executed edge evidence.
+- Sample type: `shadow`, with `experiment_key = esports_edge_filter_shadow_v1`.
+- Exposure: no-money only; maximum real-money exposure is `$0`.
+- Scope: esports `Match Winner` moneyline candidates that already pass the default BO3 / BO5 and child-game exclusions, then additionally pass stricter price, liquidity, lead-time, and score thresholds.
+- Caps: must respect `LIVE_BLOCKED_SHADOW_MAX_OPEN`, `LIVE_BLOCKED_SHADOW_COOLDOWN_SEC`, and `AUTONOMOUS_EDGE_FILTER_MAX_SIGNALS_PER_CYCLE`.
+- Review threshold: do not consider any live recovery before at least `AUTONOMOUS_EDGE_FILTER_MIN_DECIDED_SAMPLES` decided samples, currently `50`.
+- Rollback condition: if after `AUTONOMOUS_EDGE_FILTER_ROLLBACK_MIN_DECIDED` decided samples, currently `30`, win rate is at or below `AUTONOMOUS_EDGE_FILTER_ROLLBACK_MAX_WIN_RATE`, currently `45%`, or realized PnL is negative, keep default live autonomous paused and replace or retire the experiment.
+
+Shadow or backtest improvement from this rule is hypothesis evidence only. A later real-money canary still requires a separate reviewed plan with explicit real-money exposure and rollback limits.
+
 ## Live Readiness
 
 Do not claim stable live-readiness until all of the following are true:

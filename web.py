@@ -29,6 +29,21 @@ if not os.path.exists(env_path):
         f.write("MARKET_SCOPE_CACHE_SEC=3600\n")
         f.write("ENABLE_COPY_STRATEGY=false\n")
         f.write("ENABLE_AUTONOMOUS_STRATEGY=true\n")
+        f.write("LIVE_RECORD_BLOCKED_SHADOW_SAMPLES=true\n")
+        f.write("LIVE_BLOCKED_SHADOW_MAX_OPEN=250\n")
+        f.write("LIVE_BLOCKED_SHADOW_COOLDOWN_SEC=3600\n")
+        f.write("ENABLE_AUTONOMOUS_EDGE_FILTER_SHADOW=true\n")
+        f.write("AUTONOMOUS_EDGE_FILTER_MIN_PRICE=0.28\n")
+        f.write("AUTONOMOUS_EDGE_FILTER_MAX_PRICE=0.42\n")
+        f.write("AUTONOMOUS_EDGE_FILTER_TARGET_PRICE=0.34\n")
+        f.write("AUTONOMOUS_EDGE_FILTER_MIN_LIQUIDITY=2000\n")
+        f.write("AUTONOMOUS_EDGE_FILTER_MIN_LEAD_SEC=3600\n")
+        f.write("AUTONOMOUS_EDGE_FILTER_MAX_LEAD_SEC=129600\n")
+        f.write("AUTONOMOUS_EDGE_FILTER_MIN_SCORE=74\n")
+        f.write("AUTONOMOUS_EDGE_FILTER_MAX_SIGNALS_PER_CYCLE=2\n")
+        f.write("AUTONOMOUS_EDGE_FILTER_MIN_DECIDED_SAMPLES=50\n")
+        f.write("AUTONOMOUS_EDGE_FILTER_ROLLBACK_MIN_DECIDED=30\n")
+        f.write("AUTONOMOUS_EDGE_FILTER_ROLLBACK_MAX_WIN_RATE=0.45\n")
         f.write("DRY_RUN_RECORD_BLOCKED_SAMPLES=true\n")
         f.write("ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT=false\n")
         f.write("REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES=1\n")
@@ -290,10 +305,15 @@ def get_dashboard_data():
     }
     if config.DRY_RUN:
         blocked_reasons = models.get_block_reason_analysis(sample_types=("shadow",), limit=6)
+        edge_filter_shadow = {}
         repeat_entry_experiment = models.get_experiment_analysis(config.REPEAT_ENTRY_EXPERIMENT_KEY)
         no_book_recheck_experiment = models.get_experiment_analysis(config.NO_BOOK_DELAYED_RECHECK_EXPERIMENT_KEY)
     else:
         blocked_reasons = []
+        edge_filter_shadow = models.get_trade_journal_summary(
+            sample_types=("shadow",),
+            experiment_key=config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEY,
+        )
         repeat_entry_experiment = {}
         no_book_recheck_experiment = {}
     risk_logs = models.get_recent_risk_logs(20)
@@ -358,6 +378,7 @@ def get_dashboard_data():
             "total_pnl": drawdown.get("total_pnl", float(live_execution.get("realized_pnl", 0) or 0)),
         },
         "blocked_reasons": blocked_reasons,
+        "edge_filter_shadow": edge_filter_shadow,
         "repeat_entry_experiment": repeat_entry_experiment,
         "no_book_recheck_experiment": no_book_recheck_experiment,
         "risk_logs": [{**r, "time_str": ts_fmt(r["timestamp"])} for r in risk_logs],
@@ -466,6 +487,14 @@ def get_dashboard_data():
             "delayed_order_focus_time": delayed_summary["focus_time_str"],
             "delayed_order_focus_age_label": delayed_summary["focus_age_label"],
             "dry_run_record_blocked_samples": config.DRY_RUN_RECORD_BLOCKED_SAMPLES,
+            "autonomous_edge_filter_shadow_enabled": config.ENABLE_AUTONOMOUS_EDGE_FILTER_SHADOW,
+            "autonomous_edge_filter_key": config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEY,
+            "autonomous_edge_filter_min_price": config.AUTONOMOUS_EDGE_FILTER_MIN_PRICE,
+            "autonomous_edge_filter_max_price": config.AUTONOMOUS_EDGE_FILTER_MAX_PRICE,
+            "autonomous_edge_filter_min_liquidity": config.AUTONOMOUS_EDGE_FILTER_MIN_LIQUIDITY,
+            "autonomous_edge_filter_min_decided_samples": config.AUTONOMOUS_EDGE_FILTER_MIN_DECIDED_SAMPLES,
+            "autonomous_edge_filter_rollback_min_decided": config.AUTONOMOUS_EDGE_FILTER_ROLLBACK_MIN_DECIDED,
+            "autonomous_edge_filter_rollback_max_win_rate": config.AUTONOMOUS_EDGE_FILTER_ROLLBACK_MAX_WIN_RATE,
             "stage2_repeat_entry_experiment_enabled": config.stage2_repeat_entry_experiment_enabled(),
             "repeat_entry_experiment_max_extra_entries": config.REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES,
             "stage2_no_book_recheck_experiment_enabled": config.stage2_no_book_delayed_recheck_experiment_enabled(),
@@ -679,6 +708,15 @@ def bot_loop():
         if entry_pause.get("pause_all") or entry_pause.get("pause_autonomous"):
             if entry_pause.get("pause_autonomous"):
                 _log_entry_pause(entry_pause.get("kind", "risk"), entry_pause.get("reason", "risk pause active"))
+            try:
+                shadow_summary = autonomous_strategy.record_edge_filter_shadow_observations(
+                    entry_pause.get("kind", "risk_pause")
+                )
+                if shadow_summary.get("recorded", 0):
+                    logger.info("Edge-filter shadow observation: %s", shadow_summary)
+            except Exception as e:
+                logger.error(f"Edge-filter shadow observation error: {e}")
+                models.log_risk_event("EDGE_FILTER_SHADOW_ERROR", str(e), "skipped")
         elif config.autonomous_strategy_enabled():
             try:
                 autonomous_signals = autonomous_strategy.build_autonomous_signals()

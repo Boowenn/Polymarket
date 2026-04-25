@@ -68,6 +68,21 @@ def first_run_setup():
         f.write(f"DRY_RUN={dry_run}\n")
         f.write(f"ENABLE_COPY_STRATEGY=false\n")
         f.write(f"ENABLE_AUTONOMOUS_STRATEGY=true\n")
+        f.write(f"LIVE_RECORD_BLOCKED_SHADOW_SAMPLES=true\n")
+        f.write(f"LIVE_BLOCKED_SHADOW_MAX_OPEN=250\n")
+        f.write(f"LIVE_BLOCKED_SHADOW_COOLDOWN_SEC=3600\n")
+        f.write(f"ENABLE_AUTONOMOUS_EDGE_FILTER_SHADOW=true\n")
+        f.write(f"AUTONOMOUS_EDGE_FILTER_MIN_PRICE=0.28\n")
+        f.write(f"AUTONOMOUS_EDGE_FILTER_MAX_PRICE=0.42\n")
+        f.write(f"AUTONOMOUS_EDGE_FILTER_TARGET_PRICE=0.34\n")
+        f.write(f"AUTONOMOUS_EDGE_FILTER_MIN_LIQUIDITY=2000\n")
+        f.write(f"AUTONOMOUS_EDGE_FILTER_MIN_LEAD_SEC=3600\n")
+        f.write(f"AUTONOMOUS_EDGE_FILTER_MAX_LEAD_SEC=129600\n")
+        f.write(f"AUTONOMOUS_EDGE_FILTER_MIN_SCORE=74\n")
+        f.write(f"AUTONOMOUS_EDGE_FILTER_MAX_SIGNALS_PER_CYCLE=2\n")
+        f.write(f"AUTONOMOUS_EDGE_FILTER_MIN_DECIDED_SAMPLES=50\n")
+        f.write(f"AUTONOMOUS_EDGE_FILTER_ROLLBACK_MIN_DECIDED=30\n")
+        f.write(f"AUTONOMOUS_EDGE_FILTER_ROLLBACK_MAX_WIN_RATE=0.45\n")
         f.write(f"DRY_RUN_RECORD_BLOCKED_SAMPLES=true\n")
         f.write(f"ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT=false\n")
         f.write(f"REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES=1\n")
@@ -382,6 +397,15 @@ def run_cycle(cycle_count):
     if entry_pause.get("pause_all") or entry_pause.get("pause_autonomous"):
         if entry_pause.get("pause_autonomous"):
             _log_entry_pause(entry_pause.get("kind", "risk"), entry_pause.get("reason", "risk pause active"))
+        try:
+            shadow_summary = autonomous_strategy.record_edge_filter_shadow_observations(
+                entry_pause.get("kind", "risk_pause")
+            )
+            if shadow_summary.get("recorded", 0):
+                logger.info("Edge-filter shadow observation: %s", shadow_summary)
+        except Exception as e:
+            logger.error(f"Edge-filter shadow observation error: {e}")
+            models.log_risk_event("EDGE_FILTER_SHADOW_ERROR", str(e), "skipped")
     elif config.autonomous_strategy_enabled():
         try:
             autonomous_signals = autonomous_strategy.build_autonomous_signals()
