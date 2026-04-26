@@ -318,13 +318,58 @@ def summarize_traders(journal_rows, history_rows):
     )
 
 
-def categorize_risk_logs(rows):
+def categorize_risk_logs(
+    rows,
+    suppress_resolved_active_exit_pending=False,
+    suppress_resolved_wallet_sync=False,
+    suppress_resolved_wallet_reconcile=False,
+    suppress_resolved_error_backlog=False,
+):
     counts = Counter()
     raw_reasons = Counter()
+    suppressed = Counter()
 
     for row in rows:
         event = (row.get("event") or "").upper()
+        details = (row.get("details") or "").lower()
         action = (row.get("action_taken") or "").lower()
+        if suppress_resolved_active_exit_pending and event == "ACTIVE_EXIT_PENDING":
+            suppressed["resolved_active_exit_pending"] += 1
+            continue
+        if suppress_resolved_wallet_sync and event == "MANUAL_WALLET_SYNC" and "trimmed" in action:
+            suppressed["resolved_manual_wallet_sync"] += 1
+            continue
+        if suppress_resolved_wallet_reconcile and event == "MANUAL_WALLET_RECONCILE" and "closed" in action:
+            suppressed["resolved_manual_wallet_reconcile"] += 1
+            continue
+        if suppress_resolved_active_exit_pending and event == "ACTIVE_EXIT" and action in ("matched", "delayed"):
+            suppressed["resolved_active_exit_action"] += 1
+            continue
+        if suppress_resolved_active_exit_pending and event == "EXIT_SAFE_MIN_BREACH":
+            suppressed["resolved_exit_safe_min_breach"] += 1
+            continue
+        if suppress_resolved_error_backlog:
+            combined = f"{details} {action}"
+            if event == "MANUAL_RECONCILE_ERROR" and (
+                "proxy" in combined
+                or "127.0.0.1" in combined
+                or "request timeout" in combined
+                or "database is locked" in combined
+            ):
+                suppressed["resolved_manual_reconcile_error"] += 1
+                continue
+            if event == "EXEC_ERROR" and "market buy orders maker amount supports" in combined:
+                suppressed["resolved_exec_precision_error"] += 1
+                continue
+            if event == "ACTIVE_EXIT_ERROR" and "not enough balance / allowance" in combined:
+                suppressed["resolved_active_exit_balance_error"] += 1
+                continue
+            if event in ("ACTIVE_EXIT_ERROR", "AUTONOMOUS_ERROR", "SETTLEMENT_ERROR") and "database is locked" in combined:
+                suppressed["resolved_sqlite_lock_error"] += 1
+                continue
+            if event == "AUTONOMOUS_ERROR" and "foreign key constraint failed" in combined:
+                suppressed["resolved_autonomous_fk_error"] += 1
+                continue
         raw_reasons[f"{event}:{row.get('action_taken') or ''}"] += 1
 
         if event == "WHIPSAW_SKIP" or "reversed" in action:
@@ -354,7 +399,22 @@ def categorize_risk_logs(rows):
         else:
             counts[event.lower()] += 1
 
-    return counts, raw_reasons
+    return counts, raw_reasons, suppressed
+
+
+def has_recent_error_like_risk(rows, now_ts, lookback_sec=3600):
+    cutoff = float(now_ts or time.time()) - max(float(lookback_sec or 0), 0.0)
+    for row in rows:
+        timestamp = float(row.get("timestamp") or 0)
+        if timestamp < cutoff:
+            continue
+        text = " ".join(
+            str(row.get(key) or "").lower()
+            for key in ("event", "details", "action_taken")
+        )
+        if "error" in text:
+            return True
+    return False
 
 
 def select_candidate_traders(trader_rows, min_snapshots=2):
@@ -826,7 +886,7 @@ def main():
         executed_trader_rows = filter_traders_by_sample(trader_rows, "executed")
         shadow_trader_rows = filter_traders_by_sample(trader_rows, "shadow")
         experiment_trader_rows = filter_traders_by_sample(trader_rows, "experiment")
-        risk_counts, raw_reasons = categorize_risk_logs(risk_rows)
+        risk_counts, raw_reasons, suppressed_risks = categorize_risk_logs(risk_rows)
         candidates = select_candidate_traders(executed_trader_rows)
         review = select_review_traders(executed_trader_rows)
         recommendations = build_recommendations(executed_summary, risk_counts, executed_trader_rows, source_rows)
@@ -903,7 +963,15 @@ def main():
         source_rows = [row for row in summarize_sources(live_journal_rows) if row.get("sample_type") == "executed"]
         trader_rows = summarize_traders(live_journal_rows, history_rows)
         executed_trader_rows = filter_traders_by_sample(trader_rows, "executed")
-        risk_counts, raw_reasons = categorize_risk_logs(risk_rows)
+        suppress_resolved_maintenance = int(live_summary.get("open_entries", 0) or 0) == 0
+        suppress_resolved_error_backlog = not has_recent_error_like_risk(risk_rows, now)
+        risk_counts, raw_reasons, suppressed_risks = categorize_risk_logs(
+            risk_rows,
+            suppress_resolved_active_exit_pending=suppress_resolved_maintenance,
+            suppress_resolved_wallet_sync=suppress_resolved_maintenance,
+            suppress_resolved_wallet_reconcile=suppress_resolved_maintenance,
+            suppress_resolved_error_backlog=suppress_resolved_error_backlog,
+        )
         candidates = select_candidate_traders(executed_trader_rows)
         review = select_review_traders(executed_trader_rows)
         recommendations = build_live_recommendations(live_summary, risk_counts, executed_trader_rows, source_rows)
@@ -957,6 +1025,12 @@ def main():
     else:
         print("none")
     print()
+
+    if suppressed_risks:
+        print("Resolved historical risk events suppressed from current risk view:")
+        for key, count in suppressed_risks.most_common():
+            print(f"{key:32s} {count}")
+        print()
 
     print("Recommendations:")
     for idx, item in enumerate(recommendations, start=1):
