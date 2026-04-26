@@ -6,9 +6,10 @@ import models
 import portfolio
 
 
-def _autonomous_loss_summary():
-    lookback_sec = float(config.AUTONOMOUS_LOSS_PROBATION_LOOKBACK_DAYS or 0) * 86400
-    since_ts = time.time() - lookback_sec if lookback_sec > 0 else None
+def _autonomous_loss_summary(since_ts="lookback"):
+    if since_ts == "lookback":
+        lookback_sec = float(config.AUTONOMOUS_LOSS_PROBATION_LOOKBACK_DAYS or 0) * 86400
+        since_ts = time.time() - lookback_sec if lookback_sec > 0 else None
     summary = models.get_live_source_decision_summary("autonomous", since_ts=since_ts)
     return {
         "decisions": int(summary.get("decision_count", 0) or 0),
@@ -17,11 +18,7 @@ def _autonomous_loss_summary():
     }
 
 
-def autonomous_loss_quarantine_state():
-    if config.DRY_RUN or not config.ENABLE_AUTONOMOUS_LOSS_QUARANTINE:
-        return {"active": False, "blocks_new_entries": False, "reason": ""}
-
-    summary = _autonomous_loss_summary()
+def _quarantine_state_from_summary(summary, source_label):
     decisions = int(summary.get("decisions", 0) or 0)
     min_decisions = int(config.AUTONOMOUS_LOSS_QUARANTINE_MIN_DECISIONS or 0)
     if decisions < min_decisions:
@@ -40,7 +37,7 @@ def autonomous_loss_quarantine_state():
     reason = (
         "autonomous loss quarantine active "
         f"(decisions={decisions}, win_rate={float(win_rate) * 100:.1f}%, "
-        f"pnl=${realized_pnl:.2f}, loss_floor=${loss_floor:.2f})"
+        f"pnl=${realized_pnl:.2f}, loss_floor=${loss_floor:.2f}, source={source_label})"
     )
     return {
         "active": True,
@@ -50,7 +47,19 @@ def autonomous_loss_quarantine_state():
         "win_rate": float(win_rate),
         "realized_pnl": realized_pnl,
         "loss_floor": loss_floor,
+        "source": source_label,
     }
+
+
+def autonomous_loss_quarantine_state():
+    if config.DRY_RUN or not config.ENABLE_AUTONOMOUS_LOSS_QUARANTINE:
+        return {"active": False, "blocks_new_entries": False, "reason": ""}
+
+    lookback_state = _quarantine_state_from_summary(_autonomous_loss_summary(), "lookback")
+    if lookback_state.get("blocks_new_entries"):
+        return lookback_state
+
+    return _quarantine_state_from_summary(_autonomous_loss_summary(since_ts=None), "lifetime")
 
 
 def autonomous_loss_probation_state():
