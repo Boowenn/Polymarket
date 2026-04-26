@@ -4,18 +4,18 @@
 
 Verified local baseline:
 
-- Date: `2026-04-25` JST
+- Date: `2026-04-26` JST
 - Command: `python report.py --days 3 --top 5`
-- `live_entries = 10`
-- `live_closed = 10`
+- `live_entries = 8`
+- `live_closed = 8`
 - `live_open = 0`
-- `live_decision_count = 10`
+- `live_decision_count = 8`
 - `live_close_rate = 100.0%`
-- `live_win_rate = 10.0%`
-- `live_realized_pnl = -2.84`
-- `autonomous_live_entries = 10`
-- `autonomous_live_closed = 10`
-- `autonomous_live_realized_pnl = -2.84`
+- `live_win_rate = 0.0%`
+- `live_realized_pnl = -2.94`
+- `autonomous_live_entries = 8`
+- `autonomous_live_closed = 8`
+- `autonomous_live_realized_pnl = -2.94`
 - `copy_live_entries = 0`
 - `copy_live_closed = 0`
 - `copy_live_realized_pnl = 0.00`
@@ -23,8 +23,8 @@ Verified local baseline:
 - `7d_executed_autonomous_win_rate = 5.6%`
 - `7d_executed_autonomous_realized_pnl = -2.85`
 - `esports_edge_filter_shadow_v1 = retired, 54 entries, 11 decisions, 9.1% win rate, -16.17 PnL`
-- `esports_edge_filter_shadow_v2 = active, 1 entry, 0 decisions`
-- `sports_edge_filter_shadow_v1 = active, 18 entries, 3 decisions, 66.7% win rate, 4.62 PnL`
+- `esports_edge_filter_shadow_v2 = retired, 26 entries, 9 decisions, 11.1% win rate, -16.43 PnL`
+- `sports_edge_filter_shadow_v1 = active, 45 entries, 10 decisions, 40.0% win rate, 1.68 PnL`
 
 Use this snapshot as the current reference point until a newer report is intentionally recorded.
 
@@ -115,16 +115,16 @@ This is a rollout policy, not proof of edge. Promotion still requires executed e
 
 ### Current Quarantine Recovery Experiments
 
-The active recovery plans are `esports_edge_filter_shadow_v2`, `sports_edge_filter_shadow_v1`, and `sports_copy_archive_shadow_v1`.
+The active recovery plans are `sports_edge_filter_shadow_v1` and `sports_copy_archive_shadow_v1`.
 
 - Failed rule being replaced: the default market-first selector that primarily used a balanced price band / target-price preference without enough executed edge evidence.
-- Sample type: `shadow`, with `experiment_key = esports_edge_filter_shadow_v2` for active esports and `experiment_key = sports_edge_filter_shadow_v1` for sports.
+- Sample type: `shadow`, with `experiment_key = sports_edge_filter_shadow_v1` for active sports. There is no active esports edge-filter key after `esports_edge_filter_shadow_v2` was retired.
 - Exposure: no-money only; maximum real-money exposure is `$0`.
-- Scope: esports `Match Winner` moneyline candidates that already pass the default BO3 / BO5 and child-game exclusions, plus sports moneyline candidates from the allowed autonomous sports universe. Active esports v2 additionally narrows to higher-liquidity, near-consensus pre-match moneyline candidates because the bot does not yet ingest map vetoes, drafts, roster news, patch context, or sharp closing-line value. Sports v1 keeps the original stricter price, liquidity, lead-time, and score thresholds.
+- Scope: traditional sports moneyline candidates from the allowed autonomous sports universe. Sports v1 keeps the original stricter price, liquidity, lead-time, and score thresholds.
 - Caps: must respect `LIVE_BLOCKED_SHADOW_MAX_OPEN`, `LIVE_BLOCKED_SHADOW_COOLDOWN_SEC`, and `AUTONOMOUS_EDGE_FILTER_MAX_SIGNALS_PER_CYCLE`.
 - Review threshold: do not consider any live recovery before at least `AUTONOMOUS_EDGE_FILTER_MIN_DECIDED_SAMPLES` decided samples, currently `50`.
 - Rollback condition: if after `AUTONOMOUS_EDGE_FILTER_ROLLBACK_MIN_DECIDED` decided samples, currently `30`, win rate is at or below `AUTONOMOUS_EDGE_FILTER_ROLLBACK_MAX_WIN_RATE`, currently `45%`, or realized PnL is negative, keep default live autonomous paused and replace or retire the experiment.
-- Retired comparison: `esports_edge_filter_shadow_v1` stays in report/dashboard summaries as old shadow evidence after its poor early read, but no new rows should be written with that key.
+- Retired comparison: `esports_edge_filter_shadow_v1` and `esports_edge_filter_shadow_v2` stay in report/dashboard summaries as old shadow evidence after poor no-money reads, but no new rows should be written with either key. Any future esports recovery needs a new plan with a meaningfully different edge source, such as map vetoes, drafts, roster news, patch context, or sharp closing-line value.
 - Archived copy recovery: `sports_copy_archive_shadow_v1` continues the strongest archived sports copy-trading hypothesis as no-money shadow only. It starts from the archived Tier-A seed `Herdonia`, excludes esports by default, writes `sample_type = shadow`, uses `$0` real-money exposure, may simulate a minimum executable paper size within `COPY_ARCHIVE_SHADOW_SIMULATED_MAX_TRADE_VALUE_USDC`, and must not be promoted directly from archived or shadow PnL.
 
 Shadow or backtest improvement from any recovery rule is hypothesis evidence only. A later real-money canary still requires a separate reviewed plan with explicit real-money exposure and rollback limits.

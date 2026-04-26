@@ -654,20 +654,24 @@ def record_edge_filter_shadow_observations(reason="risk pause active"):
     allowed_codes = _allowed_autonomous_codes()
     esports_codes = market_scope.get_esports_codes()
     sports_codes = market_scope.get_sport_codes()
-    groups = [
-        _record_edge_filter_shadow_observations_for_scope(
-            [code for code in allowed_codes if code in esports_codes],
-            config.AUTONOMOUS_ESPORTS_EDGE_FILTER_EXPERIMENT_KEY,
-            "esports",
-            reason,
-        ),
+    groups = []
+    if config.AUTONOMOUS_ESPORTS_EDGE_FILTER_EXPERIMENT_KEY:
+        groups.append(
+            _record_edge_filter_shadow_observations_for_scope(
+                [code for code in allowed_codes if code in esports_codes],
+                config.AUTONOMOUS_ESPORTS_EDGE_FILTER_EXPERIMENT_KEY,
+                "esports",
+                reason,
+            )
+        )
+    groups.append(
         _record_edge_filter_shadow_observations_for_scope(
             [code for code in allowed_codes if code in sports_codes and code not in esports_codes],
             config.AUTONOMOUS_SPORTS_EDGE_FILTER_EXPERIMENT_KEY,
             "sports",
             reason,
-        ),
-    ]
+        )
+    )
     return {
         "recorded": sum(int(group.get("recorded", 0) or 0) for group in groups),
         "candidates": sum(int(group.get("candidates", 0) or 0) for group in groups),
