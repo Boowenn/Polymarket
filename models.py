@@ -277,15 +277,31 @@ def _is_sqlite_locked(exc):
     return "database is locked" in str(exc or "").strip().lower()
 
 
-def _run_write_with_retry(writer, retries=_SQLITE_WRITE_RETRIES):
+def is_sqlite_locked_error(exc):
+    return _is_sqlite_locked(exc)
+
+
+def run_sqlite_with_retry(operation, retries=_SQLITE_WRITE_RETRIES, base_delay_sec=None, context="sqlite operation", log=None):
     attempts = max(int(retries or 0), 1)
+    delay = float(base_delay_sec if base_delay_sec is not None else _SQLITE_WRITE_RETRY_BASE_SEC)
     for attempt in range(1, attempts + 1):
         try:
-            return writer()
+            return operation()
         except sqlite3.OperationalError as exc:
             if not _is_sqlite_locked(exc) or attempt >= attempts:
                 raise
-            time.sleep(_SQLITE_WRITE_RETRY_BASE_SEC * attempt)
+            if log:
+                log.warning(
+                    "%s hit SQLite lock; retrying %s/%s",
+                    context,
+                    attempt + 1,
+                    attempts,
+                )
+            time.sleep(delay * attempt)
+
+
+def _run_write_with_retry(writer, retries=_SQLITE_WRITE_RETRIES):
+    return run_sqlite_with_retry(writer, retries=retries, context="sqlite write")
 
 
 def _placeholder_trader_username(wallet, username=""):
@@ -1022,9 +1038,14 @@ def trade_exists(trade_id):
 
 
 def trade_journal_entry_exists(trade_id):
-    with db() as conn:
-        row = conn.execute("SELECT 1 FROM trade_journal WHERE trade_id = ?", (trade_id,)).fetchone()
-    return row is not None
+    def _reader():
+        with db() as conn:
+            return conn.execute("SELECT 1 FROM trade_journal WHERE trade_id = ?", (trade_id,)).fetchone()
+
+    return run_sqlite_with_retry(
+        _reader,
+        context="trade journal existence check",
+    ) is not None
 
 
 def has_open_autonomous_position(condition_id, outcome, side="BUY"):
@@ -1638,41 +1659,53 @@ def get_open_trade_journal(limit=100):
 
 
 def get_open_shadow_count(sample_type="shadow"):
-    with db() as conn:
-        row = conn.execute(
-            """
-            SELECT COUNT(*) AS cnt
-            FROM trade_journal
-            WHERE COALESCE(sample_type, 'executed') = ?
-              AND exit_timestamp IS NULL
-            """,
-            (sample_type,),
-        ).fetchone()
+    def _reader():
+        with db() as conn:
+            return conn.execute(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM trade_journal
+                WHERE COALESCE(sample_type, 'executed') = ?
+                  AND exit_timestamp IS NULL
+                """,
+                (sample_type,),
+            ).fetchone()
+
+    row = run_sqlite_with_retry(
+        _reader,
+        context="open shadow count read",
+    )
     return int(row["cnt"] or 0) if row else 0
 
 
 def get_recent_shadow_entry_count(signal, lookback_sec=3600):
     cutoff = time.time() - max(float(lookback_sec or 0), 0)
-    with db() as conn:
-        row = conn.execute(
-            """
-            SELECT COUNT(*) AS cnt
-            FROM trade_journal
-            WHERE COALESCE(sample_type, 'executed') = 'shadow'
-              AND COALESCE(signal_source, 'copy') = ?
-              AND condition_id = ?
-              AND outcome = ?
-              AND entry_side = ?
-              AND entry_timestamp >= ?
-            """,
-            (
-                signal.get("signal_source", "copy"),
-                signal.get("condition_id", ""),
-                signal.get("outcome", ""),
-                signal.get("side", "BUY"),
-                cutoff,
-            ),
-        ).fetchone()
+    def _reader():
+        with db() as conn:
+            return conn.execute(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM trade_journal
+                WHERE COALESCE(sample_type, 'executed') = 'shadow'
+                  AND COALESCE(signal_source, 'copy') = ?
+                  AND condition_id = ?
+                  AND outcome = ?
+                  AND entry_side = ?
+                  AND entry_timestamp >= ?
+                """,
+                (
+                    signal.get("signal_source", "copy"),
+                    signal.get("condition_id", ""),
+                    signal.get("outcome", ""),
+                    signal.get("side", "BUY"),
+                    cutoff,
+                ),
+            ).fetchone()
+
+    row = run_sqlite_with_retry(
+        _reader,
+        context="recent shadow entry count read",
+    )
     return int(row["cnt"] or 0) if row else 0
 
 

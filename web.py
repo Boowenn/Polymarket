@@ -591,7 +591,11 @@ def safe_dashboard_data():
             return dict(cached)
 
     try:
-        payload = get_dashboard_data()
+        payload = models.run_sqlite_with_retry(
+            get_dashboard_data,
+            context="dashboard snapshot",
+            log=logger,
+        )
         _dashboard_snapshot["ts"] = time.time()
         _dashboard_snapshot["data"] = payload
         return payload
