@@ -11,6 +11,7 @@ from datetime import datetime
 
 import config
 import models
+import risk
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -623,6 +624,21 @@ def build_live_recommendations(journal_summary, risk_counts, trader_rows, source
     total_entries = int(journal_summary.get("total_entries", 0) or 0)
     closed_entries = int(journal_summary.get("closed_entries", 0) or 0)
     decision_count = int(journal_summary.get("decision_count", 0) or 0)
+    quarantine_state = _read_with_retry(
+        risk.autonomous_loss_quarantine_state,
+        "autonomous loss quarantine state",
+    )
+    autonomous_quarantine_active = bool(quarantine_state.get("blocks_new_entries"))
+
+    if autonomous_quarantine_active:
+        quarantine_reason = str(quarantine_state.get("reason") or "autonomous loss quarantine active")
+        recommendations.append(
+            "autonomous live is in loss quarantine. Pause new autonomous entries entirely; "
+            "keep exits, settlement, reconciliation, dashboard, report, and shadow observation running. "
+            f"Current gate: {quarantine_reason}. "
+            "Do not raise bankroll, trade caps, position caps, session stop, probation, or quarantine thresholds "
+            "to force fills; review only no-money shadow recovery evidence until a separate recovery plan exists."
+        )
 
     if total_entries == 0:
         recommendations.append("切到实盘后当前还没有真实 executed 成交。先观察首批 live fills 和记账链路，不要立刻放宽参数。")
@@ -649,14 +665,19 @@ def build_live_recommendations(journal_summary, risk_counts, trader_rows, source
             and autonomous_win_rate is not None
             and float(autonomous_win_rate) <= quarantine_win_rate_pct
             and autonomous_pnl <= -float(config.AUTONOMOUS_LOSS_QUARANTINE_MIN_REALIZED_LOSS_USDC or 0)
+            and not autonomous_quarantine_active
         ):
+            autonomous_quarantine_active = True
             recommendations.append(
                 "autonomous live is in loss quarantine. Pause new autonomous entries entirely; "
-                "keep exits, settlement, reconciliation, dashboard, report, and shadow observation running."
+                "keep exits, settlement, reconciliation, dashboard, report, and shadow observation running. "
+                "Do not raise bankroll, trade caps, position caps, session stop, probation, or quarantine thresholds "
+                "to force fills; review only no-money shadow recovery evidence until a separate recovery plan exists."
             )
         probation_win_rate_pct = float(config.AUTONOMOUS_LOSS_PROBATION_MAX_WIN_RATE or 0) * 100
         if (
-            config.ENABLE_AUTONOMOUS_LOSS_PROBATION
+            not autonomous_quarantine_active
+            and config.ENABLE_AUTONOMOUS_LOSS_PROBATION
             and autonomous_decisions >= int(config.AUTONOMOUS_LOSS_PROBATION_MIN_DECISIONS or 0)
             and autonomous_win_rate is not None
             and float(autonomous_win_rate) <= probation_win_rate_pct
@@ -669,10 +690,16 @@ def build_live_recommendations(journal_summary, risk_counts, trader_rows, source
             )
 
     if risk_counts.get("capital_gate", 0) >= max(3, total_entries):
-        recommendations.append(
-            "实盘信号里有不少被资金/单笔/开放部署上限拦住。若后面要提成交数，"
-            "优先评估 bankroll、单笔上限和当前开放仓位，不要先放宽流动性门槛。"
-        )
+        if autonomous_quarantine_active:
+            recommendations.append(
+                "capital/probation blocks are expected while autonomous loss quarantine is preserving risk. "
+                "Keep real-money entries paused and use only the active no-money sports shadow tracks for recovery review."
+            )
+        else:
+            recommendations.append(
+                "实盘信号里有不少被资金/单笔/开放部署上限拦住。若后面要提成交数，"
+                "优先评估 bankroll、单笔上限和当前开放仓位，不要先放宽流动性门槛。"
+            )
 
     if risk_counts.get("liquidity_gate", 0) >= max(3, total_entries):
         recommendations.append("实盘里流动性/价差拦截依然很多。继续接受跳单，不要为了出手率去追薄簿。")
