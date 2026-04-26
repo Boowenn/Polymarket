@@ -1317,12 +1317,10 @@
           <div class="nav-title" id="nav-traders-title">交易员</div>
           <div class="nav-note" id="nav-traders-note">当前跟踪对象、状态和质量评分</div>
         </a>
-        {% if dry_run %}
         <a class="nav-link" href="#section-experiments" data-target="section-experiments" id="nav-experiments">
-          <div class="nav-title">实验</div>
-          <div class="nav-note">阻断理由、repeat-entry、空簿延迟复查</div>
+          <div class="nav-title" id="nav-experiments-title">Shadow</div>
+          <div class="nav-note" id="nav-experiments-note">No-money recovery tracks and archived comparison rows</div>
         </a>
-        {% endif %}
         <a class="nav-link" href="#section-signals" data-target="section-signals">
           <div class="nav-title">信号与风险</div>
           <div class="nav-note">最新信号、风险日志和执行状态</div>
@@ -1683,17 +1681,40 @@
       </article>
     </section>
 
-    {% if dry_run %}
     <section class="section" id="section-experiments">
       <div class="section-head">
         <div>
-          <div class="section-title">实验与阻断</div>
-          <div class="section-note">这一层只服务研究，不直接代表可执行 edge。repeat-entry 和空簿复查会单独跟踪。</div>
+          <div class="section-title" id="experiments-section-title">Shadow / Experiment Watch</div>
+          <div class="section-note" id="experiments-section-note">No-money shadow rows stay separate from real executed live results.</div>
         </div>
-        <div class="section-tag">实验面板</div>
+        <div class="section-tag" id="experiments-section-tag">No-money</div>
       </div>
 
-      <article class="panel">
+      <article class="panel" id="shadow-recovery-panel">
+        <div class="panel-header">
+          <div class="panel-title">No-money Shadow Recovery</div>
+          <div class="panel-badge" id="shadow-recovery-count">0</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Rule</th>
+                <th>Status</th>
+                <th class="text-right">Entries</th>
+                <th class="text-right">Closed</th>
+                <th class="text-right">Decisions</th>
+                <th class="text-right">Win Rate</th>
+                <th class="text-right">PnL</th>
+                <th>Review Rule</th>
+              </tr>
+            </thead>
+            <tbody id="shadow-recovery-body"></tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="panel" id="stage2-panel" style="margin-top: 16px;">
         <div class="panel-header">
           <div class="panel-title">实验观察</div>
           <div class="panel-badge" id="stage2-count">0</div>
@@ -1718,7 +1739,7 @@
         </div>
       </article>
 
-      <article class="panel" style="margin-top: 16px;">
+      <article class="panel" id="blocked-shadow-panel" style="margin-top: 16px;">
         <div class="panel-header">
           <div class="panel-title">Blocked Shadow 理由</div>
           <div class="panel-badge" id="blocked-count">0</div>
@@ -1742,7 +1763,6 @@
         </div>
       </article>
     </section>
-    {% endif %}
 
     <section class="section" id="section-signals">
       <div class="section-head">
@@ -2352,6 +2372,81 @@ function renderExperimentWatch(rows) {
   }).join('');
 }
 
+function shadowRecoveryStatus(rule, config) {
+  const key = String(rule || '');
+  const activeKeys = new Set(config.shadow_recovery_active_keys || []);
+  const retiredKeys = new Set(config.shadow_recovery_retired_keys || []);
+  if (retiredKeys.has(key)) {
+    return { label: 'retired', action: 'paused' };
+  }
+  if (key === config.copy_archive_shadow_key && !config.copy_archive_shadow_enabled) {
+    return { label: 'off', action: 'paused' };
+  }
+  if (activeKeys.has(key)) {
+    return { label: 'active', action: 'experiment' };
+  }
+  return { label: 'watch', action: 'watch' };
+}
+
+function shadowRecoveryReview(rule, config) {
+  const key = String(rule || '');
+  const isCopyArchive = key === config.copy_archive_shadow_key;
+  const minDecided = Number(isCopyArchive
+    ? config.copy_archive_shadow_min_decided_samples
+    : config.autonomous_edge_filter_min_decided_samples) || 50;
+  const rollbackMin = Number(isCopyArchive
+    ? config.copy_archive_shadow_rollback_min_decided
+    : config.autonomous_edge_filter_rollback_min_decided) || 30;
+  const rollbackRate = Number(isCopyArchive
+    ? config.copy_archive_shadow_rollback_max_win_rate
+    : config.autonomous_edge_filter_rollback_max_win_rate) || 0.45;
+  const scope = isCopyArchive ? `copy archive, ${config.copy_archive_shadow_scope || 'sports'}` : 'edge filter';
+  return `$0 real money; ${scope}; review at ${minDecided} decided; rollback if ${rollbackMin}+ decided and win rate <= ${(rollbackRate * 100).toFixed(0)}% or PnL < 0`;
+}
+
+function renderShadowRecovery(rows, config = {}) {
+  const shadowRows = rows || [];
+  const tbody = document.getElementById('shadow-recovery-body');
+  const count = document.getElementById('shadow-recovery-count');
+  if (!tbody || !count) {
+    return;
+  }
+  const totalEntries = shadowRows.reduce((sum, row) => sum + Number(row.total_entries || 0), 0);
+  count.textContent = totalEntries;
+
+  if (!shadowRows.length) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" class="muted">No no-money shadow recovery rows are configured for this mode.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = shadowRows.map(row => {
+    const rule = row.experiment_key || row.key || 'unknown_shadow_rule';
+    const status = shadowRecoveryStatus(rule, config);
+    const winRate = row.win_rate === null || row.win_rate === undefined
+      ? 'N/A'
+      : `${Number(row.win_rate).toFixed(1)}%`;
+    return `
+      <tr>
+        <td>
+          <div>${rule}</div>
+          <div class="muted">sample_type=shadow</div>
+        </td>
+        <td><span class="${actionClass(status.action)}">${status.label}</span></td>
+        <td class="text-right">${Number(row.total_entries || 0)}</td>
+        <td class="text-right">${Number(row.closed_entries || 0)}</td>
+        <td class="text-right">${Number(row.decision_count || 0)}</td>
+        <td class="text-right">${winRate}</td>
+        <td class="text-right ${Number(row.realized_pnl || 0) >= 0 ? 'green' : 'red'}">${fmtSignedMoney(row.realized_pnl || 0)}</td>
+        <td class="block-note">${shadowRecoveryReview(rule, config)}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
 function renderTraders(rows, config = {}) {
   const traderRows = rows || [];
   document.getElementById('trader-count').textContent = `${traderRows.length} 名`;
@@ -2510,6 +2605,8 @@ function renderSystem(config, stats, performance, liveExecution) {
   const delayedAlert = document.getElementById('delayed-alert');
   const navExperiments = document.getElementById('nav-experiments');
   const experimentsSection = document.getElementById('section-experiments');
+  const stage2Panel = document.getElementById('stage2-panel');
+  const blockedShadowPanel = document.getElementById('blocked-shadow-panel');
   const sideResearchCard = document.getElementById('side-research-card');
   const tradersNav = document.getElementById('nav-traders');
   const tradersSection = document.getElementById('section-traders');
@@ -2524,9 +2621,10 @@ function renderSystem(config, stats, performance, liveExecution) {
   const statusBanner = document.getElementById('status-banner');
   const statusBannerBody = document.getElementById('status-banner-body');
 
+  const showShadowRecovery = !!config.show_shadow_recovery_panels;
   document.getElementById('overview-note').textContent = config.dry_run
     ? '上排先看研究预算与执行护栏，下排再看 executed 研究基线；不要把 shadow 或 experiment 当成默认策略。'
-    : '上排只显示真钱账户与当前 live 风控，下排只显示真实 executed 成交；模拟盘、shadow 和实验样本已经归档。';
+    : '上排显示真钱账户与当前 live 风控，下排显示真实 executed 成交；no-money shadow recovery 另在 Shadow 面板单独归类。';
   document.getElementById('hero-subtitle').textContent = config.dry_run
     ? '先看研究预算、实验和样本分层，再看 executed 研究基线、交易员、实验与信号。'
     : (autonomousEnabled && !copyEnabled)
@@ -2536,14 +2634,41 @@ function renderSystem(config, stats, performance, liveExecution) {
   document.getElementById('brand-subtitle').textContent = config.dry_run
     ? '当前页面按 executed / shadow / experiment 分层观察研究样本。'
     : (autonomousEnabled && !copyEnabled)
-      ? '当前页面只保留真钱账户、自主策略信号、真实 executed 成交和实盘风控；跟单池默认隐藏。'
-      : '当前页面只保留真钱账户、真实 executed 成交和实盘风控；模拟盘、shadow 和实验样本已经归档。';
+      ? '当前页面保留真钱账户、自主策略信号、真实 executed 成交和实盘风控；shadow recovery 在独立面板里只按 no-money 样本观察。'
+      : '当前页面保留真钱账户、真实 executed 成交和实盘风控；shadow recovery 在独立面板里只按 no-money 样本观察。';
 
   if (navExperiments) {
-    navExperiments.style.display = config.dry_run ? '' : 'none';
+    navExperiments.style.display = (config.dry_run || showShadowRecovery) ? '' : 'none';
   }
   if (experimentsSection) {
-    experimentsSection.style.display = config.dry_run ? '' : 'none';
+    experimentsSection.style.display = (config.dry_run || showShadowRecovery) ? '' : 'none';
+  }
+  if (stage2Panel) {
+    stage2Panel.style.display = config.dry_run ? '' : 'none';
+  }
+  if (blockedShadowPanel) {
+    blockedShadowPanel.style.display = config.dry_run ? '' : 'none';
+  }
+  if (document.getElementById('nav-experiments-title')) {
+    document.getElementById('nav-experiments-title').textContent = config.dry_run ? '实验' : 'Shadow';
+  }
+  if (document.getElementById('nav-experiments-note')) {
+    document.getElementById('nav-experiments-note').textContent = config.dry_run
+      ? '阻断理由、repeat-entry、空簿延迟复查'
+      : 'No-money recovery tracks, separated from live executed';
+  }
+  if (document.getElementById('experiments-section-title')) {
+    document.getElementById('experiments-section-title').textContent = config.dry_run
+      ? '实验与阻断'
+      : 'No-money Shadow Recovery';
+  }
+  if (document.getElementById('experiments-section-note')) {
+    document.getElementById('experiments-section-note').textContent = config.dry_run
+      ? '这一层只服务研究，不直接代表可执行 edge。repeat-entry 和空簿复查会单独跟踪。'
+      : 'Live executed performance stays on the main panels; these rows are no-money shadow evidence only.';
+  }
+  if (document.getElementById('experiments-section-tag')) {
+    document.getElementById('experiments-section-tag').textContent = config.dry_run ? '实验面板' : '$0 exposure';
   }
   if (sideResearchCard) {
     sideResearchCard.style.display = config.dry_run ? '' : 'none';
@@ -2847,6 +2972,7 @@ function render(data) {
   renderPerformance(performance, config, liveExecution);
   renderCharts(charts, performance, liveExecution, config);
   renderTraders(data.traders || [], config);
+  renderShadowRecovery(data.edge_filter_shadows || [], config);
   if (config.show_research_panels) {
     renderBlockedReasons(data.blocked_reasons || []);
     renderExperimentWatch([

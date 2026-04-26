@@ -107,7 +107,7 @@ For a very small live bankroll such as `$20`, treat the bot as an order-lifecycl
 - if autonomous loss probation is active and current open positions are already at the probation cap, pause autonomous candidate scanning instead of generating candidates that can only be blocked
 - if a delayed active-exit order is later superseded by a matched active exit for the same wallet/market/outcome, reconcile the older row as `superseded` instead of showing it as pending forever
 - keep the real `.env` local-only; do not commit private keys or live wallet settings
-- read the dashboard as a live-only view: real account cash, current guardrails, and true executed fills
+- read the main dashboard panels as live-only: real account cash, current guardrails, and true executed fills. No-money quarantine recovery shadows appear only in their separate Shadow panel and must not be mixed into live executed performance.
 - keep only one active execution loop writing to the live DB; if you need another browser/view process, let it attach in dashboard-only mode instead of starting a second trader loop
 - if automation or a sandboxed shell starts the runtime with a blackhole proxy such as `127.0.0.1:9`, clear that inherited proxy before API calls; otherwise the dashboard can stay up while CLOB/Gamma/Data API reconciliation is silently offline
 - if an observer/report starts while the live runtime is writing, it should continue with SQLite busy-timeout settings instead of crashing just because the one-time WAL setup is locked
@@ -166,7 +166,7 @@ When you are done with dry-run research and want the active DB to contain only r
 1. Keep a local archive snapshot with `python live_cutover.py`.
 2. This copies `copybot.db` into local `archives/` first.
 3. Then it clears active `trade_journal` dry-run / shadow / experiment rows, resets dry-run mirror metadata in `trades`, and truncates old `risk_log` / `pnl_log`.
-4. After cutover, the live dashboard and live report only speak in real executed terms.
+4. After cutover, the main live dashboard and live report only speak in real executed terms; no-money quarantine recovery shadows stay visible only as separate research rows.
 
 ## Legacy dry-run workflow
 
