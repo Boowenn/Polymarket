@@ -83,6 +83,15 @@ def first_run_setup():
         f.write(f"AUTONOMOUS_EDGE_FILTER_MIN_DECIDED_SAMPLES=50\n")
         f.write(f"AUTONOMOUS_EDGE_FILTER_ROLLBACK_MIN_DECIDED=30\n")
         f.write(f"AUTONOMOUS_EDGE_FILTER_ROLLBACK_MAX_WIN_RATE=0.45\n")
+        f.write(f"ENABLE_COPY_ARCHIVE_SHADOW=true\n")
+        f.write(f"COPY_ARCHIVE_SHADOW_SCOPE=sports\n")
+        f.write(f"COPY_ARCHIVE_SHADOW_TRADERS=0xd106952ebf30a3125affd8a23b6c1f30c35fc79c|Herdonia|85\n")
+        f.write(f"COPY_ARCHIVE_SHADOW_MAX_SIGNALS_PER_CYCLE=2\n")
+        f.write(f"COPY_ARCHIVE_SHADOW_MAX_SIGNAL_AGE_SEC=900\n")
+        f.write(f"COPY_ARCHIVE_SHADOW_SIMULATED_MAX_TRADE_VALUE_USDC=3.00\n")
+        f.write(f"COPY_ARCHIVE_SHADOW_MIN_DECIDED_SAMPLES=50\n")
+        f.write(f"COPY_ARCHIVE_SHADOW_ROLLBACK_MIN_DECIDED=30\n")
+        f.write(f"COPY_ARCHIVE_SHADOW_ROLLBACK_MAX_WIN_RATE=0.45\n")
         f.write(f"DRY_RUN_RECORD_BLOCKED_SAMPLES=true\n")
         f.write(f"ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT=false\n")
         f.write(f"REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES=1\n")
@@ -192,6 +201,7 @@ import autonomous_strategy
 import settlement
 import wallet_reconcile
 import risk
+import copy_archive_shadow
 from dashboard import console
 
 # Logging to file only — dashboard handles terminal output
@@ -375,6 +385,16 @@ def run_cycle(cycle_count):
                 logger.info(f"Detected {len(new_signals)} new signal(s)")
         except Exception as e:
             logger.error(f"Trade scan failed: {e}")
+
+    try:
+        copy_shadow_summary = copy_archive_shadow.record_copy_archive_shadow_observations(
+            entry_pause.get("kind", "normal")
+        )
+        if copy_shadow_summary.get("recorded", 0):
+            logger.info("Copy archive shadow observation: %s", copy_shadow_summary)
+    except Exception as e:
+        logger.error(f"Copy archive shadow observation error: {e}")
+        models.log_risk_event("COPY_ARCHIVE_SHADOW_ERROR", str(e), "skipped")
 
     # 3. Consensus fallback only matters when trader discovery is on
     strategy_signals = []

@@ -770,16 +770,31 @@ def print_shadow_recovery_watch(rows):
     for row in rows:
         win_rate = f"{row['win_rate']:.1f}%" if row.get("win_rate") is not None else "N/A"
         rule = str(row.get("experiment_key") or config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEY)
-        status = "active" if rule in config.AUTONOMOUS_ACTIVE_EDGE_FILTER_EXPERIMENT_KEYS else "retired"
+        if rule in config.SHADOW_RECOVERY_RETIRED_EXPERIMENT_KEYS:
+            status = "retired"
+        elif rule in config.SHADOW_RECOVERY_ACTIVE_EXPERIMENT_KEYS:
+            status = "active"
+        else:
+            status = "watch"
+        enabled = (
+            config.ENABLE_AUTONOMOUS_EDGE_FILTER_SHADOW
+            if rule in config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEYS
+            else config.ENABLE_COPY_ARCHIVE_SHADOW
+        )
+        min_decided = (
+            config.COPY_ARCHIVE_SHADOW_MIN_DECIDED_SAMPLES
+            if rule in config.COPY_ARCHIVE_SHADOW_EXPERIMENT_KEYS
+            else config.AUTONOMOUS_EDGE_FILTER_MIN_DECIDED_SAMPLES
+        )
         print(
             f"{rule[:30]:30s}  "
-            f"{status if config.ENABLE_AUTONOMOUS_EDGE_FILTER_SHADOW else 'off':7s}  "
+            f"{status if enabled else 'off':7s}  "
             f"{int(row.get('total_entries', 0) or 0):7d}  "
             f"{int(row.get('closed_entries', 0) or 0):6d}  "
             f"{int(row.get('decision_count', 0) or 0):4d}  "
             f"{win_rate:8s}  "
             f"{_fmt_money(row.get('realized_pnl', 0)):>9s}  "
-            f"min_decided={config.AUTONOMOUS_EDGE_FILTER_MIN_DECIDED_SAMPLES}"
+            f"min_decided={min_decided}"
         )
     print(
         "  no-money shadow only; rollback if "
@@ -949,7 +964,7 @@ def main():
         live_journal_rows = [row for row in journal_rows if _is_live_journal_row(row)]
         live_summary = models.get_live_execution_summary(since_ts=since_ts)
         edge_shadow_summaries = []
-        for experiment_key in config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEYS:
+        for experiment_key in config.SHADOW_RECOVERY_EXPERIMENT_KEYS:
             edge_shadow_summaries.append(
                 {
                     "experiment_key": experiment_key,

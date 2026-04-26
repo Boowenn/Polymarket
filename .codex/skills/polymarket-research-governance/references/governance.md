@@ -115,7 +115,7 @@ This is a rollout policy, not proof of edge. Promotion still requires executed e
 
 ### Current Quarantine Recovery Experiments
 
-The active recovery plans are `esports_edge_filter_shadow_v2` and `sports_edge_filter_shadow_v1`.
+The active recovery plans are `esports_edge_filter_shadow_v2`, `sports_edge_filter_shadow_v1`, and `sports_copy_archive_shadow_v1`.
 
 - Failed rule being replaced: the default market-first selector that primarily used a balanced price band / target-price preference without enough executed edge evidence.
 - Sample type: `shadow`, with `experiment_key = esports_edge_filter_shadow_v2` for active esports and `experiment_key = sports_edge_filter_shadow_v1` for sports.
@@ -125,8 +125,9 @@ The active recovery plans are `esports_edge_filter_shadow_v2` and `sports_edge_f
 - Review threshold: do not consider any live recovery before at least `AUTONOMOUS_EDGE_FILTER_MIN_DECIDED_SAMPLES` decided samples, currently `50`.
 - Rollback condition: if after `AUTONOMOUS_EDGE_FILTER_ROLLBACK_MIN_DECIDED` decided samples, currently `30`, win rate is at or below `AUTONOMOUS_EDGE_FILTER_ROLLBACK_MAX_WIN_RATE`, currently `45%`, or realized PnL is negative, keep default live autonomous paused and replace or retire the experiment.
 - Retired comparison: `esports_edge_filter_shadow_v1` stays in report/dashboard summaries as old shadow evidence after its poor early read, but no new rows should be written with that key.
+- Archived copy recovery: `sports_copy_archive_shadow_v1` continues the strongest archived sports copy-trading hypothesis as no-money shadow only. It starts from the archived Tier-A seed `Herdonia`, excludes esports by default, writes `sample_type = shadow`, uses `$0` real-money exposure, may simulate a minimum executable paper size within `COPY_ARCHIVE_SHADOW_SIMULATED_MAX_TRADE_VALUE_USDC`, and must not be promoted directly from archived or shadow PnL.
 
-Shadow or backtest improvement from either rule is hypothesis evidence only. A later real-money canary still requires a separate reviewed plan with explicit real-money exposure and rollback limits.
+Shadow or backtest improvement from any recovery rule is hypothesis evidence only. A later real-money canary still requires a separate reviewed plan with explicit real-money exposure and rollback limits.
 
 ## Live Readiness
 

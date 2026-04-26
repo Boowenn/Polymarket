@@ -1021,6 +1021,12 @@ def trade_exists(trade_id):
     return row is not None
 
 
+def trade_journal_entry_exists(trade_id):
+    with db() as conn:
+        row = conn.execute("SELECT 1 FROM trade_journal WHERE trade_id = ?", (trade_id,)).fetchone()
+    return row is not None
+
+
 def has_open_autonomous_position(condition_id, outcome, side="BUY"):
     with db() as conn:
         row = conn.execute(
@@ -1108,6 +1114,26 @@ def mark_trade_mirrored(trade_id, order_id, side, size, price, status):
                WHERE id = ?""",
             (order_id, side, size, price, status, trade_id),
         )
+
+
+def mark_trade_shadow_reviewed(trade_id, status):
+    if not trade_id:
+        return 0
+
+    def _writer():
+        with db() as conn:
+            cur = conn.execute(
+                """
+                UPDATE trades
+                SET our_status = ?
+                WHERE id = ?
+                  AND mirrored = 0
+                """,
+                (str(status or "shadow_reviewed"), trade_id),
+            )
+            return cur.rowcount
+
+    return _run_write_with_retry(_writer)
 
 
 def refresh_trade_attempt_timestamp(trade_id, timestamp=None):

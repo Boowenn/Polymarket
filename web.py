@@ -51,6 +51,15 @@ if not os.path.exists(env_path):
         f.write("AUTONOMOUS_EDGE_FILTER_MIN_DECIDED_SAMPLES=50\n")
         f.write("AUTONOMOUS_EDGE_FILTER_ROLLBACK_MIN_DECIDED=30\n")
         f.write("AUTONOMOUS_EDGE_FILTER_ROLLBACK_MAX_WIN_RATE=0.45\n")
+        f.write("ENABLE_COPY_ARCHIVE_SHADOW=true\n")
+        f.write("COPY_ARCHIVE_SHADOW_SCOPE=sports\n")
+        f.write("COPY_ARCHIVE_SHADOW_TRADERS=0xd106952ebf30a3125affd8a23b6c1f30c35fc79c|Herdonia|85\n")
+        f.write("COPY_ARCHIVE_SHADOW_MAX_SIGNALS_PER_CYCLE=2\n")
+        f.write("COPY_ARCHIVE_SHADOW_MAX_SIGNAL_AGE_SEC=900\n")
+        f.write("COPY_ARCHIVE_SHADOW_SIMULATED_MAX_TRADE_VALUE_USDC=3.00\n")
+        f.write("COPY_ARCHIVE_SHADOW_MIN_DECIDED_SAMPLES=50\n")
+        f.write("COPY_ARCHIVE_SHADOW_ROLLBACK_MIN_DECIDED=30\n")
+        f.write("COPY_ARCHIVE_SHADOW_ROLLBACK_MAX_WIN_RATE=0.45\n")
         f.write("DRY_RUN_RECORD_BLOCKED_SAMPLES=true\n")
         f.write("ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT=false\n")
         f.write("REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES=1\n")
@@ -123,6 +132,7 @@ import autonomous_strategy
 import settlement
 import wallet_reconcile
 import risk
+import copy_archive_shadow
 
 logging.basicConfig(
     level=logging.INFO,
@@ -330,7 +340,7 @@ def get_dashboard_data():
                     experiment_key=experiment_key,
                 ),
             }
-            for experiment_key in config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEYS
+            for experiment_key in config.SHADOW_RECOVERY_EXPERIMENT_KEYS
         ]
         repeat_entry_experiment = {}
         no_book_recheck_experiment = {}
@@ -511,6 +521,12 @@ def get_dashboard_data():
             "autonomous_edge_filter_keys": list(config.AUTONOMOUS_EDGE_FILTER_EXPERIMENT_KEYS),
             "autonomous_active_edge_filter_keys": list(config.AUTONOMOUS_ACTIVE_EDGE_FILTER_EXPERIMENT_KEYS),
             "autonomous_sports_edge_filter_key": config.AUTONOMOUS_SPORTS_EDGE_FILTER_EXPERIMENT_KEY,
+            "copy_archive_shadow_enabled": config.copy_archive_shadow_enabled(),
+            "copy_archive_shadow_key": config.COPY_ARCHIVE_SHADOW_EXPERIMENT_KEY,
+            "copy_archive_shadow_scope": config.COPY_ARCHIVE_SHADOW_SCOPE,
+            "copy_archive_shadow_max_signals_per_cycle": config.COPY_ARCHIVE_SHADOW_MAX_SIGNALS_PER_CYCLE,
+            "copy_archive_shadow_max_signal_age_sec": config.COPY_ARCHIVE_SHADOW_MAX_SIGNAL_AGE_SEC,
+            "copy_archive_shadow_simulated_max_trade_value": config.COPY_ARCHIVE_SHADOW_SIMULATED_MAX_TRADE_VALUE_USDC,
             "autonomous_edge_filter_min_price": config.AUTONOMOUS_EDGE_FILTER_MIN_PRICE,
             "autonomous_edge_filter_max_price": config.AUTONOMOUS_EDGE_FILTER_MAX_PRICE,
             "autonomous_edge_filter_min_liquidity": config.AUTONOMOUS_EDGE_FILTER_MIN_LIQUIDITY,
@@ -719,6 +735,16 @@ def bot_loop():
                     logger.info(f"{len(signals)} new signal(s)")
             except Exception as e:
                 logger.error(f"Scan: {e}")
+
+        try:
+            copy_shadow_summary = copy_archive_shadow.record_copy_archive_shadow_observations(
+                entry_pause.get("kind", "normal")
+            )
+            if copy_shadow_summary.get("recorded", 0):
+                logger.info("Copy archive shadow observation: %s", copy_shadow_summary)
+        except Exception as e:
+            logger.error(f"Copy archive shadow: {e}")
+            models.log_risk_event("COPY_ARCHIVE_SHADOW_ERROR", str(e), "skipped")
 
         if not entry_pause.get("pause_all") and config.copy_strategy_enabled() and config.ENABLE_CONSENSUS_STRATEGY and not signals:
             try:
