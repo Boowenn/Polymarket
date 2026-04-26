@@ -755,15 +755,30 @@ def main():
     parser = argparse.ArgumentParser(description="Summarize recent paper-trading observation results.")
     parser.add_argument("--days", type=int, default=config.REPORT_DEFAULT_DAYS, help="Lookback window in days.")
     parser.add_argument("--top", type=int, default=5, help="How many traders to show in each ranking.")
+    parser.add_argument(
+        "--db-path",
+        default=config.DB_PATH,
+        help="SQLite database to read. Defaults to the active runtime copybot.db.",
+    )
+    parser.add_argument(
+        "--research-db",
+        action="store_true",
+        help="Treat the selected database as historical research/dry-run data for reporting only.",
+    )
+    parser.add_argument("--all", action="store_true", help="Use all available rows instead of a recent-day window.")
     args = parser.parse_args()
 
-    if config.DRY_RUN or not os.path.exists(config.DB_PATH):
+    if args.db_path:
+        config.DB_PATH = os.path.abspath(args.db_path)
+    report_is_research = bool(config.DRY_RUN or args.research_db)
+
+    if not os.path.exists(config.DB_PATH):
         models.init_db()
     else:
         models.use_observer_read_only_connections(True)
 
     now = time.time()
-    since_ts = now - max(args.days, 1) * 86400
+    since_ts = 0 if args.all else now - max(args.days, 1) * 86400
 
     trades, journal_rows, history_rows, risk_rows = load_window_data(since_ts)
     total_signals = len(trades)
@@ -772,11 +787,14 @@ def main():
     mirrored_signals = sum(1 for row in trades if int(row.get("mirrored", 0) or 0) == 1)
 
     print()
-    report_title = "Polymarket Trading Observation Report" if config.DRY_RUN else "Polymarket Live Execution Report"
+    report_title = "Polymarket Trading Observation Report" if report_is_research else "Polymarket Live Execution Report"
     print(report_title)
-    print(f"Window: {_fmt_ts(since_ts)} -> {_fmt_ts(now)}  ({max(args.days, 1)} day(s))")
-    mode_label = "DRY_RUN" if config.DRY_RUN else "LIVE"
-    if config.DRY_RUN:
+    if args.all:
+        print(f"Window: all available rows in {config.DB_PATH}")
+    else:
+        print(f"Window: {_fmt_ts(since_ts)} -> {_fmt_ts(now)}  ({max(args.days, 1)} day(s))")
+    mode_label = "RESEARCH_DB" if args.research_db else ("DRY_RUN" if config.DRY_RUN else "LIVE")
+    if report_is_research:
         gate_label = "off" if config.PAPER_IGNORE_CAPITAL_GATES else "on"
         print(
             f"Mode: {mode_label}  |  paper_bankroll={config.effective_bankroll():.0f}  "
@@ -786,7 +804,7 @@ def main():
         print(f"Mode: {mode_label}")
     print()
 
-    if config.DRY_RUN:
+    if report_is_research:
         journal_summary = models.get_trade_journal_summary(since_ts=since_ts)
         executed_summary = models.get_trade_journal_summary(since_ts=since_ts, sample_types=("executed",))
         shadow_summary = models.get_trade_journal_summary(since_ts=since_ts, sample_types=("shadow",))
