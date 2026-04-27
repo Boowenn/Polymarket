@@ -830,6 +830,44 @@ def print_shadow_recovery_watch(rows):
     )
 
 
+def print_live_canary_watch(row):
+    print("Live canary watch:")
+    if not row:
+        print("none")
+        return
+    win_rate = f"{row['win_rate']:.1f}%" if row.get("win_rate") is not None else "N/A"
+    enabled = "on" if config.copy_archive_live_canary_enabled() else "off"
+    approval = "approved" if config.COPY_ARCHIVE_LIVE_CANARY_OPERATOR_APPROVED else "not_approved"
+    decision_count = int(row.get("decision_count", 0) or 0)
+    pnl = float(row.get("realized_pnl", 0) or 0)
+    review = "hold"
+    if pnl <= -config.COPY_ARCHIVE_LIVE_CANARY_MAX_REALIZED_LOSS_USDC:
+        review = "rollback"
+    elif decision_count >= config.COPY_ARCHIVE_LIVE_CANARY_FINAL_REVIEW_DECISIONS:
+        review = "review_now"
+    elif (
+        decision_count >= config.COPY_ARCHIVE_LIVE_CANARY_ROLLBACK_MIN_DECISIONS
+        and row.get("win_rate") is not None
+        and float(row["win_rate"]) <= config.COPY_ARCHIVE_LIVE_CANARY_ROLLBACK_MAX_WIN_RATE * 100.0
+    ):
+        review = "rollback"
+    print("rule                           enabled approval      entries  closed  decs  win_rate  pnl        review")
+    print(
+        f"{config.COPY_ARCHIVE_LIVE_CANARY_EXPERIMENT_KEY[:30]:30s}  "
+        f"{enabled:7s} {approval:13s} "
+        f"{int(row.get('total_entries', 0) or 0):7d}  "
+        f"{int(row.get('closed_entries', 0) or 0):6d}  "
+        f"{decision_count:4d}  "
+        f"{win_rate:8s}  "
+        f"{_fmt_money(pnl):>9s}  "
+        f"{review}"
+    )
+    print(
+        "  disabled by default; enable only with both local .env switches and the documented "
+        "canary rollback plan"
+    )
+
+
 def print_trader_table(title, rows, limit=5):
     print(title)
     if not rows:
@@ -1042,6 +1080,14 @@ def main():
         print()
 
         print_source_table(source_rows, title="Live source performance:", empty_label="No live executed entries yet.")
+        print()
+
+        live_canary_summary = models.get_trade_journal_summary(
+            since_ts=since_ts,
+            sample_types=("executed",),
+            experiment_key=config.COPY_ARCHIVE_LIVE_CANARY_EXPERIMENT_KEY,
+        )
+        print_live_canary_watch(live_canary_summary)
         print()
 
         print_shadow_recovery_watch(edge_shadow_summaries)

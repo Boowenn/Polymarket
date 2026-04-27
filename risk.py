@@ -6,6 +6,10 @@ import models
 import portfolio
 
 
+def _copy_like_source(source):
+    return source in {"copy", config.COPY_ARCHIVE_LIVE_CANARY_SIGNAL_SOURCE}
+
+
 def _autonomous_loss_summary(since_ts="lookback"):
     if since_ts == "lookback":
         lookback_sec = float(config.AUTONOMOUS_LOSS_PROBATION_LOOKBACK_DAYS or 0) * 86400
@@ -212,6 +216,11 @@ class RiskCheck:
             if score < config.MIN_AUTONOMOUS_SCORE:
                 return False, f"autonomous score too low ({score:.1f} < {config.MIN_AUTONOMOUS_SCORE:.1f})"
             return True, ""
+        if source == config.COPY_ARCHIVE_LIVE_CANARY_SIGNAL_SOURCE:
+            wallet = str(signal.get("trader_wallet", "") or "").lower()
+            if wallet not in config.copy_archive_seed_wallets():
+                return False, "copy archive canary seed not configured"
+            return True, ""
 
         profile = models.get_trader_profile(signal.get("trader_wallet", ""))
         if not profile:
@@ -224,7 +233,7 @@ class RiskCheck:
 
     def _check_signal_age(self, signal):
         age = time.time() - float(signal.get("timestamp", 0) or 0)
-        if signal.get("signal_source", "copy") == "copy" and age < config.MIN_SIGNAL_CONFIRM_SEC:
+        if _copy_like_source(signal.get("signal_source", "copy")) and age < config.MIN_SIGNAL_CONFIRM_SEC:
             return False, f"waiting confirmation window ({age:.0f}s < {config.MIN_SIGNAL_CONFIRM_SEC}s)"
         if age > config.MAX_SIGNAL_AGE_SEC:
             return False, f"stale signal ({age:.0f}s old)"
@@ -244,7 +253,7 @@ class RiskCheck:
         return True, ""
 
     def _check_whipsaw_trap(self, signal):
-        if signal.get("signal_source", "copy") != "copy":
+        if not _copy_like_source(signal.get("signal_source", "copy")):
             return True, ""
         reversed_after = models.has_opposite_trade_after(
             signal.get("trader_wallet", ""),
@@ -311,7 +320,7 @@ class RiskCheck:
         return True, ""
 
     def _check_repeat_harvest(self, signal):
-        if signal.get("signal_source", "copy") != "copy":
+        if not _copy_like_source(signal.get("signal_source", "copy")):
             return True, ""
         count = models.get_mirrored_entry_count(
             signal.get("trader_wallet", ""),
@@ -323,7 +332,7 @@ class RiskCheck:
         return True, ""
 
     def _check_trader_exposure(self, signal):
-        if signal.get("signal_source", "copy") != "copy":
+        if not _copy_like_source(signal.get("signal_source", "copy")):
             return True, ""
         if not config.capital_gates_enabled():
             return True, ""
@@ -345,7 +354,7 @@ class RiskCheck:
 
     def _check_cooldown(self, signal):
         source = signal.get("signal_source", "copy")
-        trader_wallet = signal.get("trader_wallet") if source == "copy" else None
+        trader_wallet = signal.get("trader_wallet") if _copy_like_source(source) else None
         recent = models.get_recent_mirrored_trade(
             signal.get("condition_id", ""),
             signal.get("outcome", ""),

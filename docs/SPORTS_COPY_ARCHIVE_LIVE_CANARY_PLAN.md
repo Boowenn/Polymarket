@@ -1,6 +1,6 @@
 # Sports Copy Archive Live Canary Plan
 
-Status: reviewed draft only. This plan does not enable live copy trading, does not edit `.env`, and does not restart default autonomous real-money entries.
+Status: disabled-by-default wiring implemented. This plan does not enable live copy trading, does not edit real `.env`, and does not restart default autonomous real-money entries.
 
 ## Current Evidence
 
@@ -59,7 +59,7 @@ The canary may not place any real-money order until all items are true:
 
 - The operator explicitly approves enabling `sports_copy_archive_live_canary_v1` after reading this plan.
 - Default autonomous real-money entries remain paused under loss quarantine.
-- A dedicated disabled-by-default code/config path exists for the canary; enabling it must not re-enable autonomous scanning.
+- A dedicated disabled-by-default code/config path exists for the canary; enabling it must not re-enable autonomous scanning. The local operator must set both `ENABLE_COPY_ARCHIVE_LIVE_CANARY=true` and `COPY_ARCHIVE_LIVE_CANARY_OPERATOR_APPROVED=true`.
 - Read-only CLOB authentication succeeds for the live wallet.
 - No live order is stuck in `pending_live_order`, delayed, unreconciled, or exit-safety-breach status.
 - Dashboard/report output separates:
@@ -139,4 +139,4 @@ Every heartbeat/report during the canary must show:
 
 ## Current Decision
 
-Do not enable the canary yet from this document alone. The next implementation step, if approved by the operator, is to add the disabled-by-default canary wiring and dashboard/report separation, then run focused validation before any real-money order is allowed.
+Do not enable the canary yet from this document alone. The disabled-by-default wiring and dashboard/report separation now exist, but real-money entries remain blocked unless the operator explicitly flips both local `.env` switches after checking pending orders, session stop, wallet reconciliation, and the latest report/backtest baseline.

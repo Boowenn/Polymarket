@@ -29,6 +29,18 @@ def _int_env(name, default):
     except (TypeError, ValueError):
         return int(default)
 
+
+def _float_env(name, default):
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _bool_env(name, default=False):
+    raw_default = "true" if default else "false"
+    return os.getenv(name, raw_default).strip().lower() == "true"
+
 # API endpoints
 DATA_API_BASE = "https://data-api.polymarket.com"
 CLOB_BASE = "https://clob.polymarket.com"
@@ -169,6 +181,67 @@ COPY_ARCHIVE_SHADOW_ROLLBACK_MAX_WIN_RATE = float(
     os.getenv("COPY_ARCHIVE_SHADOW_ROLLBACK_MAX_WIN_RATE", "0.45")
 )
 COPY_ARCHIVE_SHADOW_EXPERIMENT_KEYS = (COPY_ARCHIVE_SHADOW_EXPERIMENT_KEY,)
+ENABLE_COPY_ARCHIVE_LIVE_CANARY = _bool_env("ENABLE_COPY_ARCHIVE_LIVE_CANARY", False)
+COPY_ARCHIVE_LIVE_CANARY_OPERATOR_APPROVED = _bool_env(
+    "COPY_ARCHIVE_LIVE_CANARY_OPERATOR_APPROVED",
+    False,
+)
+COPY_ARCHIVE_LIVE_CANARY_EXPERIMENT_KEY = "sports_copy_archive_live_canary_v1"
+COPY_ARCHIVE_LIVE_CANARY_SIGNAL_SOURCE = "copy_archive_canary"
+COPY_ARCHIVE_LIVE_CANARY_MAX_GROSS_USDC = max(
+    0.0,
+    _float_env("COPY_ARCHIVE_LIVE_CANARY_MAX_GROSS_USDC", "4.50"),
+)
+COPY_ARCHIVE_LIVE_CANARY_MAX_TRADE_VALUE_USDC = max(
+    0.0,
+    _float_env("COPY_ARCHIVE_LIVE_CANARY_MAX_TRADE_VALUE_USDC", "1.50"),
+)
+COPY_ARCHIVE_LIVE_CANARY_MAX_OPEN_POSITIONS = max(
+    0,
+    _int_env("COPY_ARCHIVE_LIVE_CANARY_MAX_OPEN_POSITIONS", 1),
+)
+COPY_ARCHIVE_LIVE_CANARY_MAX_ENTRIES = max(
+    0,
+    _int_env("COPY_ARCHIVE_LIVE_CANARY_MAX_ENTRIES", 5),
+)
+COPY_ARCHIVE_LIVE_CANARY_MAX_DECISIONS = max(
+    0,
+    _int_env("COPY_ARCHIVE_LIVE_CANARY_MAX_DECISIONS", 5),
+)
+COPY_ARCHIVE_LIVE_CANARY_MAX_DAILY_ENTRIES = max(
+    0,
+    _int_env("COPY_ARCHIVE_LIVE_CANARY_MAX_DAILY_ENTRIES", 2),
+)
+COPY_ARCHIVE_LIVE_CANARY_COOLDOWN_SEC = max(
+    0,
+    _int_env("COPY_ARCHIVE_LIVE_CANARY_COOLDOWN_SEC", 21600),
+)
+COPY_ARCHIVE_LIVE_CANARY_MAX_SIGNALS_PER_CYCLE = max(
+    0,
+    _int_env("COPY_ARCHIVE_LIVE_CANARY_MAX_SIGNALS_PER_CYCLE", 1),
+)
+COPY_ARCHIVE_LIVE_CANARY_MAX_REALIZED_LOSS_USDC = abs(
+    _float_env("COPY_ARCHIVE_LIVE_CANARY_MAX_REALIZED_LOSS_USDC", "1.50")
+)
+COPY_ARCHIVE_LIVE_CANARY_MAX_DAILY_LOSS_USDC = abs(
+    _float_env("COPY_ARCHIVE_LIVE_CANARY_MAX_DAILY_LOSS_USDC", "1.00")
+)
+COPY_ARCHIVE_LIVE_CANARY_ROLLBACK_MIN_DECISIONS = max(
+    1,
+    _int_env("COPY_ARCHIVE_LIVE_CANARY_ROLLBACK_MIN_DECISIONS", 3),
+)
+COPY_ARCHIVE_LIVE_CANARY_ROLLBACK_MAX_WIN_RATE = _float_env(
+    "COPY_ARCHIVE_LIVE_CANARY_ROLLBACK_MAX_WIN_RATE",
+    "0.33",
+)
+COPY_ARCHIVE_LIVE_CANARY_FINAL_REVIEW_DECISIONS = max(
+    1,
+    _int_env("COPY_ARCHIVE_LIVE_CANARY_FINAL_REVIEW_DECISIONS", 5),
+)
+COPY_ARCHIVE_LIVE_CANARY_FINAL_MIN_WIN_RATE = _float_env(
+    "COPY_ARCHIVE_LIVE_CANARY_FINAL_MIN_WIN_RATE",
+    "0.50",
+)
 SHADOW_RECOVERY_RETIRED_EXPERIMENT_KEYS = AUTONOMOUS_RETIRED_EDGE_FILTER_EXPERIMENT_KEYS
 SHADOW_RECOVERY_ACTIVE_EXPERIMENT_KEYS = (
     *AUTONOMOUS_ACTIVE_EDGE_FILTER_EXPERIMENT_KEYS,
@@ -382,6 +455,23 @@ def autonomous_strategy_enabled():
 
 def copy_archive_shadow_enabled():
     return (not DRY_RUN) and ENABLE_COPY_ARCHIVE_SHADOW
+
+
+def copy_archive_live_canary_enabled():
+    return (
+        (not DRY_RUN)
+        and ENABLE_COPY_ARCHIVE_LIVE_CANARY
+        and COPY_ARCHIVE_LIVE_CANARY_OPERATOR_APPROVED
+    )
+
+
+def copy_archive_seed_wallets():
+    wallets = []
+    for item in COPY_ARCHIVE_SHADOW_TRADERS:
+        wallet = str(item).split("|", 1)[0].strip().lower()
+        if wallet:
+            wallets.append(wallet)
+    return tuple(wallets)
 
 
 def trader_discovery_enabled():

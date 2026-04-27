@@ -60,6 +60,22 @@ if not os.path.exists(env_path):
         f.write("COPY_ARCHIVE_SHADOW_MIN_DECIDED_SAMPLES=50\n")
         f.write("COPY_ARCHIVE_SHADOW_ROLLBACK_MIN_DECIDED=30\n")
         f.write("COPY_ARCHIVE_SHADOW_ROLLBACK_MAX_WIN_RATE=0.45\n")
+        f.write("ENABLE_COPY_ARCHIVE_LIVE_CANARY=false\n")
+        f.write("COPY_ARCHIVE_LIVE_CANARY_OPERATOR_APPROVED=false\n")
+        f.write("COPY_ARCHIVE_LIVE_CANARY_MAX_GROSS_USDC=4.50\n")
+        f.write("COPY_ARCHIVE_LIVE_CANARY_MAX_TRADE_VALUE_USDC=1.50\n")
+        f.write("COPY_ARCHIVE_LIVE_CANARY_MAX_OPEN_POSITIONS=1\n")
+        f.write("COPY_ARCHIVE_LIVE_CANARY_MAX_ENTRIES=5\n")
+        f.write("COPY_ARCHIVE_LIVE_CANARY_MAX_DECISIONS=5\n")
+        f.write("COPY_ARCHIVE_LIVE_CANARY_MAX_DAILY_ENTRIES=2\n")
+        f.write("COPY_ARCHIVE_LIVE_CANARY_COOLDOWN_SEC=21600\n")
+        f.write("COPY_ARCHIVE_LIVE_CANARY_MAX_SIGNALS_PER_CYCLE=1\n")
+        f.write("COPY_ARCHIVE_LIVE_CANARY_MAX_REALIZED_LOSS_USDC=1.50\n")
+        f.write("COPY_ARCHIVE_LIVE_CANARY_MAX_DAILY_LOSS_USDC=1.00\n")
+        f.write("COPY_ARCHIVE_LIVE_CANARY_ROLLBACK_MIN_DECISIONS=3\n")
+        f.write("COPY_ARCHIVE_LIVE_CANARY_ROLLBACK_MAX_WIN_RATE=0.33\n")
+        f.write("COPY_ARCHIVE_LIVE_CANARY_FINAL_REVIEW_DECISIONS=5\n")
+        f.write("COPY_ARCHIVE_LIVE_CANARY_FINAL_MIN_WIN_RATE=0.50\n")
         f.write("DRY_RUN_RECORD_BLOCKED_SAMPLES=true\n")
         f.write("ENABLE_STAGE2_REPEAT_ENTRY_EXPERIMENT=false\n")
         f.write("REPEAT_ENTRY_EXPERIMENT_MAX_EXTRA_ENTRIES=1\n")
@@ -133,6 +149,7 @@ import settlement
 import wallet_reconcile
 import risk
 import copy_archive_shadow
+import copy_archive_canary
 
 logging.basicConfig(
     level=logging.INFO,
@@ -308,6 +325,10 @@ def get_dashboard_data():
     pnl = models.get_latest_pnl()
     performance = models.get_performance_snapshot()
     live_execution = models.get_live_execution_summary()
+    live_canary = models.get_trade_journal_summary(
+        sample_types=("executed",),
+        experiment_key=config.COPY_ARCHIVE_LIVE_CANARY_EXPERIMENT_KEY,
+    )
     drawdown = portfolio.get_live_drawdown_snapshot() if not config.DRY_RUN else {
         "unrealized_pnl": pnl.get("unrealized_pnl", 0),
         "realized_pnl": performance.get("realized_pnl", 0),
@@ -404,6 +425,13 @@ def get_dashboard_data():
             **live_execution,
             "unrealized_pnl": drawdown.get("unrealized_pnl", 0),
             "total_pnl": drawdown.get("total_pnl", float(live_execution.get("realized_pnl", 0) or 0)),
+        },
+        "live_canary": {
+            "experiment_key": config.COPY_ARCHIVE_LIVE_CANARY_EXPERIMENT_KEY,
+            **live_canary,
+            "enabled": config.copy_archive_live_canary_enabled(),
+            "operator_approved": config.COPY_ARCHIVE_LIVE_CANARY_OPERATOR_APPROVED,
+            "signal_source": config.COPY_ARCHIVE_LIVE_CANARY_SIGNAL_SOURCE,
         },
         "blocked_reasons": blocked_reasons,
         "edge_filter_shadow": edge_filter_shadow,
@@ -533,6 +561,16 @@ def get_dashboard_data():
             "copy_archive_shadow_min_decided_samples": config.COPY_ARCHIVE_SHADOW_MIN_DECIDED_SAMPLES,
             "copy_archive_shadow_rollback_min_decided": config.COPY_ARCHIVE_SHADOW_ROLLBACK_MIN_DECIDED,
             "copy_archive_shadow_rollback_max_win_rate": config.COPY_ARCHIVE_SHADOW_ROLLBACK_MAX_WIN_RATE,
+            "copy_archive_live_canary_enabled": config.copy_archive_live_canary_enabled(),
+            "copy_archive_live_canary_key": config.COPY_ARCHIVE_LIVE_CANARY_EXPERIMENT_KEY,
+            "copy_archive_live_canary_operator_approved": config.COPY_ARCHIVE_LIVE_CANARY_OPERATOR_APPROVED,
+            "copy_archive_live_canary_signal_source": config.COPY_ARCHIVE_LIVE_CANARY_SIGNAL_SOURCE,
+            "copy_archive_live_canary_max_gross": config.COPY_ARCHIVE_LIVE_CANARY_MAX_GROSS_USDC,
+            "copy_archive_live_canary_max_trade_value": config.COPY_ARCHIVE_LIVE_CANARY_MAX_TRADE_VALUE_USDC,
+            "copy_archive_live_canary_max_entries": config.COPY_ARCHIVE_LIVE_CANARY_MAX_ENTRIES,
+            "copy_archive_live_canary_max_daily_entries": config.COPY_ARCHIVE_LIVE_CANARY_MAX_DAILY_ENTRIES,
+            "copy_archive_live_canary_max_open_positions": config.COPY_ARCHIVE_LIVE_CANARY_MAX_OPEN_POSITIONS,
+            "copy_archive_live_canary_cooldown_sec": config.COPY_ARCHIVE_LIVE_CANARY_COOLDOWN_SEC,
             "autonomous_edge_filter_min_price": config.AUTONOMOUS_EDGE_FILTER_MIN_PRICE,
             "autonomous_edge_filter_max_price": config.AUTONOMOUS_EDGE_FILTER_MAX_PRICE,
             "autonomous_edge_filter_min_liquidity": config.AUTONOMOUS_EDGE_FILTER_MIN_LIQUIDITY,
@@ -756,6 +794,19 @@ def bot_loop():
             logger.error(f"Copy archive shadow: {e}")
             models.log_risk_event("COPY_ARCHIVE_SHADOW_ERROR", str(e), "skipped")
 
+        canary_signals = []
+        if not entry_pause.get("pause_all"):
+            try:
+                canary_summary = copy_archive_canary.build_copy_archive_live_canary_signals(
+                    entry_pause.get("kind", "normal")
+                )
+                canary_signals = canary_summary.get("signals", [])
+                if canary_signals:
+                    logger.info("Copy archive live canary prepared: %s", canary_summary)
+            except Exception as e:
+                logger.error(f"Copy archive canary: {e}")
+                models.log_risk_event("COPY_ARCHIVE_CANARY_ERROR", str(e), "skipped")
+
         if not entry_pause.get("pause_all") and config.copy_strategy_enabled() and config.ENABLE_CONSENSUS_STRATEGY and not signals:
             try:
                 signals = strategy.build_consensus_signals()
@@ -788,7 +839,7 @@ def bot_loop():
                 models.log_risk_event("AUTONOMOUS_ERROR", str(e), "skipped")
 
         # Execute
-        for sig in signals + autonomous_signals:
+        for sig in signals + autonomous_signals + canary_signals:
             try:
                 executor.execute_trade(sig)
             except Exception as e:

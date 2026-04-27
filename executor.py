@@ -203,6 +203,9 @@ def _record_executed_fill(signal, size, value, status, tradable_price, protected
         tradable_price=tradable_price,
         protected_price=protected_price,
         sample_type="executed",
+        trade_id=signal.get("journal_trade_id") or signal.get("id"),
+        experiment_key=signal.get("experiment_key", ""),
+        entry_reason=signal.get("entry_reason", ""),
     )
     return models.close_open_journal_entries(
         fill_signal,
@@ -224,7 +227,13 @@ def _record_pending_live_order(signal, size, value, status, tradable_price, prot
         tradable_price=tradable_price,
         protected_price=protected_price,
         sample_type="executed",
-        entry_reason=f"awaiting_live_fill_reconciliation:{status}",
+        trade_id=signal.get("journal_trade_id") or signal.get("id"),
+        experiment_key=signal.get("experiment_key", ""),
+        entry_reason=(
+            f"{signal.get('entry_reason', '')}; awaiting_live_fill_reconciliation:{status}"
+            if signal.get("entry_reason")
+            else f"awaiting_live_fill_reconciliation:{status}"
+        ),
     )
 
 

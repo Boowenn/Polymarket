@@ -1714,6 +1714,30 @@
         </div>
       </article>
 
+      <article class="panel" id="live-canary-panel" style="margin-top: 16px;">
+        <div class="panel-header">
+          <div class="panel-title">Live Canary Watch</div>
+          <div class="panel-badge" id="live-canary-count">0</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Rule</th>
+                <th>Status</th>
+                <th class="text-right">Entries</th>
+                <th class="text-right">Closed</th>
+                <th class="text-right">Decs</th>
+                <th class="text-right">Win%</th>
+                <th class="text-right">PnL</th>
+                <th>Guardrail</th>
+              </tr>
+            </thead>
+            <tbody id="live-canary-body"></tbody>
+          </table>
+        </div>
+      </article>
+
       <article class="panel" id="stage2-panel" style="margin-top: 16px;">
         <div class="panel-header">
           <div class="panel-title">实验观察</div>
@@ -2447,6 +2471,45 @@ function renderShadowRecovery(rows, config = {}) {
   }).join('');
 }
 
+function renderLiveCanary(row = {}, config = {}) {
+  const tbody = document.getElementById('live-canary-body');
+  const count = document.getElementById('live-canary-count');
+  if (!tbody || !count) {
+    return;
+  }
+  const entries = Number(row.total_entries || 0);
+  count.textContent = entries;
+  const enabled = !!row.enabled;
+  const approved = !!row.operator_approved;
+  const statusLabel = enabled ? 'enabled' : (approved ? 'switch_off' : 'not_approved');
+  const statusAction = enabled ? 'experiment' : 'paused';
+  const winRate = row.win_rate === null || row.win_rate === undefined
+    ? 'N/A'
+    : `${Number(row.win_rate).toFixed(1)}%`;
+  const guardrail = [
+    `source=${row.signal_source || config.copy_archive_live_canary_signal_source || 'copy_archive_canary'}`,
+    `max_trade=${fmtMoney(config.copy_archive_live_canary_max_trade_value || 0)}`,
+    `gross=${fmtMoney(config.copy_archive_live_canary_max_gross || 0)}`,
+    `open_cap=${Number(config.copy_archive_live_canary_max_open_positions || 0)}`,
+    `cooldown=${Number(config.copy_archive_live_canary_cooldown_sec || 0)}s`
+  ].join('<br>');
+  tbody.innerHTML = `
+    <tr>
+      <td>
+        <div>${row.experiment_key || config.copy_archive_live_canary_key || 'sports_copy_archive_live_canary_v1'}</div>
+        <div class="muted">sample_type=executed, disabled by default</div>
+      </td>
+      <td><span class="${actionClass(statusAction)}">${statusLabel}</span></td>
+      <td class="text-right">${entries}</td>
+      <td class="text-right">${Number(row.closed_entries || 0)}</td>
+      <td class="text-right">${Number(row.decision_count || 0)}</td>
+      <td class="text-right">${winRate}</td>
+      <td class="text-right ${Number(row.realized_pnl || 0) >= 0 ? 'green' : 'red'}">${fmtSignedMoney(row.realized_pnl || 0)}</td>
+      <td class="block-note">${guardrail}</td>
+    </tr>
+  `;
+}
+
 function renderTraders(rows, config = {}) {
   const traderRows = rows || [];
   document.getElementById('trader-count').textContent = `${traderRows.length} 名`;
@@ -2607,6 +2670,7 @@ function renderSystem(config, stats, performance, liveExecution) {
   const experimentsSection = document.getElementById('section-experiments');
   const stage2Panel = document.getElementById('stage2-panel');
   const blockedShadowPanel = document.getElementById('blocked-shadow-panel');
+  const liveCanaryPanel = document.getElementById('live-canary-panel');
   const sideResearchCard = document.getElementById('side-research-card');
   const tradersNav = document.getElementById('nav-traders');
   const tradersSection = document.getElementById('section-traders');
@@ -2645,6 +2709,9 @@ function renderSystem(config, stats, performance, liveExecution) {
   }
   if (stage2Panel) {
     stage2Panel.style.display = config.dry_run ? '' : 'none';
+  }
+  if (liveCanaryPanel) {
+    liveCanaryPanel.style.display = config.dry_run ? 'none' : '';
   }
   if (blockedShadowPanel) {
     blockedShadowPanel.style.display = config.dry_run ? '' : 'none';
@@ -2973,6 +3040,7 @@ function render(data) {
   renderCharts(charts, performance, liveExecution, config);
   renderTraders(data.traders || [], config);
   renderShadowRecovery(data.edge_filter_shadows || [], config);
+  renderLiveCanary(data.live_canary || {}, config);
   if (config.show_research_panels) {
     renderBlockedReasons(data.blocked_reasons || []);
     renderExperimentWatch([

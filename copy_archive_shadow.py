@@ -50,13 +50,15 @@ def _planned_order(signal):
     return round(size, 4), round(value, 4)
 
 
-def _fetch_actionable_seed_signals(wallets):
+def _fetch_actionable_seed_signals(wallets, limit=None, max_age_sec=None):
     if not wallets:
         return []
     newest_ts = time.time() - float(config.MIN_SIGNAL_CONFIRM_SEC or 0)
-    oldest_ts = time.time() - float(config.COPY_ARCHIVE_SHADOW_MAX_SIGNAL_AGE_SEC or config.MAX_SIGNAL_AGE_SEC or 0)
+    age_limit = max_age_sec if max_age_sec is not None else config.COPY_ARCHIVE_SHADOW_MAX_SIGNAL_AGE_SEC
+    oldest_ts = time.time() - float(age_limit or config.MAX_SIGNAL_AGE_SEC or 0)
     placeholders = ",".join("?" for _ in wallets)
-    params = [oldest_ts, newest_ts, *wallets, int(config.COPY_ARCHIVE_SHADOW_MAX_SIGNALS_PER_CYCLE or 0)]
+    row_limit = limit if limit is not None else config.COPY_ARCHIVE_SHADOW_MAX_SIGNALS_PER_CYCLE
+    params = [oldest_ts, newest_ts, *wallets, int(row_limit or 0)]
     with models.db() as conn:
         rows = conn.execute(
             f"""
@@ -81,11 +83,12 @@ def _fetch_actionable_seed_signals(wallets):
     return [dict(row) for row in rows]
 
 
-def _skip_reason(signal):
+def _skip_reason(signal, label="copy archive shadow", scope=None):
+    scope = scope or config.COPY_ARCHIVE_SHADOW_SCOPE
     if str(signal.get("side") or "BUY").upper() != "BUY":
-        return "copy archive shadow only records BUY entries"
-    if str(signal.get("market_scope") or "").lower() != config.COPY_ARCHIVE_SHADOW_SCOPE:
-        return f"scope not in copy archive shadow ({signal.get('market_scope') or 'unknown'})"
+        return f"{label} only records BUY entries"
+    if str(signal.get("market_scope") or "").lower() != scope:
+        return f"scope not in {label} ({signal.get('market_scope') or 'unknown'})"
     price = float(signal.get("price", 0) or 0)
     if price <= 0:
         return "invalid price"
