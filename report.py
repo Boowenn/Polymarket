@@ -693,7 +693,7 @@ def build_live_recommendations(journal_summary, risk_counts, trader_rows, source
         if autonomous_quarantine_active:
             recommendations.append(
                 "capital/probation blocks are expected while autonomous loss quarantine is preserving risk. "
-                "Keep real-money entries paused and use only the active no-money sports shadow tracks for recovery review."
+                "Keep real-money entries paused and use only the active no-money copy-archive shadow track for recovery review."
             )
         else:
             recommendations.append(

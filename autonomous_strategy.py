@@ -664,14 +664,15 @@ def record_edge_filter_shadow_observations(reason="risk pause active"):
                 reason,
             )
         )
-    groups.append(
-        _record_edge_filter_shadow_observations_for_scope(
-            [code for code in allowed_codes if code in sports_codes and code not in esports_codes],
-            config.AUTONOMOUS_SPORTS_EDGE_FILTER_EXPERIMENT_KEY,
-            "sports",
-            reason,
+    if config.AUTONOMOUS_SPORTS_EDGE_FILTER_EXPERIMENT_KEY:
+        groups.append(
+            _record_edge_filter_shadow_observations_for_scope(
+                [code for code in allowed_codes if code in sports_codes and code not in esports_codes],
+                config.AUTONOMOUS_SPORTS_EDGE_FILTER_EXPERIMENT_KEY,
+                "sports",
+                reason,
+            )
         )
-    )
     return {
         "recorded": sum(int(group.get("recorded", 0) or 0) for group in groups),
         "candidates": sum(int(group.get("candidates", 0) or 0) for group in groups),
