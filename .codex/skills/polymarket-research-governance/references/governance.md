@@ -6,26 +6,26 @@ Verified local baseline:
 
 - Date: `2026-04-27` JST
 - Command: `python report.py --days 3 --top 5`
-- `live_entries = 7`
-- `live_closed = 7`
+- `live_entries = 6`
+- `live_closed = 6`
 - `live_open = 0`
-- `live_decision_count = 6`
+- `live_decision_count = 5`
 - `live_close_rate = 100.0%`
 - `live_win_rate = 0.0%`
-- `live_realized_pnl = -2.11`
-- `autonomous_live_entries = 7`
-- `autonomous_live_closed = 7`
-- `autonomous_live_realized_pnl = -2.11`
+- `live_realized_pnl = -1.18`
+- `autonomous_live_entries = 6`
+- `autonomous_live_closed = 6`
+- `autonomous_live_realized_pnl = -1.18`
 - `copy_live_entries = 0`
 - `copy_live_closed = 0`
 - `copy_live_realized_pnl = 0.00`
-- `7d_executed_autonomous_entries = 21`
-- `7d_executed_autonomous_win_rate = 5.0%`
+- `7d_executed_autonomous_entries = 22`
+- `7d_executed_autonomous_win_rate = 4.8%`
 - `7d_executed_autonomous_realized_pnl = -2.90`
-- `esports_edge_filter_shadow_v1 = retired, 54 entries, 49 decisions, 20.4% win rate, -44.83 PnL`
+- `esports_edge_filter_shadow_v1 = retired, 54 entries, 54 decisions, 18.5% win rate, -55.33 PnL`
 - `esports_edge_filter_shadow_v2 = retired, 26 entries, 26 decisions, 46.2% win rate, 0.00 PnL`
-- `sports_edge_filter_shadow_v1 = retired, 66 entries, 55 decisions, 21.8% win rate, -44.99 PnL`
-- `sports_copy_archive_shadow_v1 = active, 55 entries, 36 decisions, 69.4% win rate, 37.64 PnL`
+- `sports_edge_filter_shadow_v1 = retired, 66 entries, 62 decisions, 19.4% win rate, -58.06 PnL`
+- `sports_copy_archive_shadow_v1 = active, 75 entries, 67 decisions, 56.7% win rate, 26.00 PnL`
 
 Use this snapshot as the current reference point until a newer report is intentionally recorded.
 
@@ -127,6 +127,7 @@ The active recovery plan is `sports_copy_archive_shadow_v1`.
 - Rollback condition: if after `AUTONOMOUS_EDGE_FILTER_ROLLBACK_MIN_DECIDED` decided samples, currently `30`, win rate is at or below `AUTONOMOUS_EDGE_FILTER_ROLLBACK_MAX_WIN_RATE`, currently `45%`, or realized PnL is negative, keep default live autonomous paused and replace or retire the experiment.
 - Retired comparison: `esports_edge_filter_shadow_v1`, `esports_edge_filter_shadow_v2`, and `sports_edge_filter_shadow_v1` stay in report/dashboard summaries as old shadow evidence after poor or failed no-money reads, but no new rows should be written with any retired key. Any future esports or sports edge-filter recovery needs a new plan with a meaningfully different edge source, such as map vetoes, drafts, roster news, patch context, sharp closing-line value, or a different sports signal source.
 - Archived copy recovery: `sports_copy_archive_shadow_v1` continues the strongest archived sports copy-trading hypothesis as no-money shadow only. It starts from the archived Tier-A seed `Herdonia`, excludes esports by default, writes `sample_type = shadow`, uses `$0` real-money exposure, may simulate a minimum executable paper size within `COPY_ARCHIVE_SHADOW_SIMULATED_MAX_TRADE_VALUE_USDC`, and must not be promoted directly from archived or shadow PnL.
+- Reviewed draft canary plan: `docs/SPORTS_COPY_ARCHIVE_LIVE_CANARY_PLAN.md` defines a possible `sports_copy_archive_live_canary_v1` real-money canary with `sample_type = executed`, `signal_source = copy_archive_canary`, maximum Phase A gross buy notional `$4.50`, maximum per-trade notional `$1.50`, maximum open positions `1`, maximum `5` entries/decisions before review, and immediate rollback if canary PnL reaches `-$1.50`, daily canary PnL reaches `-$1.00`, `3+` decided samples have win rate at or below `33%`, `5` decided samples are below `50%` win rate or non-positive PnL, or any pending-order, exit-safety, scope, DB-lock, retired-key, or default-autonomous-live violation appears. This is not enabled and still requires separate implementation plus explicit operator approval before any live order.
 
 Shadow or backtest improvement from any recovery rule is hypothesis evidence only. A later real-money canary still requires a separate reviewed plan with explicit real-money exposure and rollback limits.
 
